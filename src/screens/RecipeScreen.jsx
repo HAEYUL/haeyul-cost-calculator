@@ -190,7 +190,7 @@ export default function RecipeScreen() {
 
       <label className="upload-btn">
         {previewUrl ? '다른 사진 선택' : '레시피 사진 선택 (선택사항)'}
-        <input type="file" accept="image/*" capture="environment" onChange={handleFileChange} hidden />
+        <input type="file" accept="image/*" onChange={handleFileChange} hidden />
       </label>
 
       {previewUrl && (

@@ -194,7 +194,7 @@ export default function InvoiceScreen() {
 
       <label className="upload-btn">
         {previewUrl ? '다른 사진 선택' : '거래명세표 사진 선택'}
-        <input type="file" accept="image/*" capture="environment" onChange={handleFileChange} hidden />
+        <input type="file" accept="image/*" onChange={handleFileChange} hidden />
       </label>
 
       {previewUrl && (
