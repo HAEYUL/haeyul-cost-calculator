@@ -52,6 +52,16 @@ export default function VendorScreen() {
 
   if (!store) return null
 
+  const vendorsWithBalance = vendors
+    .map((v) => {
+      const totalAmount = totalsByVendor.get(v.id) ?? 0
+      const totalPaid = paidByVendor.get(v.id) ?? 0
+      return { ...v, totalAmount, totalPaid, balance: totalAmount - totalPaid }
+    })
+    .sort((a, b) => b.balance - a.balance)
+
+  const totalBalance = vendorsWithBalance.reduce((sum, v) => sum + v.balance, 0)
+
   const handleAdd = async () => {
     const trimmed = newName.trim()
     if (!trimmed || !supabase) return
@@ -81,6 +91,15 @@ export default function VendorScreen() {
 
       {!supabase && <p className="hint">Supabase가 설정되지 않았습니다.</p>}
 
+      {!loading && !error && vendors.length > 0 && (
+        <div className="cost-summary">
+          <div className="cost-summary-row">
+            <span>전체 미지급금</span>
+            <strong className={totalBalance > 0 ? 'alert-up' : ''}>{Math.round(totalBalance).toLocaleString()}원</strong>
+          </div>
+        </div>
+      )}
+
       <div className="field">
         <label htmlFor="newVendorName">새 거래처 추가</label>
         <input
@@ -100,25 +119,20 @@ export default function VendorScreen() {
       {!loading && !error && vendors.length === 0 && <p className="hint">등록된 거래처가 없습니다.</p>}
 
       <ul className="history-list">
-        {vendors.map((v) => {
-          const totalAmount = totalsByVendor.get(v.id) ?? 0
-          const totalPaid = paidByVendor.get(v.id) ?? 0
-          const balance = totalAmount - totalPaid
-          return (
-            <li key={v.id} className="history-row">
-              <button type="button" className="cost-row-btn" onClick={() => navigate(`/vendors/${v.id}`)}>
-                <div className="history-row-main">
-                  <span className="history-item">{v.name}</span>
-                  <span className={balance > 0 ? 'alert-up' : ''}>미지급 {Math.round(balance).toLocaleString()}원</span>
-                </div>
-                <div className="history-row-sub">
-                  <span>입고 {Math.round(totalAmount).toLocaleString()}원</span>
-                  <span>결제 {Math.round(totalPaid).toLocaleString()}원</span>
-                </div>
-              </button>
-            </li>
-          )
-        })}
+        {vendorsWithBalance.map((v) => (
+          <li key={v.id} className="history-row">
+            <button type="button" className="cost-row-btn" onClick={() => navigate(`/vendors/${v.id}`)}>
+              <div className="history-row-main">
+                <span className="history-item">{v.name}</span>
+                <span className={v.balance > 0 ? 'alert-up' : ''}>미지급 {Math.round(v.balance).toLocaleString()}원</span>
+              </div>
+              <div className="history-row-sub">
+                <span>입고 {Math.round(v.totalAmount).toLocaleString()}원</span>
+                <span>결제 {Math.round(v.totalPaid).toLocaleString()}원</span>
+              </div>
+            </button>
+          </li>
+        ))}
       </ul>
     </div>
   )
