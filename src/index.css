@@ -255,6 +255,13 @@ h1 {
   color: var(--text);
 }
 
+.select-block {
+  width: 100%;
+  padding: 10px 12px;
+  font-size: 15px;
+  box-sizing: border-box;
+}
+
 .item-table-wrap {
   overflow-x: auto;
   margin-top: 8px;
@@ -489,6 +496,24 @@ h1 {
 
 .history-item-link:hover {
   text-decoration: underline;
+}
+
+.batch-items {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 8px 0 0;
+  border-top: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.batch-item-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 13px;
+  color: var(--text-muted);
 }
 
 .inline-link {

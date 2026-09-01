@@ -21,6 +21,49 @@ create policy "stores are publicly readable"
   on stores for select
   using (true);
 
+-- vendors: 거래처 마스터. 입고 저장 시 자유 텍스트로 흩어지던 거래처명을 하나로 묶어서
+-- 오탈자로 같은 거래처가 여러 개로 나뉘는 걸 막는다. 매장별로 이름 유일.
+create table if not exists vendors (
+  id uuid primary key default gen_random_uuid(),
+  store_code text not null references stores(code),
+  name text not null,
+  created_at timestamptz not null default now(),
+  unique (store_code, name)
+);
+
+alter table vendors enable row level security;
+
+create policy "vendors are publicly readable"
+  on vendors for select
+  using (true);
+
+create policy "vendors are publicly insertable"
+  on vendors for insert
+  with check (true);
+
+-- invoice_batches: 거래명세표 사진 한 장(=한 번의 저장)을 전표 하나로 묶는다. 거래처별
+-- 입고액/미지급금 계산과 날짜별 정리는 이 단위를 기준으로 한다.
+create table if not exists invoice_batches (
+  id uuid primary key default gen_random_uuid(),
+  store_code text not null references stores(code),
+  vendor_id uuid not null references vendors(id),
+  invoice_date date,
+  total_amount numeric not null default 0,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists invoice_batches_store_vendor_idx on invoice_batches (store_code, vendor_id);
+
+alter table invoice_batches enable row level security;
+
+create policy "invoice_batches are publicly readable"
+  on invoice_batches for select
+  using (true);
+
+create policy "invoice_batches are publicly insertable"
+  on invoice_batches for insert
+  with check (true);
+
 -- invoices: 입고 내역. 한 품목당 한 행. store_code로 매장별 데이터를 분리한다.
 -- 로그인/비밀번호가 없는 앱이므로 매장 분리는 애플리케이션 레벨(선택된 매장 코드로 필터)에서
 -- 이루어지고, RLS는 anon 키로 읽기/쓰기를 허용한다.
@@ -41,8 +84,15 @@ create table if not exists invoices (
 
 alter table invoices add column if not exists unit text;
 
+-- vendor_id/batch_id: vendors/invoice_batches 도입 이전 데이터는 null로 남는다(레거시).
+-- 옛 데이터는 화면에서 "거래처 미지정"으로 따로 보여주고, 원가 계산 등 기존 로직은
+-- item_name/unit 기반이라 이 컬럼들과 무관하게 그대로 동작한다.
+alter table invoices add column if not exists vendor_id uuid references vendors(id);
+alter table invoices add column if not exists batch_id uuid references invoice_batches(id);
+
 create index if not exists invoices_store_vendor_idx on invoices (store_code, vendor);
 create index if not exists invoices_store_item_idx on invoices (store_code, item_name);
+create index if not exists invoices_batch_idx on invoices (batch_id);
 
 alter table invoices enable row level security;
 
@@ -65,6 +115,8 @@ create table if not exists price_changes (
   new_price numeric not null,
   changed_at timestamptz not null default now()
 );
+
+alter table price_changes add column if not exists vendor_id uuid references vendors(id);
 
 create index if not exists price_changes_store_idx on price_changes (store_code, changed_at desc);
 
