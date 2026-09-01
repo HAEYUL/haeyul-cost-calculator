@@ -32,6 +32,7 @@ export default function InvoiceScreen() {
   const [previewUrl, setPreviewUrl] = useState(null)
   const [pendingImage, setPendingImage] = useState(null)
   const [analyzing, setAnalyzing] = useState(false)
+  const [analyzed, setAnalyzed] = useState(false)
   const [error, setError] = useState('')
   const [vendors, setVendors] = useState([])
   const [vendorsVersion, setVendorsVersion] = useState(0)
@@ -77,6 +78,7 @@ export default function InvoiceScreen() {
       setDate('')
       setItems([])
       setDuplicateWarning(null)
+      setAnalyzed(false)
     } catch (err) {
       setError(err.message)
     }
@@ -86,6 +88,7 @@ export default function InvoiceScreen() {
     if (!pendingImage) return
     setAnalyzing(true)
     setError('')
+    setAnalyzed(false)
     try {
       const res = await fetch('/api/analyze-invoice', {
         method: 'POST',
@@ -115,6 +118,7 @@ export default function InvoiceScreen() {
           amount: item.amount ?? '',
         })),
       )
+      setAnalyzed(true)
     } catch (err) {
       setError(err.message)
     } finally {
@@ -297,6 +301,7 @@ export default function InvoiceScreen() {
     setHistoryKey((k) => k + 1)
     setPendingImage(null)
     setPreviewUrl(null)
+    setAnalyzed(false)
     setVendorId('')
     setNewVendorName('')
     setDate('')
@@ -337,8 +342,8 @@ export default function InvoiceScreen() {
       )}
 
       {previewUrl && (
-        <button type="button" className="btn-primary" onClick={handleAnalyze} disabled={analyzing}>
-          {analyzing ? '분석 중...' : '분석하기'}
+        <button type="button" className="btn-primary" onClick={handleAnalyze} disabled={analyzing || analyzed}>
+          {analyzing ? '분석 중...' : analyzed ? '분석완료' : '분석하기'}
         </button>
       )}
 
