@@ -5,6 +5,13 @@ import { supabase } from '../lib/supabaseClient'
 
 const UNIT_LABELS = { g: 'g', kg: 'kg', ea: '개', other: '기타' }
 
+// 명세표의 실제 입고일(invoice_date)이 있으면 그걸 기준으로, 없으면 저장 시각(created_at)으로
+// 정렬한다. created_at은 사진을 "언제 업로드했는지"라 늦게 업로드된 예전 명세표가 있으면
+// invoice_date와 순서가 어긋날 수 있어 정렬 기준으로 쓰면 안 된다.
+function rowDateValue(row) {
+  return row.invoice_date ? new Date(row.invoice_date).getTime() : new Date(row.created_at).getTime()
+}
+
 export default function PriceTrendScreen() {
   const { store } = useStore()
   const navigate = useNavigate()
@@ -74,7 +81,7 @@ export default function PriceTrendScreen() {
   const latestByVendor = new Map()
   for (const r of rows) {
     const existing = latestByVendor.get(r.vendor)
-    if (!existing || new Date(r.created_at) > new Date(existing.created_at)) {
+    if (!existing || rowDateValue(r) > rowDateValue(existing)) {
       latestByVendor.set(r.vendor, r)
     }
   }
@@ -84,18 +91,19 @@ export default function PriceTrendScreen() {
 
   const vendorNames = [...latestByVendor.keys()].sort((a, b) => a.localeCompare(b))
 
-  // 가격 추이: 거래처/기간으로 좁혀서 날짜순 목록 + 첫 가격 대비 마지막 가격 변동률
+  // 가격 추이: 거래처/기간으로 좁혀서 입고일 기준 오름차순으로 정리 (변동률 계산용)
   const trendRows = rows
     .filter((r) => vendorFilter === 'all' || r.vendor === vendorFilter)
     .filter((r) => !dateFrom || (r.invoice_date && r.invoice_date >= dateFrom))
     .filter((r) => !dateTo || (r.invoice_date && r.invoice_date <= dateTo))
+    .sort((a, b) => rowDateValue(a) - rowDateValue(b))
 
   const firstPrice = trendRows[0]?.unit_price
   const lastPrice = trendRows[trendRows.length - 1]?.unit_price
   const trendDiff = firstPrice != null && lastPrice != null ? lastPrice - firstPrice : null
   const trendPct = trendDiff != null && firstPrice !== 0 ? (trendDiff / firstPrice) * 100 : null
 
-  // 목록 표시는 최신 날짜가 위로 오도록 내림차순 (변동률 계산은 위 오름차순 trendRows 기준 유지)
+  // 목록 표시는 최신 날짜가 위로 오도록 내림차순
   const trendRowsDesc = [...trendRows].reverse()
 
   return (
