@@ -64,6 +64,30 @@ create policy "invoice_batches are publicly insertable"
   on invoice_batches for insert
   with check (true);
 
+-- vendor_payments: 거래처에 지급(결제)한 금액 기록. 거래처별 미지급금(잔액)은
+-- invoice_batches.total_amount 합계 - vendor_payments.amount 합계로 계산한다.
+create table if not exists vendor_payments (
+  id uuid primary key default gen_random_uuid(),
+  store_code text not null references stores(code),
+  vendor_id uuid not null references vendors(id),
+  amount numeric not null,
+  paid_date date,
+  memo text,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists vendor_payments_store_vendor_idx on vendor_payments (store_code, vendor_id);
+
+alter table vendor_payments enable row level security;
+
+create policy "vendor_payments are publicly readable"
+  on vendor_payments for select
+  using (true);
+
+create policy "vendor_payments are publicly insertable"
+  on vendor_payments for insert
+  with check (true);
+
 -- invoices: 입고 내역. 한 품목당 한 행. store_code로 매장별 데이터를 분리한다.
 -- 로그인/비밀번호가 없는 앱이므로 매장 분리는 애플리케이션 레벨(선택된 매장 코드로 필터)에서
 -- 이루어지고, RLS는 anon 키로 읽기/쓰기를 허용한다.

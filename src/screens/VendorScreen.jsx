@@ -9,6 +9,7 @@ export default function VendorScreen() {
 
   const [vendors, setVendors] = useState([])
   const [totalsByVendor, setTotalsByVendor] = useState(new Map())
+  const [paidByVendor, setPaidByVendor] = useState(new Map())
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [newName, setNewName] = useState('')
@@ -26,8 +27,9 @@ export default function VendorScreen() {
     Promise.all([
       supabase.from('vendors').select('id, name').eq('store_code', store.code).order('name'),
       supabase.from('invoice_batches').select('vendor_id, total_amount').eq('store_code', store.code),
-    ]).then(([vendorsRes, batchesRes]) => {
-      const err = vendorsRes.error || batchesRes.error
+      supabase.from('vendor_payments').select('vendor_id, amount').eq('store_code', store.code),
+    ]).then(([vendorsRes, batchesRes, paymentsRes]) => {
+      const err = vendorsRes.error || batchesRes.error || paymentsRes.error
       if (err) {
         setError(err.message)
         setLoading(false)
@@ -37,8 +39,13 @@ export default function VendorScreen() {
       for (const b of batchesRes.data ?? []) {
         totals.set(b.vendor_id, (totals.get(b.vendor_id) ?? 0) + Number(b.total_amount))
       }
+      const paid = new Map()
+      for (const p of paymentsRes.data ?? []) {
+        paid.set(p.vendor_id, (paid.get(p.vendor_id) ?? 0) + Number(p.amount))
+      }
       setVendors(vendorsRes.data ?? [])
       setTotalsByVendor(totals)
+      setPaidByVendor(paid)
       setLoading(false)
     })
   }, [store, dataKey])
@@ -69,7 +76,7 @@ export default function VendorScreen() {
           ← 입고 입력
         </button>
         <h1>거래처 관리</h1>
-        <p className="subtitle">{store.name} · 거래처별 입고 내역을 확인해요</p>
+        <p className="subtitle">{store.name} · 거래처별 입고액과 미지급금을 확인해요</p>
       </div>
 
       {!supabase && <p className="hint">Supabase가 설정되지 않았습니다.</p>}
@@ -93,19 +100,25 @@ export default function VendorScreen() {
       {!loading && !error && vendors.length === 0 && <p className="hint">등록된 거래처가 없습니다.</p>}
 
       <ul className="history-list">
-        {vendors.map((v) => (
-          <li key={v.id} className="history-row">
-            <button type="button" className="cost-row-btn" onClick={() => navigate(`/vendors/${v.id}`)}>
-              <div className="history-row-main">
-                <span className="history-item">{v.name}</span>
-                <span>{Math.round(totalsByVendor.get(v.id) ?? 0).toLocaleString()}원</span>
-              </div>
-              <div className="history-row-sub">
-                <span>누적 입고액</span>
-              </div>
-            </button>
-          </li>
-        ))}
+        {vendors.map((v) => {
+          const totalAmount = totalsByVendor.get(v.id) ?? 0
+          const totalPaid = paidByVendor.get(v.id) ?? 0
+          const balance = totalAmount - totalPaid
+          return (
+            <li key={v.id} className="history-row">
+              <button type="button" className="cost-row-btn" onClick={() => navigate(`/vendors/${v.id}`)}>
+                <div className="history-row-main">
+                  <span className="history-item">{v.name}</span>
+                  <span className={balance > 0 ? 'alert-up' : ''}>미지급 {Math.round(balance).toLocaleString()}원</span>
+                </div>
+                <div className="history-row-sub">
+                  <span>입고 {Math.round(totalAmount).toLocaleString()}원</span>
+                  <span>결제 {Math.round(totalPaid).toLocaleString()}원</span>
+                </div>
+              </button>
+            </li>
+          )
+        })}
       </ul>
     </div>
   )
