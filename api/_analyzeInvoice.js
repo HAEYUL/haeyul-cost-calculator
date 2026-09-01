@@ -5,6 +5,14 @@ import { parseWithRetry } from './_anthropicClient.js'
 const InvoiceSchema = z.object({
   vendor: z.string().nullable().describe('거래처명(공급자명)'),
   date: z.string().nullable().describe('입고일. YYYY-MM-DD 형식, 연도를 알 수 없으면 null'),
+  statementBalance: z
+    .number()
+    .nullable()
+    .describe(
+      '명세표에 "현잔액", "현잔고", "총잔금", "잔액"처럼 이번 거래까지 포함해 거래처에 갚아야 할 총액으로 적힌 값. ' +
+        '"전잔금"(이전 미수금)과 "합계"/"당일합계"(이번 거래 금액)가 따로 있고 최종 합계가 표에 있으면 그 최종 합계값을 반환하세요. ' +
+        '이번 거래 금액(공급가액, 당일합계)만 있고 누적 잔액을 나타내는 값이 표에 없으면 null.',
+    ),
   items: z
     .array(
       z.object({
@@ -27,6 +35,7 @@ const PROMPT = `이 이미지는 한국 식당에 납품된 거래명세표(또�
 표에서 다음을 추출하세요:
 - 거래처명(공급자 상호명)
 - 날짜 (있다면 YYYY-MM-DD 형식으로, 연도가 불확실하면 null)
+- 현잔액/현잔고/총잔금 (표 하단에 "전잔금 + 당일합계 = 합계(총잔금)" 형태로 있는 경우가 많습니다. 이번 거래까지 포함한 최종 누적 잔액을 찾으세요)
 - 각 품목의: 물품명, 수량, 단가, 단위, 금액
 
 규칙:

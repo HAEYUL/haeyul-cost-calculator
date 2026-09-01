@@ -55,6 +55,11 @@ create table if not exists invoice_batches (
   created_at timestamptz not null default now()
 );
 
+-- statement_balance: 명세표에 인쇄된 현잔액/현잔고/총잔금(이번 거래까지 포함해 거래처에
+-- 갚아야 할 총액). 있는 대로 그대로 저장해서, 미지급금은 결제 기록 대신 이 값(가장 최근
+-- 명세표 기준)을 우선 보여준다. 사진에 없으면 null.
+alter table invoice_batches add column if not exists statement_balance numeric;
+
 create index if not exists invoice_batches_store_vendor_idx on invoice_batches (store_code, vendor_id);
 
 alter table invoice_batches enable row level security;
