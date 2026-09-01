@@ -17,6 +17,7 @@ on conflict (code) do nothing;
 
 alter table stores enable row level security;
 
+drop policy if exists "stores are publicly readable" on stores;
 create policy "stores are publicly readable"
   on stores for select
   using (true);
@@ -33,10 +34,12 @@ create table if not exists vendors (
 
 alter table vendors enable row level security;
 
+drop policy if exists "vendors are publicly readable" on vendors;
 create policy "vendors are publicly readable"
   on vendors for select
   using (true);
 
+drop policy if exists "vendors are publicly insertable" on vendors;
 create policy "vendors are publicly insertable"
   on vendors for insert
   with check (true);
@@ -56,10 +59,12 @@ create index if not exists invoice_batches_store_vendor_idx on invoice_batches (
 
 alter table invoice_batches enable row level security;
 
+drop policy if exists "invoice_batches are publicly readable" on invoice_batches;
 create policy "invoice_batches are publicly readable"
   on invoice_batches for select
   using (true);
 
+drop policy if exists "invoice_batches are publicly insertable" on invoice_batches;
 create policy "invoice_batches are publicly insertable"
   on invoice_batches for insert
   with check (true);
@@ -80,10 +85,12 @@ create index if not exists vendor_payments_store_vendor_idx on vendor_payments (
 
 alter table vendor_payments enable row level security;
 
+drop policy if exists "vendor_payments are publicly readable" on vendor_payments;
 create policy "vendor_payments are publicly readable"
   on vendor_payments for select
   using (true);
 
+drop policy if exists "vendor_payments are publicly insertable" on vendor_payments;
 create policy "vendor_payments are publicly insertable"
   on vendor_payments for insert
   with check (true);
@@ -107,10 +114,12 @@ create index if not exists stock_usage_store_item_idx on stock_usage (store_code
 
 alter table stock_usage enable row level security;
 
+drop policy if exists "stock_usage is publicly readable" on stock_usage;
 create policy "stock_usage is publicly readable"
   on stock_usage for select
   using (true);
 
+drop policy if exists "stock_usage is publicly insertable" on stock_usage;
 create policy "stock_usage is publicly insertable"
   on stock_usage for insert
   with check (true);
@@ -147,10 +156,12 @@ create index if not exists invoices_batch_idx on invoices (batch_id);
 
 alter table invoices enable row level security;
 
+drop policy if exists "invoices are publicly readable" on invoices;
 create policy "invoices are publicly readable"
   on invoices for select
   using (true);
 
+drop policy if exists "invoices are publicly insertable" on invoices;
 create policy "invoices are publicly insertable"
   on invoices for insert
   with check (true);
@@ -173,10 +184,12 @@ create index if not exists price_changes_store_idx on price_changes (store_code,
 
 alter table price_changes enable row level security;
 
+drop policy if exists "price_changes are publicly readable" on price_changes;
 create policy "price_changes are publicly readable"
   on price_changes for select
   using (true);
 
+drop policy if exists "price_changes are publicly insertable" on price_changes;
 create policy "price_changes are publicly insertable"
   on price_changes for insert
   with check (true);
@@ -196,14 +209,17 @@ create index if not exists recipes_store_menu_idx on recipes (store_code, menu_n
 
 alter table recipes enable row level security;
 
+drop policy if exists "recipes are publicly readable" on recipes;
 create policy "recipes are publicly readable"
   on recipes for select
   using (true);
 
+drop policy if exists "recipes are publicly insertable" on recipes;
 create policy "recipes are publicly insertable"
   on recipes for insert
   with check (true);
 
+drop policy if exists "recipes are publicly deletable" on recipes;
 create policy "recipes are publicly deletable"
   on recipes for delete
   using (true);
@@ -221,19 +237,23 @@ create table if not exists ingredient_mapping (
 
 alter table ingredient_mapping enable row level security;
 
+drop policy if exists "ingredient_mapping is publicly readable" on ingredient_mapping;
 create policy "ingredient_mapping is publicly readable"
   on ingredient_mapping for select
   using (true);
 
+drop policy if exists "ingredient_mapping is publicly insertable" on ingredient_mapping;
 create policy "ingredient_mapping is publicly insertable"
   on ingredient_mapping for insert
   with check (true);
 
+drop policy if exists "ingredient_mapping is publicly updatable" on ingredient_mapping;
 create policy "ingredient_mapping is publicly updatable"
   on ingredient_mapping for update
   using (true)
   with check (true);
 
+drop policy if exists "ingredient_mapping is publicly deletable" on ingredient_mapping;
 create policy "ingredient_mapping is publicly deletable"
   on ingredient_mapping for delete
   using (true);
@@ -250,14 +270,17 @@ create table if not exists menu_prices (
 
 alter table menu_prices enable row level security;
 
+drop policy if exists "menu_prices are publicly readable" on menu_prices;
 create policy "menu_prices are publicly readable"
   on menu_prices for select
   using (true);
 
+drop policy if exists "menu_prices are publicly insertable" on menu_prices;
 create policy "menu_prices are publicly insertable"
   on menu_prices for insert
   with check (true);
 
+drop policy if exists "menu_prices are publicly updatable" on menu_prices;
 create policy "menu_prices are publicly updatable"
   on menu_prices for update
   using (true)
