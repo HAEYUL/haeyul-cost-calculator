@@ -1,6 +1,6 @@
-import Anthropic from '@anthropic-ai/sdk'
 import { z } from 'zod'
 import { zodOutputFormat } from '@anthropic-ai/sdk/helpers/zod'
+import { parseWithRetry } from './_anthropicClient.js'
 
 const RecipeSchema = z.object({
   ingredients: z
@@ -25,17 +25,8 @@ const PROMPT = `이 이미지는 한식당 메뉴의 레시피(재료 배합비)
 - 이미 g 단위로 적혀 있으면 숫자만 amountG에 반환하고 originalText에도 원본 그대로 남기세요.
 - 표에 없는 재료를 추측해서 만들어내지 마세요.`
 
-let client
-
-function getClient() {
-  if (!client) {
-    client = new Anthropic()
-  }
-  return client
-}
-
 export async function analyzeRecipeImage({ base64, mediaType }) {
-  const response = await getClient().messages.parse({
+  const response = await parseWithRetry({
     model: 'claude-opus-5',
     max_tokens: 4096,
     output_config: {

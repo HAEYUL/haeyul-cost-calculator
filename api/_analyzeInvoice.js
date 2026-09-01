@@ -1,6 +1,6 @@
-import Anthropic from '@anthropic-ai/sdk'
 import { z } from 'zod'
 import { zodOutputFormat } from '@anthropic-ai/sdk/helpers/zod'
+import { parseWithRetry } from './_anthropicClient.js'
 
 const InvoiceSchema = z.object({
   vendor: z.string().nullable().describe('거래처명(공급자명)'),
@@ -36,17 +36,8 @@ const PROMPT = `이 이미지는 한국 식당에 납품된 거래명세표(또�
 - 품목명은 원문 그대로 옮기되 불필요한 공백만 정리하세요.
 - 표에 없는 값을 추측해서 만들어내지 마세요.`
 
-let client
-
-function getClient() {
-  if (!client) {
-    client = new Anthropic()
-  }
-  return client
-}
-
 export async function analyzeInvoiceImage({ base64, mediaType }) {
-  const response = await getClient().messages.parse({
+  const response = await parseWithRetry({
     model: 'claude-opus-5',
     max_tokens: 4096,
     output_config: {
