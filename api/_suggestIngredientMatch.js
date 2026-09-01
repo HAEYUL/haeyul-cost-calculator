@@ -1,15 +1,6 @@
-import Anthropic from '@anthropic-ai/sdk'
 import { z } from 'zod'
 import { zodOutputFormat } from '@anthropic-ai/sdk/helpers/zod'
-
-let client
-
-function getClient() {
-  if (!client) {
-    client = new Anthropic()
-  }
-  return client
-}
+import { parseWithRetry } from './_anthropicClient.js'
 
 export async function suggestIngredientMatches({ ingredientName, candidateItems }) {
   if (!candidateItems || candidateItems.length === 0) {
@@ -33,7 +24,7 @@ ${candidateItems.map((name) => `- ${name}`).join('\n')}
 
 위 물품명 목록 중에서만 골라 이 재료명과 같은 재료일 가능성이 높은 순서로 추천하세요. 목록에 없는 이름을 만들어내지 마세요. 확실한 후보가 없으면 빈 배열을 반환하세요.`
 
-  const response = await getClient().messages.parse({
+  const response = await parseWithRetry({
     model: 'claude-opus-5',
     max_tokens: 1024,
     output_config: {
