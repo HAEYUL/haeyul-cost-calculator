@@ -43,6 +43,7 @@ export default function InvoiceScreen() {
   const [saveMessage, setSaveMessage] = useState('')
   const [priceChanges, setPriceChanges] = useState([])
   const [historyKey, setHistoryKey] = useState(0)
+  const [duplicateWarning, setDuplicateWarning] = useState(null)
 
   useEffect(() => {
     if (!store) navigate('/', { replace: true })
@@ -75,6 +76,7 @@ export default function InvoiceScreen() {
       setNewVendorName('')
       setDate('')
       setItems([])
+      setDuplicateWarning(null)
     } catch (err) {
       setError(err.message)
     }
@@ -127,7 +129,7 @@ export default function InvoiceScreen() {
   const addItem = () => setItems((prev) => [...prev, emptyItem()])
   const removeItem = (index) => setItems((prev) => prev.filter((_, i) => i !== index))
 
-  const handleSave = async () => {
+  const handleSave = async (skipDuplicateCheck = false) => {
     if (!supabase) {
       setError('Supabase가 설정되지 않아 저장할 수 없습니다.')
       return
@@ -145,6 +147,7 @@ export default function InvoiceScreen() {
     setError('')
     setSaveMessage('')
     setPriceChanges([])
+    setDuplicateWarning(null)
 
     let resolvedVendorId = vendorId
     let resolvedVendorName
@@ -170,6 +173,40 @@ export default function InvoiceScreen() {
     }
 
     const validItems = items.filter((item) => item.name.trim())
+
+    // 같은 거래처 + 같은 날짜로 이미 저장된 전표가 있고 물품 구성까지 같으면 같은 사진을
+    // 다시 올린 것으로 보고 저장 전에 경고한다 (날짜 미입력이면 비교할 수 없어 건너뜀).
+    if (!skipDuplicateCheck && date) {
+      const { data: existingBatches, error: dupErr } = await supabase
+        .from('invoice_batches')
+        .select('id, invoices(item_name)')
+        .eq('store_code', store.code)
+        .eq('vendor_id', resolvedVendorId)
+        .eq('invoice_date', date)
+
+      if (dupErr) {
+        setSaving(false)
+        setError(dupErr.message)
+        return
+      }
+
+      const currentNames = new Set(validItems.map((item) => item.name.trim()))
+      const duplicateBatch = (existingBatches ?? []).find((b) => {
+        const existingNames = new Set((b.invoices ?? []).map((i) => i.item_name))
+        return existingNames.size === currentNames.size && [...existingNames].every((n) => currentNames.has(n))
+      })
+
+      if (duplicateBatch) {
+        setSaving(false)
+        setDuplicateWarning({
+          vendorName: resolvedVendorName,
+          date,
+          itemNames: [...currentNames],
+        })
+        if (didCreateVendor) setVendorsVersion((v) => v + 1)
+        return
+      }
+    }
 
     // 같은 거래처의 이전 입고 내역에서 품목별 최근 단가를 조회 (물품명 정확히 일치만 비교)
     const { data: history, error: historyErr } = await supabase
@@ -308,6 +345,24 @@ export default function InvoiceScreen() {
       {error && <p className="error-text">{error}</p>}
       {saveMessage && <p className="success-text">{saveMessage}</p>}
 
+      {duplicateWarning && (
+        <div className="price-alert-box">
+          <p className="price-alert-title">이미 입고된 내역이 있어요</p>
+          <p className="hint">
+            {duplicateWarning.vendorName} · {duplicateWarning.date} 에 같은 물품({duplicateWarning.itemNames.join(', ')})으로
+            저장된 입고 내역이 있습니다. 같은 사진을 다시 올린 게 아닌지 확인해주세요.
+          </p>
+          <div className="invoice-form">
+            <button type="button" className="btn-secondary" onClick={() => setDuplicateWarning(null)}>
+              취소
+            </button>
+            <button type="button" className="btn-primary" onClick={() => handleSave(true)} disabled={saving}>
+              {saving ? '저장 중...' : '그래도 저장'}
+            </button>
+          </div>
+        </div>
+      )}
+
       {priceChanges.length > 0 && (
         <div className="price-alert-box">
           <p className="price-alert-title">단가가 변경된 품목이 있어요</p>
@@ -427,7 +482,7 @@ export default function InvoiceScreen() {
           + 품목 추가
         </button>
         {(vendorId || items.length > 0) && (
-          <button type="button" className="btn-primary" onClick={handleSave} disabled={saving}>
+          <button type="button" className="btn-primary" onClick={() => handleSave()} disabled={saving}>
             {saving ? '저장 중...' : '저장'}
           </button>
         )}
