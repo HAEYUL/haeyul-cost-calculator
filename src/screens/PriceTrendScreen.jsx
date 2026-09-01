@@ -95,6 +95,9 @@ export default function PriceTrendScreen() {
   const trendDiff = firstPrice != null && lastPrice != null ? lastPrice - firstPrice : null
   const trendPct = trendDiff != null && firstPrice !== 0 ? (trendDiff / firstPrice) * 100 : null
 
+  // 목록 표시는 최신 날짜가 위로 오도록 내림차순 (변동률 계산은 위 오름차순 trendRows 기준 유지)
+  const trendRowsDesc = [...trendRows].reverse()
+
   return (
     <div className="screen screen-wide">
       <div className="screen-header">
@@ -191,7 +194,7 @@ export default function PriceTrendScreen() {
 
           {!loadingRows && trendRows.length === 0 && <p className="hint">조건에 맞는 입고 기록이 없습니다.</p>}
           <ul className="history-list">
-            {trendRows.map((r, i) => (
+            {trendRowsDesc.map((r, i) => (
               <li key={`${r.created_at}-${i}`} className="history-row">
                 <div className="history-row-main">
                   <span className="history-item">{r.invoice_date ?? new Date(r.created_at).toLocaleDateString('ko-KR')}</span>
