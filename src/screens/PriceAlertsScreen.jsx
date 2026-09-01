@@ -35,9 +35,14 @@ export default function PriceAlertsScreen() {
   return (
     <div className="screen screen-wide">
       <div className="screen-header">
-        <button type="button" className="link-btn" onClick={() => navigate('/invoices')}>
-          ← 입고 입력
-        </button>
+        <div className="screen-header-row">
+          <button type="button" className="link-btn" onClick={() => navigate('/invoices')}>
+            ← 입고 입력
+          </button>
+          <button type="button" className="link-btn" onClick={() => navigate('/price-trend')}>
+            단가 추이 조회 →
+          </button>
+        </div>
         <h1>단가 변동 알림함</h1>
         <p className="subtitle">{store.name} · 단가가 바뀐 품목 모음</p>
       </div>

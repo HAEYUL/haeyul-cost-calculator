@@ -11,6 +11,20 @@ function emptyItem() {
   return { name: '', quantity: '', unitPrice: '', unit: 'kg', amount: '' }
 }
 
+function matchVendor(vendors, name) {
+  if (!name) return null
+  const norm = name.trim().toLowerCase()
+  if (!norm) return null
+  return vendors.find((v) => v.name.trim().toLowerCase() === norm) ?? null
+}
+
+function itemAmount(item) {
+  if (item.amount !== '') return Number(item.amount)
+  const q = item.quantity === '' ? null : Number(item.quantity)
+  const p = item.unitPrice === '' ? null : Number(item.unitPrice)
+  return q != null && p != null ? q * p : 0
+}
+
 export default function InvoiceScreen() {
   const { store } = useStore()
   const navigate = useNavigate()
@@ -19,7 +33,10 @@ export default function InvoiceScreen() {
   const [pendingImage, setPendingImage] = useState(null)
   const [analyzing, setAnalyzing] = useState(false)
   const [error, setError] = useState('')
-  const [vendor, setVendor] = useState('')
+  const [vendors, setVendors] = useState([])
+  const [vendorsVersion, setVendorsVersion] = useState(0)
+  const [vendorId, setVendorId] = useState('')
+  const [newVendorName, setNewVendorName] = useState('')
   const [date, setDate] = useState('')
   const [items, setItems] = useState([])
   const [saving, setSaving] = useState(false)
@@ -30,6 +47,18 @@ export default function InvoiceScreen() {
   useEffect(() => {
     if (!store) navigate('/', { replace: true })
   }, [store, navigate])
+
+  useEffect(() => {
+    if (!store || !supabase) return
+    supabase
+      .from('vendors')
+      .select('id, name')
+      .eq('store_code', store.code)
+      .order('name')
+      .then(({ data, error: err }) => {
+        if (!err) setVendors(data ?? [])
+      })
+  }, [store, vendorsVersion])
 
   if (!store) return null
 
@@ -42,7 +71,8 @@ export default function InvoiceScreen() {
       const { base64, mediaType, previewUrl: preview } = await compressImage(file)
       setPendingImage({ imageBase64: base64, mediaType })
       setPreviewUrl(preview)
-      setVendor('')
+      setVendorId('')
+      setNewVendorName('')
       setDate('')
       setItems([])
     } catch (err) {
@@ -62,7 +92,17 @@ export default function InvoiceScreen() {
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || '분석에 실패했습니다')
-      setVendor(data.vendor ?? '')
+      const matched = matchVendor(vendors, data.vendor)
+      if (matched) {
+        setVendorId(matched.id)
+        setNewVendorName('')
+      } else if (data.vendor) {
+        setVendorId('new')
+        setNewVendorName(data.vendor)
+      } else {
+        setVendorId('')
+        setNewVendorName('')
+      }
       setDate(data.date ?? '')
       setItems(
         (data.items ?? []).map((item) => ({
@@ -92,8 +132,12 @@ export default function InvoiceScreen() {
       setError('Supabase가 설정되지 않아 저장할 수 없습니다.')
       return
     }
-    if (!vendor.trim() || items.length === 0) {
-      setError('거래처명과 최소 1개의 품목이 필요합니다.')
+    if (vendorId === 'new' && !newVendorName.trim()) {
+      setError('새 거래처명을 입력하세요.')
+      return
+    }
+    if (!vendorId || items.length === 0) {
+      setError('거래처와 최소 1개의 품목이 필요합니다.')
       return
     }
 
@@ -102,7 +146,29 @@ export default function InvoiceScreen() {
     setSaveMessage('')
     setPriceChanges([])
 
-    const trimmedVendor = vendor.trim()
+    let resolvedVendorId = vendorId
+    let resolvedVendorName
+    let didCreateVendor = false
+
+    if (vendorId === 'new') {
+      const trimmedName = newVendorName.trim()
+      const { data: vendorRow, error: vendorErr } = await supabase
+        .from('vendors')
+        .upsert({ store_code: store.code, name: trimmedName }, { onConflict: 'store_code,name' })
+        .select('id, name')
+        .single()
+      if (vendorErr) {
+        setSaving(false)
+        setError(vendorErr.message)
+        return
+      }
+      resolvedVendorId = vendorRow.id
+      resolvedVendorName = vendorRow.name
+      didCreateVendor = true
+    } else {
+      resolvedVendorName = vendors.find((v) => v.id === vendorId)?.name ?? ''
+    }
+
     const validItems = items.filter((item) => item.name.trim())
 
     // 같은 거래처의 이전 입고 내역에서 품목별 최근 단가를 조회 (물품명 정확히 일치만 비교)
@@ -110,7 +176,7 @@ export default function InvoiceScreen() {
       .from('invoices')
       .select('item_name, unit_price, created_at')
       .eq('store_code', store.code)
-      .eq('vendor', trimmedVendor)
+      .eq('vendor_id', resolvedVendorId)
       .order('created_at', { ascending: false })
 
     if (historyErr) {
@@ -136,9 +202,30 @@ export default function InvoiceScreen() {
       }
     }
 
+    const totalAmount = validItems.reduce((sum, item) => sum + itemAmount(item), 0)
+
+    const { data: batch, error: batchErr } = await supabase
+      .from('invoice_batches')
+      .insert({
+        store_code: store.code,
+        vendor_id: resolvedVendorId,
+        invoice_date: date || null,
+        total_amount: totalAmount,
+      })
+      .select('id')
+      .single()
+
+    if (batchErr) {
+      setSaving(false)
+      setError(batchErr.message)
+      return
+    }
+
     const rows = validItems.map((item) => ({
       store_code: store.code,
-      vendor: trimmedVendor,
+      vendor: resolvedVendorName,
+      vendor_id: resolvedVendorId,
+      batch_id: batch.id,
       item_name: item.name.trim(),
       quantity: item.quantity === '' ? null : Number(item.quantity),
       unit_price: item.unitPrice === '' ? null : Number(item.unitPrice),
@@ -157,7 +244,8 @@ export default function InvoiceScreen() {
     if (changes.length > 0) {
       const changeRows = changes.map((c) => ({
         store_code: store.code,
-        vendor: trimmedVendor,
+        vendor: resolvedVendorName,
+        vendor_id: resolvedVendorId,
         item_name: c.itemName,
         previous_price: c.previousPrice,
         new_price: c.newPrice,
@@ -172,9 +260,11 @@ export default function InvoiceScreen() {
     setHistoryKey((k) => k + 1)
     setPendingImage(null)
     setPreviewUrl(null)
-    setVendor('')
+    setVendorId('')
+    setNewVendorName('')
     setDate('')
     setItems([])
+    if (didCreateVendor) setVendorsVersion((v) => v + 1)
   }
 
   return (
@@ -186,6 +276,12 @@ export default function InvoiceScreen() {
           </button>
           <button type="button" className="link-btn" onClick={() => navigate('/price-alerts')}>
             단가 변동 알림함 →
+          </button>
+        </div>
+        <div className="screen-header-row">
+          <span />
+          <button type="button" className="link-btn" onClick={() => navigate('/vendors')}>
+            거래처 관리 →
           </button>
         </div>
         <h1>입고 입력</h1>
@@ -232,15 +328,35 @@ export default function InvoiceScreen() {
       )}
 
       <div className="field">
-        <label htmlFor="vendor">거래처명</label>
-        <input
+        <label htmlFor="vendor">거래처</label>
+        <select
           id="vendor"
-          className="input"
-          value={vendor}
-          onChange={(e) => setVendor(e.target.value)}
-          placeholder="예: 국일농산"
-        />
+          className="select select-block"
+          value={vendorId}
+          onChange={(e) => setVendorId(e.target.value)}
+        >
+          <option value="">거래처 선택...</option>
+          {vendors.map((v) => (
+            <option key={v.id} value={v.id}>
+              {v.name}
+            </option>
+          ))}
+          <option value="new">+ 새 거래처 추가</option>
+        </select>
       </div>
+
+      {vendorId === 'new' && (
+        <div className="field">
+          <label htmlFor="newVendor">새 거래처명</label>
+          <input
+            id="newVendor"
+            className="input"
+            value={newVendorName}
+            onChange={(e) => setNewVendorName(e.target.value)}
+            placeholder="예: 국일농산"
+          />
+        </div>
+      )}
       <div className="field">
         <label htmlFor="date">입고일</label>
         <input id="date" className="input" type="date" value={date} onChange={(e) => setDate(e.target.value)} />
@@ -310,7 +426,7 @@ export default function InvoiceScreen() {
         <button type="button" className="btn-secondary" onClick={addItem}>
           + 품목 추가
         </button>
-        {(vendor.trim() || items.length > 0) && (
+        {(vendorId || items.length > 0) && (
           <button type="button" className="btn-primary" onClick={handleSave} disabled={saving}>
             {saving ? '저장 중...' : '저장'}
           </button>
