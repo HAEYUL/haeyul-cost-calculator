@@ -16,7 +16,8 @@ export default function PriceTrendScreen() {
   const { store } = useStore()
   const navigate = useNavigate()
 
-  const [itemNames, setItemNames] = useState([])
+  const [invoiceIndex, setInvoiceIndex] = useState([])
+  const [itemFilterVendor, setItemFilterVendor] = useState('')
   const [selectedItem, setSelectedItem] = useState('')
   const [rows, setRows] = useState([])
   const [loadingItems, setLoadingItems] = useState(false)
@@ -37,7 +38,7 @@ export default function PriceTrendScreen() {
     setError('')
     supabase
       .from('invoices')
-      .select('item_name')
+      .select('item_name, vendor')
       .eq('store_code', store.code)
       .then(({ data, error: err }) => {
         if (err) {
@@ -45,7 +46,7 @@ export default function PriceTrendScreen() {
           setLoadingItems(false)
           return
         }
-        setItemNames([...new Set((data ?? []).map((r) => r.item_name))].sort((a, b) => a.localeCompare(b)))
+        setInvoiceIndex(data ?? [])
         setLoadingItems(false)
       })
   }, [store])
@@ -76,6 +77,22 @@ export default function PriceTrendScreen() {
   }, [store, selectedItem])
 
   if (!store) return null
+
+  // 거래처를 고르면 그 거래처가 납품한 물품으로만 물품 목록을 좁혀서 찾기 쉽게 한다.
+  // (아래 "거래처별 단가 비교"는 이 필터와 무관하게 항상 전체 거래처를 비교한다)
+  const itemFilterVendors = [...new Set(invoiceIndex.map((r) => r.vendor))].sort((a, b) => a.localeCompare(b))
+  const itemNames = [
+    ...new Set(
+      invoiceIndex
+        .filter((r) => !itemFilterVendor || r.vendor === itemFilterVendor)
+        .map((r) => r.item_name),
+    ),
+  ].sort((a, b) => a.localeCompare(b))
+
+  const handleItemFilterVendorChange = (value) => {
+    setItemFilterVendor(value)
+    setSelectedItem('')
+  }
 
   // 거래처별 최신 단가 비교: 거래처마다 가장 최근 입고 단가를 뽑아 저렴한 순으로 정렬
   const latestByVendor = new Map()
@@ -118,6 +135,23 @@ export default function PriceTrendScreen() {
 
       {!supabase && <p className="hint">Supabase가 설정되지 않았습니다.</p>}
       {error && <p className="error-text">{error}</p>}
+
+      <div className="field">
+        <label htmlFor="itemFilterVendor">거래처 선택</label>
+        <select
+          id="itemFilterVendor"
+          className="select select-block"
+          value={itemFilterVendor}
+          onChange={(e) => handleItemFilterVendorChange(e.target.value)}
+        >
+          <option value="">전체 거래처</option>
+          {itemFilterVendors.map((v) => (
+            <option key={v} value={v}>
+              {v}
+            </option>
+          ))}
+        </select>
+      </div>
 
       <div className="field">
         <label htmlFor="itemSelect">물품 선택</label>
