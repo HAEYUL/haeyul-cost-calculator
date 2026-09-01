@@ -5,6 +5,7 @@ import { useStore } from '../context/StoreContext'
 const MENU_ITEMS = [
   { label: '입고 입력', path: '/invoices' },
   { label: '거래처 관리', path: '/vendors' },
+  { label: '재고 관리', path: '/inventory' },
   { label: '레시피 입력', path: '/recipes' },
   { label: '재료 매칭', path: '/ingredient-matching' },
   { label: '원가 확인', path: '/cost' },

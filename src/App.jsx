@@ -6,6 +6,8 @@ import InvoiceScreen from './screens/InvoiceScreen'
 import PriceAlertsScreen from './screens/PriceAlertsScreen'
 import VendorScreen from './screens/VendorScreen'
 import VendorDetailScreen from './screens/VendorDetailScreen'
+import InventoryScreen from './screens/InventoryScreen'
+import InventoryDetailScreen from './screens/InventoryDetailScreen'
 import RecipeScreen from './screens/RecipeScreen'
 import RecipeDetailScreen from './screens/RecipeDetailScreen'
 import MatchingScreen from './screens/MatchingScreen'
@@ -23,6 +25,8 @@ export default function App() {
           <Route path="/price-alerts" element={<PriceAlertsScreen />} />
           <Route path="/vendors" element={<VendorScreen />} />
           <Route path="/vendors/:vendorId" element={<VendorDetailScreen />} />
+          <Route path="/inventory" element={<InventoryScreen />} />
+          <Route path="/inventory/:itemName/:unit" element={<InventoryDetailScreen />} />
           <Route path="/recipes" element={<RecipeScreen />} />
           <Route path="/recipes/:menuName" element={<RecipeDetailScreen />} />
           <Route path="/ingredient-matching" element={<MatchingScreen />} />

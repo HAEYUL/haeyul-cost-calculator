@@ -88,6 +88,33 @@ create policy "vendor_payments are publicly insertable"
   on vendor_payments for insert
   with check (true);
 
+-- stock_usage: 당일 재료 사용량 수동 기록. 현재고는 invoices.quantity 합계(품목명+단위
+-- 기준) 에서 이 테이블의 used_qty 합계를 뺀 값으로 계산한다. item_name/unit이 자유
+-- 텍스트/선택값이라 표기가 다르면(예: "돼지고기" vs "돼지고기(앞다리)") 다른 재고로
+-- 잡히니, 입고 입력 때와 같은 이름·단위로 기록해야 정확하다.
+create table if not exists stock_usage (
+  id uuid primary key default gen_random_uuid(),
+  store_code text not null references stores(code),
+  item_name text not null,
+  unit text,
+  used_qty numeric not null,
+  used_date date,
+  memo text,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists stock_usage_store_item_idx on stock_usage (store_code, item_name, unit);
+
+alter table stock_usage enable row level security;
+
+create policy "stock_usage is publicly readable"
+  on stock_usage for select
+  using (true);
+
+create policy "stock_usage is publicly insertable"
+  on stock_usage for insert
+  with check (true);
+
 -- invoices: 입고 내역. 한 품목당 한 행. store_code로 매장별 데이터를 분리한다.
 -- 로그인/비밀번호가 없는 앱이므로 매장 분리는 애플리케이션 레벨(선택된 매장 코드로 필터)에서
 -- 이루어지고, RLS는 anon 키로 읽기/쓰기를 허용한다.
