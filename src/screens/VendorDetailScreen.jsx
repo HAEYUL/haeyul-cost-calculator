@@ -34,7 +34,9 @@ export default function VendorDetailScreen() {
       supabase.from('vendors').select('id, name').eq('id', vendorId).single(),
       supabase
         .from('invoice_batches')
-        .select('id, invoice_date, total_amount, created_at, invoices(id, item_name, quantity, unit_price, unit, amount)')
+        .select(
+          'id, invoice_date, total_amount, statement_balance, created_at, invoices(id, item_name, quantity, unit_price, unit, amount)',
+        )
         .eq('store_code', store.code)
         .eq('vendor_id', vendorId)
         .order('invoice_date', { ascending: false, nullsFirst: false })
@@ -64,7 +66,10 @@ export default function VendorDetailScreen() {
 
   const totalAmount = batches.reduce((sum, b) => sum + Number(b.total_amount), 0)
   const totalPaid = payments.reduce((sum, p) => sum + Number(p.amount), 0)
-  const balance = totalAmount - totalPaid
+
+  // 미지급금은 결제 기록 기반 계산 대신, 가장 최근 명세표에 인쇄된 잔액을 우선 보여준다.
+  // batches는 이미 최신순으로 정렬돼 있으니 잔액이 기록된 첫 항목을 찾으면 된다.
+  const latestBatchWithBalance = batches.find((b) => b.statement_balance != null)
 
   const handleAddPayment = async () => {
     const amount = Number(paymentAmount)
@@ -110,16 +115,22 @@ export default function VendorDetailScreen() {
         <>
           <div className="cost-summary">
             <div className="cost-summary-row">
+              <span>미지급금{latestBatchWithBalance ? ` (${latestBatchWithBalance.invoice_date ?? '날짜 미입력'} 명세표 기준)` : ''}</span>
+              {latestBatchWithBalance ? (
+                <strong className={Number(latestBatchWithBalance.statement_balance) > 0 ? 'alert-up' : ''}>
+                  {Math.round(Number(latestBatchWithBalance.statement_balance)).toLocaleString()}원
+                </strong>
+              ) : (
+                <span className="hint">명세표 잔액 정보 없음</span>
+              )}
+            </div>
+            <div className="cost-summary-row">
               <span>누적 입고액</span>
               <strong>{Math.round(totalAmount).toLocaleString()}원</strong>
             </div>
             <div className="cost-summary-row">
               <span>누적 결제액</span>
               <strong>{Math.round(totalPaid).toLocaleString()}원</strong>
-            </div>
-            <div className="cost-summary-row">
-              <span>미지급금</span>
-              <strong className={balance > 0 ? 'alert-up' : ''}>{Math.round(balance).toLocaleString()}원</strong>
             </div>
           </div>
 
@@ -187,6 +198,11 @@ export default function VendorDetailScreen() {
                   <span className="history-item">{batch.invoice_date ?? '날짜 미입력'}</span>
                   <span>{Math.round(Number(batch.total_amount)).toLocaleString()}원</span>
                 </div>
+                {batch.statement_balance != null && (
+                  <div className="history-row-sub">
+                    <span>명세표 잔액 {Math.round(Number(batch.statement_balance)).toLocaleString()}원</span>
+                  </div>
+                )}
                 {batch.invoices?.length > 0 && (
                   <ul className="batch-items">
                     {batch.invoices.map((row) => (

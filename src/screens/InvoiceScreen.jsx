@@ -18,6 +18,39 @@ function matchVendor(vendors, name) {
   return vendors.find((v) => v.name.trim().toLowerCase() === norm) ?? null
 }
 
+function levenshtein(a, b) {
+  const dp = Array.from({ length: a.length + 1 }, (_, i) => [i, ...new Array(b.length).fill(0)])
+  for (let j = 0; j <= b.length; j++) dp[0][j] = j
+  for (let i = 1; i <= a.length; i++) {
+    for (let j = 1; j <= b.length; j++) {
+      dp[i][j] = a[i - 1] === b[j - 1] ? dp[i - 1][j - 1] : 1 + Math.min(dp[i - 1][j], dp[i][j - 1], dp[i - 1][j - 1])
+    }
+  }
+  return dp[a.length][b.length]
+}
+
+// 완전히 같은 이름은 아니지만 오타/표기 차이로 같은 거래처일 가능성이 있는 기존 거래처를 찾는다
+// (예: "권스유통" vs "퀸스유통"). 저장 전에 사용자에게 확인을 받아 거래처가 쪼개지는 걸 막는다.
+function findSimilarVendor(vendors, name) {
+  if (!name) return null
+  const norm = name.trim().toLowerCase()
+  if (!norm) return null
+  let best = null
+  let bestSimilarity = 0
+  for (const v of vendors) {
+    const vNorm = v.name.trim().toLowerCase()
+    if (vNorm === norm) continue
+    const maxLen = Math.max(norm.length, vNorm.length)
+    if (maxLen === 0) continue
+    const similarity = 1 - levenshtein(norm, vNorm) / maxLen
+    if (similarity > bestSimilarity) {
+      bestSimilarity = similarity
+      best = v
+    }
+  }
+  return bestSimilarity >= 0.6 ? best : null
+}
+
 function itemAmount(item) {
   if (item.amount !== '') return Number(item.amount)
   const q = item.quantity === '' ? null : Number(item.quantity)
@@ -38,7 +71,9 @@ export default function InvoiceScreen() {
   const [vendorsVersion, setVendorsVersion] = useState(0)
   const [vendorId, setVendorId] = useState('')
   const [newVendorName, setNewVendorName] = useState('')
+  const [similarVendorPrompt, setSimilarVendorPrompt] = useState(null)
   const [date, setDate] = useState('')
+  const [statementBalance, setStatementBalance] = useState('')
   const [items, setItems] = useState([])
   const [saving, setSaving] = useState(false)
   const [saveMessage, setSaveMessage] = useState('')
@@ -75,7 +110,9 @@ export default function InvoiceScreen() {
       setPreviewUrl(preview)
       setVendorId('')
       setNewVendorName('')
+      setSimilarVendorPrompt(null)
       setDate('')
+      setStatementBalance('')
       setItems([])
       setDuplicateWarning(null)
       setAnalyzed(false)
@@ -101,14 +138,25 @@ export default function InvoiceScreen() {
       if (matched) {
         setVendorId(matched.id)
         setNewVendorName('')
+        setSimilarVendorPrompt(null)
       } else if (data.vendor) {
-        setVendorId('new')
-        setNewVendorName(data.vendor)
+        const similar = findSimilarVendor(vendors, data.vendor)
+        if (similar) {
+          setVendorId('')
+          setNewVendorName('')
+          setSimilarVendorPrompt({ existingVendor: similar, newName: data.vendor })
+        } else {
+          setVendorId('new')
+          setNewVendorName(data.vendor)
+          setSimilarVendorPrompt(null)
+        }
       } else {
         setVendorId('')
         setNewVendorName('')
+        setSimilarVendorPrompt(null)
       }
       setDate(data.date ?? '')
+      setStatementBalance(data.statementBalance != null ? String(data.statementBalance) : '')
       setItems(
         (data.items ?? []).map((item) => ({
           name: item.name ?? '',
@@ -252,6 +300,7 @@ export default function InvoiceScreen() {
         vendor_id: resolvedVendorId,
         invoice_date: date || null,
         total_amount: totalAmount,
+        statement_balance: statementBalance === '' ? null : Number(statementBalance),
       })
       .select('id')
       .single()
@@ -304,7 +353,9 @@ export default function InvoiceScreen() {
     setAnalyzed(false)
     setVendorId('')
     setNewVendorName('')
+    setSimilarVendorPrompt(null)
     setDate('')
+    setStatementBalance('')
     setItems([])
     if (didCreateVendor) setVendorsVersion((v) => v + 1)
   }
@@ -387,6 +438,39 @@ export default function InvoiceScreen() {
         </div>
       )}
 
+      {similarVendorPrompt && (
+        <div className="price-alert-box">
+          <p className="price-alert-title">비슷한 거래처가 있어요</p>
+          <p className="hint">
+            "{similarVendorPrompt.newName}"과(와) 기존 거래처 "{similarVendorPrompt.existingVendor.name}"이(가) 같은 곳인가요?
+          </p>
+          <div className="invoice-form">
+            <button
+              type="button"
+              className="btn-secondary"
+              onClick={() => {
+                setVendorId('new')
+                setNewVendorName(similarVendorPrompt.newName)
+                setSimilarVendorPrompt(null)
+              }}
+            >
+              아니요, 새 거래처예요
+            </button>
+            <button
+              type="button"
+              className="btn-primary"
+              onClick={() => {
+                setVendorId(similarVendorPrompt.existingVendor.id)
+                setNewVendorName('')
+                setSimilarVendorPrompt(null)
+              }}
+            >
+              네, 같은 거래처예요
+            </button>
+          </div>
+        </div>
+      )}
+
       <div className="field">
         <label htmlFor="vendor">거래처</label>
         <select
@@ -420,6 +504,17 @@ export default function InvoiceScreen() {
       <div className="field">
         <label htmlFor="date">입고일</label>
         <input id="date" className="input" type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+      </div>
+      <div className="field">
+        <label htmlFor="statementBalance">명세표 잔액(현잔액/총잔금, 있으면)</label>
+        <input
+          id="statementBalance"
+          className="input"
+          inputMode="decimal"
+          value={statementBalance}
+          onChange={(e) => setStatementBalance(e.target.value)}
+          placeholder="예: 3054500"
+        />
       </div>
 
       {items.length > 0 && (

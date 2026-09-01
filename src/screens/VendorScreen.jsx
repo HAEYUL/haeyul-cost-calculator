@@ -10,6 +10,7 @@ export default function VendorScreen() {
   const [vendors, setVendors] = useState([])
   const [totalsByVendor, setTotalsByVendor] = useState(new Map())
   const [paidByVendor, setPaidByVendor] = useState(new Map())
+  const [latestBalanceByVendor, setLatestBalanceByVendor] = useState(new Map())
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [newName, setNewName] = useState('')
@@ -26,7 +27,10 @@ export default function VendorScreen() {
     setError('')
     Promise.all([
       supabase.from('vendors').select('id, name').eq('store_code', store.code).order('name'),
-      supabase.from('invoice_batches').select('vendor_id, total_amount').eq('store_code', store.code),
+      supabase
+        .from('invoice_batches')
+        .select('vendor_id, total_amount, invoice_date, statement_balance, created_at')
+        .eq('store_code', store.code),
       supabase.from('vendor_payments').select('vendor_id, amount').eq('store_code', store.code),
     ]).then(([vendorsRes, batchesRes, paymentsRes]) => {
       const err = vendorsRes.error || batchesRes.error || paymentsRes.error
@@ -36,8 +40,16 @@ export default function VendorScreen() {
         return
       }
       const totals = new Map()
+      const latestBalance = new Map()
       for (const b of batchesRes.data ?? []) {
         totals.set(b.vendor_id, (totals.get(b.vendor_id) ?? 0) + Number(b.total_amount))
+        if (b.statement_balance != null) {
+          const dateValue = b.invoice_date ? new Date(b.invoice_date).getTime() : new Date(b.created_at).getTime()
+          const existing = latestBalance.get(b.vendor_id)
+          if (!existing || dateValue > existing.dateValue) {
+            latestBalance.set(b.vendor_id, { value: Number(b.statement_balance), dateValue })
+          }
+        }
       }
       const paid = new Map()
       for (const p of paymentsRes.data ?? []) {
@@ -46,6 +58,7 @@ export default function VendorScreen() {
       setVendors(vendorsRes.data ?? [])
       setTotalsByVendor(totals)
       setPaidByVendor(paid)
+      setLatestBalanceByVendor(latestBalance)
       setLoading(false)
     })
   }, [store, dataKey])
@@ -56,11 +69,17 @@ export default function VendorScreen() {
     .map((v) => {
       const totalAmount = totalsByVendor.get(v.id) ?? 0
       const totalPaid = paidByVendor.get(v.id) ?? 0
-      return { ...v, totalAmount, totalPaid, balance: totalAmount - totalPaid }
+      const balance = latestBalanceByVendor.get(v.id)?.value ?? null
+      return { ...v, totalAmount, totalPaid, balance }
     })
-    .sort((a, b) => b.balance - a.balance)
+    .sort((a, b) => {
+      if (a.balance == null && b.balance == null) return a.name.localeCompare(b.name)
+      if (a.balance == null) return 1
+      if (b.balance == null) return -1
+      return b.balance - a.balance
+    })
 
-  const totalBalance = vendorsWithBalance.reduce((sum, v) => sum + v.balance, 0)
+  const totalBalance = vendorsWithBalance.reduce((sum, v) => sum + (v.balance ?? 0), 0)
 
   const handleAdd = async () => {
     const trimmed = newName.trim()
@@ -86,7 +105,7 @@ export default function VendorScreen() {
           ← 입고 입력
         </button>
         <h1>거래처 관리</h1>
-        <p className="subtitle">{store.name} · 거래처별 입고액과 미지급금을 확인해요</p>
+        <p className="subtitle">{store.name} · 거래처별 최근 명세표 잔액을 확인해요</p>
       </div>
 
       {!supabase && <p className="hint">Supabase가 설정되지 않았습니다.</p>}
@@ -94,7 +113,7 @@ export default function VendorScreen() {
       {!loading && !error && vendors.length > 0 && (
         <div className="cost-summary">
           <div className="cost-summary-row">
-            <span>전체 미지급금</span>
+            <span>전체 미지급금 (명세표 잔액 합계)</span>
             <strong className={totalBalance > 0 ? 'alert-up' : ''}>{Math.round(totalBalance).toLocaleString()}원</strong>
           </div>
         </div>
@@ -124,7 +143,11 @@ export default function VendorScreen() {
             <button type="button" className="cost-row-btn" onClick={() => navigate(`/vendors/${v.id}`)}>
               <div className="history-row-main">
                 <span className="history-item">{v.name}</span>
-                <span className={v.balance > 0 ? 'alert-up' : ''}>미지급 {Math.round(v.balance).toLocaleString()}원</span>
+                {v.balance != null ? (
+                  <span className={v.balance > 0 ? 'alert-up' : ''}>미지급 {Math.round(v.balance).toLocaleString()}원</span>
+                ) : (
+                  <span className="hint">명세표 잔액 정보 없음</span>
+                )}
               </div>
               <div className="history-row-sub">
                 <span>입고 {Math.round(v.totalAmount).toLocaleString()}원</span>
