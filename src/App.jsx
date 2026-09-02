@@ -6,6 +6,9 @@ import InvoiceScreen from './screens/InvoiceScreen'
 import PriceAlertsScreen from './screens/PriceAlertsScreen'
 import VendorScreen from './screens/VendorScreen'
 import VendorDetailScreen from './screens/VendorDetailScreen'
+import SpendingReportScreen from './screens/SpendingReportScreen'
+import ReorderAlertScreen from './screens/ReorderAlertScreen'
+import ConsumptionPatternScreen from './screens/ConsumptionPatternScreen'
 import InventoryScreen from './screens/InventoryScreen'
 import InventoryDetailScreen from './screens/InventoryDetailScreen'
 import PriceTrendScreen from './screens/PriceTrendScreen'
@@ -27,6 +30,9 @@ export default function App() {
           <Route path="/price-alerts" element={<PriceAlertsScreen />} />
           <Route path="/vendors" element={<VendorScreen />} />
           <Route path="/vendors/:vendorId" element={<VendorDetailScreen />} />
+          <Route path="/spending-report" element={<SpendingReportScreen />} />
+          <Route path="/reorder-alerts" element={<ReorderAlertScreen />} />
+          <Route path="/consumption-pattern" element={<ConsumptionPatternScreen />} />
           <Route path="/inventory" element={<InventoryScreen />} />
           <Route path="/inventory/:itemName/:unit" element={<InventoryDetailScreen />} />
           <Route path="/price-trend" element={<PriceTrendScreen />} />

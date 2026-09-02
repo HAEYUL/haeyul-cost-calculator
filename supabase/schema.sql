@@ -87,6 +87,31 @@ create policy "invoice_batches are publicly updatable"
   using (true)
   with check (true);
 
+-- photo_path: 저장 시 올린 거래명세표 원본 사진을 Storage(invoice-photos 버킷)에 보관하고,
+-- 그 경로만 여기 저장한다. AI가 읽은 텍스트만 남기고 사진 자체는 버리던 것을, 나중에
+-- 분쟁·확인이 필요할 때 원본을 다시 볼 수 있게 남겨둔다. 사진 업로드에 실패해도 입고 저장
+-- 자체는 막지 않으므로(최선 노력), 옛 데이터나 업로드 실패 건은 null일 수 있다.
+alter table invoice_batches add column if not exists photo_path text;
+
+insert into storage.buckets (id, name, public)
+values ('invoice-photos', 'invoice-photos', true)
+on conflict (id) do nothing;
+
+drop policy if exists "invoice-photos are publicly readable" on storage.objects;
+create policy "invoice-photos are publicly readable"
+  on storage.objects for select
+  using (bucket_id = 'invoice-photos');
+
+drop policy if exists "invoice-photos are publicly insertable" on storage.objects;
+create policy "invoice-photos are publicly insertable"
+  on storage.objects for insert
+  with check (bucket_id = 'invoice-photos');
+
+drop policy if exists "invoice-photos are publicly deletable" on storage.objects;
+create policy "invoice-photos are publicly deletable"
+  on storage.objects for delete
+  using (bucket_id = 'invoice-photos');
+
 -- vendor_payments: 거래처에 지급(결제)한 금액 기록. 거래처별 미지급금(잔액)은
 -- invoice_batches.total_amount 합계 - vendor_payments.amount 합계로 계산한다.
 create table if not exists vendor_payments (

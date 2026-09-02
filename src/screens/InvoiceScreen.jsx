@@ -4,11 +4,20 @@ import { useStore } from '../context/StoreContext'
 import { supabase } from '../lib/supabaseClient'
 import { compressImage } from '../lib/compressImage'
 import InvoiceHistory from '../components/InvoiceHistory'
+import { latestInvoiceInfoByItem, computeMenuCost } from '../lib/costCalc'
 
 const UNIT_LABELS = { g: 'g', kg: 'kg', ea: '개', other: '기타' }
+const MARGIN_WARNING_RATIO = 40
 
 function emptyItem() {
   return { name: '', quantity: '', unitPrice: '', unit: 'kg', amount: '' }
+}
+
+function base64ToBlob(base64, mediaType) {
+  const byteChars = atob(base64)
+  const bytes = new Uint8Array(byteChars.length)
+  for (let i = 0; i < byteChars.length; i++) bytes[i] = byteChars.charCodeAt(i)
+  return new Blob([bytes], { type: mediaType })
 }
 
 function matchVendor(vendors, name) {
@@ -121,6 +130,7 @@ export default function InvoiceScreen() {
   const [saving, setSaving] = useState(false)
   const [saveMessage, setSaveMessage] = useState('')
   const [priceChanges, setPriceChanges] = useState([])
+  const [marginAlerts, setMarginAlerts] = useState([])
   const [historyKey, setHistoryKey] = useState(0)
   const [duplicateWarning, setDuplicateWarning] = useState(null)
 
@@ -291,6 +301,7 @@ export default function InvoiceScreen() {
     setError('')
     setSaveMessage('')
     setPriceChanges([])
+    setMarginAlerts([])
     setDuplicateWarning(null)
 
     let resolvedVendorId = vendorId
@@ -509,9 +520,73 @@ export default function InvoiceScreen() {
       if (changeErr) console.error(changeErr)
     }
 
+    // 명세표 원본 사진을 Storage에 보관한다 (최선 노력 — 실패해도 이미 저장된 입고 데이터는
+    // 그대로 유지하고, 저장 자체를 막지 않는다).
+    if (pendingImage) {
+      try {
+        const blob = base64ToBlob(pendingImage.imageBase64, pendingImage.mediaType)
+        const path = `${store.code}/${batch.id}.jpg`
+        const { error: uploadErr } = await supabase.storage.from('invoice-photos').upload(path, blob, {
+          contentType: pendingImage.mediaType,
+          upsert: true,
+        })
+        if (uploadErr) {
+          console.error(uploadErr)
+        } else {
+          const { error: photoPathErr } = await supabase.from('invoice_batches').update({ photo_path: path }).eq('id', batch.id)
+          if (photoPathErr) console.error(photoPathErr)
+        }
+      } catch (uploadErr) {
+        console.error(uploadErr)
+      }
+    }
+
+    // 단가가 오른 품목이 레시피에 쓰이고 있으면, 그 메뉴의 원가율이 얼마나 됐는지 바로 확인해서
+    // 마진이 낮아진(원가율이 높아진) 메뉴를 저장 직후에 알려준다.
+    let marginWarnings = []
+    if (changes.length > 0) {
+      const [recipesRes, mappingRes, pricesRes, allInvoicesRes] = await Promise.all([
+        supabase.from('recipes').select('menu_name, ingredient_name, amount_g').eq('store_code', store.code),
+        supabase
+          .from('ingredient_mapping')
+          .select('recipe_ingredient_name, invoice_item_name')
+          .eq('store_code', store.code),
+        supabase.from('menu_prices').select('menu_name, selling_price').eq('store_code', store.code),
+        supabase.from('invoices').select('item_name, unit_price, unit, created_at').eq('store_code', store.code),
+      ])
+
+      if (!recipesRes.error && !mappingRes.error && !pricesRes.error && !allInvoicesRes.error) {
+        const changedItemNames = new Set(changes.map((c) => c.itemName))
+        const mappingRows = mappingRes.data ?? []
+        const affectedIngredients = new Set(
+          mappingRows.filter((m) => changedItemNames.has(m.invoice_item_name)).map((m) => m.recipe_ingredient_name),
+        )
+        const recipeRows = recipesRes.data ?? []
+        const affectedMenus = new Set(
+          recipeRows.filter((r) => affectedIngredients.has(r.ingredient_name)).map((r) => r.menu_name),
+        )
+
+        const mappingByIngredient = new Map(mappingRows.map((m) => [m.recipe_ingredient_name, m.invoice_item_name]))
+        const infoByItem = latestInvoiceInfoByItem(allInvoicesRes.data ?? [])
+        const sellingByMenu = new Map((pricesRes.data ?? []).map((p) => [p.menu_name, Number(p.selling_price)]))
+
+        marginWarnings = [...affectedMenus]
+          .map((menuName) => {
+            const menuRecipeRows = recipeRows.filter((r) => r.menu_name === menuName)
+            const { totalCost } = computeMenuCost({ recipeRows: menuRecipeRows, mappingByIngredient, infoByItem })
+            const sellingPrice = sellingByMenu.get(menuName) ?? null
+            const ratio = sellingPrice ? (totalCost / sellingPrice) * 100 : null
+            return { menuName, ratio }
+          })
+          .filter((m) => m.ratio != null && m.ratio >= MARGIN_WARNING_RATIO)
+          .sort((a, b) => b.ratio - a.ratio)
+      }
+    }
+
     setSaving(false)
     setSaveMessage('저장했습니다.')
     setPriceChanges(changes)
+    setMarginAlerts(marginWarnings)
     setHistoryKey((k) => k + 1)
     setPendingImage(null)
     setPreviewUrl(null)
@@ -642,6 +717,25 @@ export default function InvoiceScreen() {
                 </li>
               )
             })}
+          </ul>
+        </div>
+      )}
+
+      {marginAlerts.length > 0 && (
+        <div className="price-alert-box price-alert-box-danger">
+          <p className="price-alert-title">⚠️ 이 단가 변동으로 원가율이 높아진 메뉴가 있어요</p>
+          <ul className="price-alert-list">
+            {marginAlerts.map((m) => (
+              <li key={m.menuName}>
+                <button
+                  type="button"
+                  className="inline-link"
+                  onClick={() => navigate(`/cost/${encodeURIComponent(m.menuName)}`)}
+                >
+                  {m.menuName}: 원가율 {m.ratio.toFixed(1)}%
+                </button>
+              </li>
+            ))}
           </ul>
         </div>
       )}
