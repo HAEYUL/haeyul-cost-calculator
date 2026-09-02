@@ -242,6 +242,41 @@ create policy "waste_records are publicly deletable"
   on waste_records for delete
   using (true);
 
+-- stock_adjustments: 실물 재고를 눈으로 세어본 결과와 계산상 재고(입고−사용−폐기)가
+-- 다를 때 그 차이(delta)를 기록해 맞춘다. counted_qty는 그때 실제로 센 수량(참고용),
+-- delta는 계산상 재고에 더하거나 뺄 보정값이다. 현재고는 이제
+-- 입고 − 사용 − 폐기 + 실사 보정 합계로 계산한다.
+create table if not exists stock_adjustments (
+  id uuid primary key default gen_random_uuid(),
+  store_code text not null references stores(code),
+  item_name text not null,
+  unit text,
+  delta numeric not null,
+  counted_qty numeric,
+  adjusted_date date,
+  memo text,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists stock_adjustments_store_item_idx on stock_adjustments (store_code, item_name, unit);
+
+alter table stock_adjustments enable row level security;
+
+drop policy if exists "stock_adjustments are publicly readable" on stock_adjustments;
+create policy "stock_adjustments are publicly readable"
+  on stock_adjustments for select
+  using (true);
+
+drop policy if exists "stock_adjustments are publicly insertable" on stock_adjustments;
+create policy "stock_adjustments are publicly insertable"
+  on stock_adjustments for insert
+  with check (true);
+
+drop policy if exists "stock_adjustments are publicly deletable" on stock_adjustments;
+create policy "stock_adjustments are publicly deletable"
+  on stock_adjustments for delete
+  using (true);
+
 -- pinned_items: 재고 관리 · 단가 추이 조회 화면이 공유하는 "관심 품목" 목록. 한쪽
 -- 화면에서 찜하면 다른 화면에도 그대로 반영된다. 예전에는 화면별로 inventory_pins(품목+단위),
 -- price_trend_pins(품목명)가 따로 있었는데, 통합하면서 단가 추이 조회와 같은 기준인

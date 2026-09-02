@@ -35,9 +35,10 @@ export default function InventoryScreen() {
       supabase.from('invoices').select('item_name, unit, quantity').eq('store_code', store.code),
       supabase.from('stock_usage').select('item_name, unit, used_qty').eq('store_code', store.code),
       supabase.from('waste_records').select('item_name, unit, qty').eq('store_code', store.code),
+      supabase.from('stock_adjustments').select('item_name, unit, delta').eq('store_code', store.code),
       supabase.from('pinned_items').select('item_name').eq('store_code', store.code),
-    ]).then(([invoicesRes, usageRes, wasteRes, pinsRes]) => {
-      const err = invoicesRes.error || usageRes.error || wasteRes.error || pinsRes.error
+    ]).then(([invoicesRes, usageRes, wasteRes, adjustmentsRes, pinsRes]) => {
+      const err = invoicesRes.error || usageRes.error || wasteRes.error || adjustmentsRes.error || pinsRes.error
       if (err) {
         setError(err.message)
         setLoading(false)
@@ -47,7 +48,7 @@ export default function InventoryScreen() {
       const stock = new Map()
       const ensure = (itemName, unit) => {
         const key = stockKey(itemName, unit)
-        if (!stock.has(key)) stock.set(key, { itemName, unit, received: 0, used: 0, wasted: 0 })
+        if (!stock.has(key)) stock.set(key, { itemName, unit, received: 0, used: 0, wasted: 0, adjusted: 0 })
         return stock.get(key)
       }
 
@@ -61,9 +62,12 @@ export default function InventoryScreen() {
       for (const row of wasteRes.data ?? []) {
         ensure(row.item_name, row.unit).wasted += Number(row.qty)
       }
+      for (const row of adjustmentsRes.data ?? []) {
+        ensure(row.item_name, row.unit).adjusted += Number(row.delta)
+      }
 
       const list = [...stock.values()]
-        .map((r) => ({ ...r, current: r.received - r.used - r.wasted }))
+        .map((r) => ({ ...r, current: r.received - r.used - r.wasted + r.adjusted }))
         .sort((a, b) => a.itemName.localeCompare(b.itemName))
 
       setRows(list)

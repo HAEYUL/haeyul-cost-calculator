@@ -17,6 +17,7 @@ export default function InventoryDetailScreen() {
   const [receipts, setReceipts] = useState([])
   const [usageRows, setUsageRows] = useState([])
   const [wasteRows, setWasteRows] = useState([])
+  const [adjustmentRows, setAdjustmentRows] = useState([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [dataKey, setDataKey] = useState(0)
@@ -37,6 +38,14 @@ export default function InventoryDetailScreen() {
 
   const [deleteWasteTarget, setDeleteWasteTarget] = useState(null)
   const [deletingWaste, setDeletingWaste] = useState(false)
+
+  const [countedQty, setCountedQty] = useState('')
+  const [adjustedDate, setAdjustedDate] = useState('')
+  const [adjustMemo, setAdjustMemo] = useState('')
+  const [savingAdjustment, setSavingAdjustment] = useState(false)
+
+  const [deleteAdjustmentTarget, setDeleteAdjustmentTarget] = useState(null)
+  const [deletingAdjustment, setDeletingAdjustment] = useState(false)
 
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo] = useState('')
@@ -74,18 +83,29 @@ export default function InventoryDetailScreen() {
       .order('created_at', { ascending: false })
     wasteQuery = unit == null ? wasteQuery.is('unit', null) : wasteQuery.eq('unit', unit)
 
-    Promise.all([receiptsQuery, usageQuery, wasteQuery]).then(([receiptsRes, usageRes, wasteRes]) => {
-      const err = receiptsRes.error || usageRes.error || wasteRes.error
-      if (err) {
-        setError(err.message)
+    let adjustmentQuery = supabase
+      .from('stock_adjustments')
+      .select('id, delta, counted_qty, adjusted_date, memo, created_at')
+      .eq('store_code', store.code)
+      .eq('item_name', itemName)
+      .order('created_at', { ascending: false })
+    adjustmentQuery = unit == null ? adjustmentQuery.is('unit', null) : adjustmentQuery.eq('unit', unit)
+
+    Promise.all([receiptsQuery, usageQuery, wasteQuery, adjustmentQuery]).then(
+      ([receiptsRes, usageRes, wasteRes, adjustmentRes]) => {
+        const err = receiptsRes.error || usageRes.error || wasteRes.error || adjustmentRes.error
+        if (err) {
+          setError(err.message)
+          setLoading(false)
+          return
+        }
+        setReceipts(receiptsRes.data ?? [])
+        setUsageRows(usageRes.data ?? [])
+        setWasteRows(wasteRes.data ?? [])
+        setAdjustmentRows(adjustmentRes.data ?? [])
         setLoading(false)
-        return
-      }
-      setReceipts(receiptsRes.data ?? [])
-      setUsageRows(usageRes.data ?? [])
-      setWasteRows(wasteRes.data ?? [])
-      setLoading(false)
-    })
+      },
+    )
   }, [store, itemName, unit, dataKey])
 
   if (!store) return null
@@ -93,7 +113,8 @@ export default function InventoryDetailScreen() {
   const totalReceived = receipts.reduce((sum, r) => sum + (r.quantity != null ? Number(r.quantity) : 0), 0)
   const totalUsed = usageRows.reduce((sum, r) => sum + Number(r.used_qty), 0)
   const totalWasted = wasteRows.reduce((sum, r) => sum + Number(r.qty), 0)
-  const currentStock = totalReceived - totalUsed - totalWasted
+  const totalAdjustment = adjustmentRows.reduce((sum, r) => sum + Number(r.delta), 0)
+  const currentStock = totalReceived - totalUsed - totalWasted + totalAdjustment
   const unitLabel = unit ? UNIT_LABELS[unit] ?? unit : ''
 
   const handleAddUsage = async () => {
@@ -184,9 +205,59 @@ export default function InventoryDetailScreen() {
     setDataKey((k) => k + 1)
   }
 
+  const handleAddAdjustment = async () => {
+    const counted = Number(countedQty)
+    if (countedQty === '' || !Number.isFinite(counted) || !supabase) {
+      setError('실제 확인한 수량을 입력하세요.')
+      return
+    }
+    const delta = counted - currentStock
+    if (delta === 0) {
+      setError('실제 수량이 계산상 재고와 같아서 보정할 내용이 없어요.')
+      return
+    }
+    setSavingAdjustment(true)
+    setError('')
+    const { error: err } = await supabase.from('stock_adjustments').insert({
+      store_code: store.code,
+      item_name: itemName,
+      unit,
+      delta,
+      counted_qty: counted,
+      adjusted_date: adjustedDate || null,
+      memo: adjustMemo.trim() || null,
+    })
+    setSavingAdjustment(false)
+    if (err) {
+      setError(err.message)
+      return
+    }
+    setCountedQty('')
+    setAdjustedDate('')
+    setAdjustMemo('')
+    setDataKey((k) => k + 1)
+  }
+
+  const handleDeleteAdjustment = async () => {
+    if (!deleteAdjustmentTarget || !supabase) return
+    setDeletingAdjustment(true)
+    setError('')
+
+    const { error: err } = await supabase.from('stock_adjustments').delete().eq('id', deleteAdjustmentTarget.id)
+    setDeletingAdjustment(false)
+    if (err) {
+      setError(err.message)
+      return
+    }
+
+    setDeleteAdjustmentTarget(null)
+    setDataKey((k) => k + 1)
+  }
+
   const inRange = (dateStr) => (!dateFrom || !dateStr || dateStr >= dateFrom) && (!dateTo || !dateStr || dateStr <= dateTo)
   const visibleUsageRows = usageRows.filter((r) => inRange(r.used_date))
   const visibleWasteRows = wasteRows.filter((r) => inRange(r.waste_date))
+  const visibleAdjustmentRows = adjustmentRows.filter((r) => inRange(r.adjusted_date))
   const visibleReceipts = receipts.filter((r) => inRange(r.invoice_date))
 
   return (
@@ -234,6 +305,16 @@ export default function InventoryDetailScreen() {
                 {unitLabel}
               </strong>
             </div>
+            {totalAdjustment !== 0 && (
+              <div className="cost-summary-row">
+                <span>실사 보정</span>
+                <strong className={totalAdjustment < 0 ? 'alert-up' : ''}>
+                  {totalAdjustment > 0 ? '+' : ''}
+                  {totalAdjustment.toLocaleString()}
+                  {unitLabel}
+                </strong>
+              </div>
+            )}
           </div>
 
           <h2 className="section-title">오늘 사용량 기록</h2>
@@ -321,6 +402,46 @@ export default function InventoryDetailScreen() {
           </div>
           <button type="button" className="btn-secondary" onClick={handleAddWaste} disabled={savingWaste}>
             {savingWaste ? '저장 중...' : '폐기 기록'}
+          </button>
+
+          <h2 className="section-title">재고 실사(실물 확인)</h2>
+          <p className="hint">
+            직접 세어본 실제 수량을 입력하면, 계산상 재고({currentStock.toLocaleString()}
+            {unitLabel})와 차이나는 만큼 자동으로 보정해요.
+          </p>
+          <div className="field">
+            <label htmlFor="countedQty">실제 확인한 수량{unitLabel ? ` (${unitLabel})` : ''}</label>
+            <input
+              id="countedQty"
+              className="input"
+              inputMode="decimal"
+              value={countedQty}
+              onChange={(e) => setCountedQty(e.target.value)}
+              placeholder="예: 15"
+            />
+          </div>
+          <div className="field">
+            <label htmlFor="adjustedDate">확인일</label>
+            <input
+              id="adjustedDate"
+              className="input"
+              type="date"
+              value={adjustedDate}
+              onChange={(e) => setAdjustedDate(e.target.value)}
+            />
+          </div>
+          <div className="field">
+            <label htmlFor="adjustMemo">메모</label>
+            <input
+              id="adjustMemo"
+              className="input"
+              value={adjustMemo}
+              onChange={(e) => setAdjustMemo(e.target.value)}
+              placeholder="선택사항"
+            />
+          </div>
+          <button type="button" className="btn-secondary" onClick={handleAddAdjustment} disabled={savingAdjustment}>
+            {savingAdjustment ? '저장 중...' : '실사 결과 반영'}
           </button>
 
           <div className="date-range">
@@ -443,6 +564,70 @@ export default function InventoryDetailScreen() {
                       </button>
                       <button type="button" className="btn-primary" onClick={handleDeleteWaste} disabled={deletingWaste}>
                         {deletingWaste ? '삭제 중...' : '삭제'}
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </li>
+            ))}
+          </ul>
+
+          <h2 className="section-title">실사 내역 ({visibleAdjustmentRows.length}건)</h2>
+          {adjustmentRows.length === 0 && <p className="hint">아직 실사 기록이 없습니다.</p>}
+          {adjustmentRows.length > 0 && visibleAdjustmentRows.length === 0 && (
+            <p className="hint">이 기간에 실사 기록이 없습니다.</p>
+          )}
+          <ul className="history-list">
+            {visibleAdjustmentRows.map((r) => (
+              <li key={r.id} className="history-row">
+                <div className="history-row-main">
+                  <span className="history-item">{r.adjusted_date ?? '날짜 미입력'}</span>
+                  <div className="history-row-main-end">
+                    <span className={Number(r.delta) < 0 ? 'alert-up' : ''}>
+                      {Number(r.delta) > 0 ? '+' : ''}
+                      {Number(r.delta).toLocaleString()}
+                      {unitLabel}
+                    </span>
+                    <button
+                      type="button"
+                      className="icon-btn"
+                      aria-label="실사 내역 삭제"
+                      onClick={() => setDeleteAdjustmentTarget(r)}
+                    >
+                      ✕
+                    </button>
+                  </div>
+                </div>
+                <div className="history-row-sub">
+                  {r.counted_qty != null && (
+                    <span>
+                      실사 결과 {Number(r.counted_qty).toLocaleString()}
+                      {unitLabel}
+                    </span>
+                  )}
+                  {r.memo && <span>{r.memo}</span>}
+                </div>
+
+                {deleteAdjustmentTarget?.id === r.id && (
+                  <div className="price-alert-box price-alert-box-danger">
+                    <p className="price-alert-title">이 실사 내역을 삭제할까요?</p>
+                    <p className="hint">삭제하면 이 보정만큼 현재고 계산에서 다시 빠져요. 되돌릴 수 없어요.</p>
+                    <div className="invoice-form">
+                      <button
+                        type="button"
+                        className="btn-secondary"
+                        onClick={() => setDeleteAdjustmentTarget(null)}
+                        disabled={deletingAdjustment}
+                      >
+                        취소
+                      </button>
+                      <button
+                        type="button"
+                        className="btn-primary"
+                        onClick={handleDeleteAdjustment}
+                        disabled={deletingAdjustment}
+                      >
+                        {deletingAdjustment ? '삭제 중...' : '삭제'}
                       </button>
                     </div>
                   </div>
