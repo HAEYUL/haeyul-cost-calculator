@@ -87,6 +87,31 @@ create policy "invoice_batches are publicly updatable"
   using (true)
   with check (true);
 
+-- photo_path: 저장 시 올린 거래명세표 원본 사진을 Storage(invoice-photos 버킷)에 보관하고,
+-- 그 경로만 여기 저장한다. AI가 읽은 텍스트만 남기고 사진 자체는 버리던 것을, 나중에
+-- 분쟁·확인이 필요할 때 원본을 다시 볼 수 있게 남겨둔다. 사진 업로드에 실패해도 입고 저장
+-- 자체는 막지 않으므로(최선 노력), 옛 데이터나 업로드 실패 건은 null일 수 있다.
+alter table invoice_batches add column if not exists photo_path text;
+
+insert into storage.buckets (id, name, public)
+values ('invoice-photos', 'invoice-photos', true)
+on conflict (id) do nothing;
+
+drop policy if exists "invoice-photos are publicly readable" on storage.objects;
+create policy "invoice-photos are publicly readable"
+  on storage.objects for select
+  using (bucket_id = 'invoice-photos');
+
+drop policy if exists "invoice-photos are publicly insertable" on storage.objects;
+create policy "invoice-photos are publicly insertable"
+  on storage.objects for insert
+  with check (bucket_id = 'invoice-photos');
+
+drop policy if exists "invoice-photos are publicly deletable" on storage.objects;
+create policy "invoice-photos are publicly deletable"
+  on storage.objects for delete
+  using (bucket_id = 'invoice-photos');
+
 -- vendor_payments: 거래처에 지급(결제)한 금액 기록. 거래처별 미지급금(잔액)은
 -- invoice_batches.total_amount 합계 - vendor_payments.amount 합계로 계산한다.
 create table if not exists vendor_payments (
@@ -152,6 +177,39 @@ create policy "stock_usage is publicly insertable"
 drop policy if exists "stock_usage is publicly deletable" on stock_usage;
 create policy "stock_usage is publicly deletable"
   on stock_usage for delete
+  using (true);
+
+-- waste_records: 상하거나 조리 실수 등으로 버린(폐기) 물량 기록. stock_usage(정상 사용)와는
+-- 별도로 관리해서, 현재고 계산(입고 − 사용 − 폐기)과 손실 금액 리포트에 모두 반영한다.
+create table if not exists waste_records (
+  id uuid primary key default gen_random_uuid(),
+  store_code text not null references stores(code),
+  item_name text not null,
+  unit text,
+  qty numeric not null,
+  waste_date date,
+  reason text,
+  memo text,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists waste_records_store_item_idx on waste_records (store_code, item_name, unit);
+
+alter table waste_records enable row level security;
+
+drop policy if exists "waste_records are publicly readable" on waste_records;
+create policy "waste_records are publicly readable"
+  on waste_records for select
+  using (true);
+
+drop policy if exists "waste_records are publicly insertable" on waste_records;
+create policy "waste_records are publicly insertable"
+  on waste_records for insert
+  with check (true);
+
+drop policy if exists "waste_records are publicly deletable" on waste_records;
+create policy "waste_records are publicly deletable"
+  on waste_records for delete
   using (true);
 
 -- pinned_items: 재고 관리 · 단가 추이 조회 화면이 공유하는 "관심 품목" 목록. 한쪽

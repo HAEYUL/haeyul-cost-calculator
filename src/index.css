@@ -77,6 +77,23 @@ h1 {
   gap: 14px;
 }
 
+.dashboard {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  text-align: left;
+  margin-bottom: 24px;
+}
+
+.dashboard-card {
+  cursor: pointer;
+  margin-top: 0;
+}
+
+.dashboard-card:active {
+  opacity: 0.85;
+}
+
 .store-btn,
 .menu-btn {
   padding: 18px;
@@ -593,6 +610,33 @@ h1 {
 .chip:disabled {
   opacity: 0.6;
   cursor: default;
+}
+
+.chip-active {
+  background: var(--accent);
+  color: var(--accent-text);
+  border-color: var(--accent);
+}
+
+.preset-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.spend-bar-track {
+  margin-top: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--border);
+  overflow: hidden;
+}
+
+.spend-bar-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: var(--accent);
 }
 
 .history-item-link {

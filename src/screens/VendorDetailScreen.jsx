@@ -67,7 +67,7 @@ export default function VendorDetailScreen() {
       supabase
         .from('invoice_batches')
         .select(
-          'id, invoice_date, total_amount, statement_balance, created_at, invoices(id, item_name, quantity, unit_price, unit, amount)',
+          'id, invoice_date, total_amount, statement_balance, photo_path, created_at, invoices(id, item_name, quantity, unit_price, unit, amount)',
         )
         .eq('store_code', store.code)
         .eq('vendor_id', vendorId)
@@ -182,9 +182,21 @@ export default function VendorDetailScreen() {
       return
     }
 
+    // 보관해 둔 원본 사진도 함께 지운다 (최선 노력 — 실패해도 명세표 삭제 자체는 이미 끝난 뒤).
+    if (deleteTarget.photo_path) {
+      supabase.storage
+        .from('invoice-photos')
+        .remove([deleteTarget.photo_path])
+        .then(({ error: removeErr }) => {
+          if (removeErr) console.error(removeErr)
+        })
+    }
+
     setDeleteTarget(null)
     setDataKey((k) => k + 1)
   }
+
+  const photoUrl = (photoPath) => supabase.storage.from('invoice-photos').getPublicUrl(photoPath).data.publicUrl
 
   return (
     <div className="screen screen-wide">
@@ -400,6 +412,19 @@ export default function VendorDetailScreen() {
                 {batch.statement_balance != null && (
                   <div className="history-row-sub">
                     <span>명세표 잔액 {Math.round(Number(batch.statement_balance)).toLocaleString()}원</span>
+                  </div>
+                )}
+                {batch.photo_path && (
+                  <div className="inventory-row-actions">
+                    <a
+                      className="link-btn"
+                      href={photoUrl(batch.photo_path)}
+                      target="_blank"
+                      rel="noreferrer"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      📷 원본 사진 보기
+                    </a>
                   </div>
                 )}
                 {batch.invoices?.length > 0 && (

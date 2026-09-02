@@ -5,6 +5,7 @@ import { supabase } from '../lib/supabaseClient'
 
 const UNIT_LABELS = { g: 'g', kg: 'kg', ea: '개', other: '기타' }
 const NO_UNIT_KEY = 'none'
+const WASTE_REASONS = ['상함/부패', '유통기한 경과', '조리 실수', '기타']
 
 export default function InventoryDetailScreen() {
   const { store } = useStore()
@@ -15,6 +16,7 @@ export default function InventoryDetailScreen() {
 
   const [receipts, setReceipts] = useState([])
   const [usageRows, setUsageRows] = useState([])
+  const [wasteRows, setWasteRows] = useState([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [dataKey, setDataKey] = useState(0)
@@ -26,6 +28,15 @@ export default function InventoryDetailScreen() {
 
   const [deleteUsageTarget, setDeleteUsageTarget] = useState(null)
   const [deletingUsage, setDeletingUsage] = useState(false)
+
+  const [wasteQty, setWasteQty] = useState('')
+  const [wasteDate, setWasteDate] = useState('')
+  const [wasteReason, setWasteReason] = useState(WASTE_REASONS[0])
+  const [wasteMemo, setWasteMemo] = useState('')
+  const [savingWaste, setSavingWaste] = useState(false)
+
+  const [deleteWasteTarget, setDeleteWasteTarget] = useState(null)
+  const [deletingWaste, setDeletingWaste] = useState(false)
 
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo] = useState('')
@@ -55,8 +66,16 @@ export default function InventoryDetailScreen() {
       .order('created_at', { ascending: false })
     usageQuery = unit == null ? usageQuery.is('unit', null) : usageQuery.eq('unit', unit)
 
-    Promise.all([receiptsQuery, usageQuery]).then(([receiptsRes, usageRes]) => {
-      const err = receiptsRes.error || usageRes.error
+    let wasteQuery = supabase
+      .from('waste_records')
+      .select('id, qty, waste_date, reason, memo, created_at')
+      .eq('store_code', store.code)
+      .eq('item_name', itemName)
+      .order('created_at', { ascending: false })
+    wasteQuery = unit == null ? wasteQuery.is('unit', null) : wasteQuery.eq('unit', unit)
+
+    Promise.all([receiptsQuery, usageQuery, wasteQuery]).then(([receiptsRes, usageRes, wasteRes]) => {
+      const err = receiptsRes.error || usageRes.error || wasteRes.error
       if (err) {
         setError(err.message)
         setLoading(false)
@@ -64,6 +83,7 @@ export default function InventoryDetailScreen() {
       }
       setReceipts(receiptsRes.data ?? [])
       setUsageRows(usageRes.data ?? [])
+      setWasteRows(wasteRes.data ?? [])
       setLoading(false)
     })
   }, [store, itemName, unit, dataKey])
@@ -72,7 +92,8 @@ export default function InventoryDetailScreen() {
 
   const totalReceived = receipts.reduce((sum, r) => sum + (r.quantity != null ? Number(r.quantity) : 0), 0)
   const totalUsed = usageRows.reduce((sum, r) => sum + Number(r.used_qty), 0)
-  const currentStock = totalReceived - totalUsed
+  const totalWasted = wasteRows.reduce((sum, r) => sum + Number(r.qty), 0)
+  const currentStock = totalReceived - totalUsed - totalWasted
   const unitLabel = unit ? UNIT_LABELS[unit] ?? unit : ''
 
   const handleAddUsage = async () => {
@@ -118,8 +139,54 @@ export default function InventoryDetailScreen() {
     setDataKey((k) => k + 1)
   }
 
+  const handleAddWaste = async () => {
+    const qty = Number(wasteQty)
+    if (!wasteQty || !Number.isFinite(qty) || qty <= 0 || !supabase) {
+      setError('폐기 수량을 0보다 크게 입력하세요.')
+      return
+    }
+    setSavingWaste(true)
+    setError('')
+    const { error: err } = await supabase.from('waste_records').insert({
+      store_code: store.code,
+      item_name: itemName,
+      unit,
+      qty,
+      waste_date: wasteDate || null,
+      reason: wasteReason,
+      memo: wasteMemo.trim() || null,
+    })
+    setSavingWaste(false)
+    if (err) {
+      setError(err.message)
+      return
+    }
+    setWasteQty('')
+    setWasteDate('')
+    setWasteReason(WASTE_REASONS[0])
+    setWasteMemo('')
+    setDataKey((k) => k + 1)
+  }
+
+  const handleDeleteWaste = async () => {
+    if (!deleteWasteTarget || !supabase) return
+    setDeletingWaste(true)
+    setError('')
+
+    const { error: err } = await supabase.from('waste_records').delete().eq('id', deleteWasteTarget.id)
+    setDeletingWaste(false)
+    if (err) {
+      setError(err.message)
+      return
+    }
+
+    setDeleteWasteTarget(null)
+    setDataKey((k) => k + 1)
+  }
+
   const inRange = (dateStr) => (!dateFrom || !dateStr || dateStr >= dateFrom) && (!dateTo || !dateStr || dateStr <= dateTo)
   const visibleUsageRows = usageRows.filter((r) => inRange(r.used_date))
+  const visibleWasteRows = wasteRows.filter((r) => inRange(r.waste_date))
   const visibleReceipts = receipts.filter((r) => inRange(r.invoice_date))
 
   return (
@@ -160,6 +227,13 @@ export default function InventoryDetailScreen() {
                 {unitLabel}
               </strong>
             </div>
+            <div className="cost-summary-row">
+              <span>누적 폐기</span>
+              <strong>
+                {totalWasted.toLocaleString()}
+                {unitLabel}
+              </strong>
+            </div>
           </div>
 
           <h2 className="section-title">오늘 사용량 기록</h2>
@@ -196,6 +270,57 @@ export default function InventoryDetailScreen() {
           </div>
           <button type="button" className="btn-primary" onClick={handleAddUsage} disabled={saving}>
             {saving ? '저장 중...' : '사용량 기록'}
+          </button>
+
+          <h2 className="section-title">폐기/손실 기록</h2>
+          <div className="field">
+            <label htmlFor="wasteQty">폐기 수량{unitLabel ? ` (${unitLabel})` : ''}</label>
+            <input
+              id="wasteQty"
+              className="input"
+              inputMode="decimal"
+              value={wasteQty}
+              onChange={(e) => setWasteQty(e.target.value)}
+              placeholder="예: 2"
+            />
+          </div>
+          <div className="field">
+            <label htmlFor="wasteReason">사유</label>
+            <select
+              id="wasteReason"
+              className="select select-block"
+              value={wasteReason}
+              onChange={(e) => setWasteReason(e.target.value)}
+            >
+              {WASTE_REASONS.map((r) => (
+                <option key={r} value={r}>
+                  {r}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="field">
+            <label htmlFor="wasteDate">폐기일</label>
+            <input
+              id="wasteDate"
+              className="input"
+              type="date"
+              value={wasteDate}
+              onChange={(e) => setWasteDate(e.target.value)}
+            />
+          </div>
+          <div className="field">
+            <label htmlFor="wasteMemo">메모</label>
+            <input
+              id="wasteMemo"
+              className="input"
+              value={wasteMemo}
+              onChange={(e) => setWasteMemo(e.target.value)}
+              placeholder="선택사항"
+            />
+          </div>
+          <button type="button" className="btn-secondary" onClick={handleAddWaste} disabled={savingWaste}>
+            {savingWaste ? '저장 중...' : '폐기 기록'}
           </button>
 
           <div className="date-range">
@@ -265,6 +390,59 @@ export default function InventoryDetailScreen() {
                       </button>
                       <button type="button" className="btn-primary" onClick={handleDeleteUsage} disabled={deletingUsage}>
                         {deletingUsage ? '삭제 중...' : '삭제'}
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </li>
+            ))}
+          </ul>
+
+          <h2 className="section-title">폐기 내역 ({visibleWasteRows.length}건)</h2>
+          {wasteRows.length === 0 && <p className="hint">아직 기록된 폐기가 없습니다.</p>}
+          {wasteRows.length > 0 && visibleWasteRows.length === 0 && (
+            <p className="hint">이 기간에 폐기 기록이 없습니다.</p>
+          )}
+          <ul className="history-list">
+            {visibleWasteRows.map((r) => (
+              <li key={r.id} className="history-row">
+                <div className="history-row-main">
+                  <span className="history-item">{r.waste_date ?? '날짜 미입력'}</span>
+                  <div className="history-row-main-end">
+                    <span className="alert-up">
+                      -{Number(r.qty).toLocaleString()}
+                      {unitLabel}
+                    </span>
+                    <button
+                      type="button"
+                      className="icon-btn"
+                      aria-label="폐기 내역 삭제"
+                      onClick={() => setDeleteWasteTarget(r)}
+                    >
+                      ✕
+                    </button>
+                  </div>
+                </div>
+                <div className="history-row-sub">
+                  {r.reason && <span>{r.reason}</span>}
+                  {r.memo && <span>{r.memo}</span>}
+                </div>
+
+                {deleteWasteTarget?.id === r.id && (
+                  <div className="price-alert-box price-alert-box-danger">
+                    <p className="price-alert-title">이 폐기 내역을 삭제할까요?</p>
+                    <p className="hint">잘못 입력한 폐기 기록만 지워지고, 되돌릴 수 없어요.</p>
+                    <div className="invoice-form">
+                      <button
+                        type="button"
+                        className="btn-secondary"
+                        onClick={() => setDeleteWasteTarget(null)}
+                        disabled={deletingWaste}
+                      >
+                        취소
+                      </button>
+                      <button type="button" className="btn-primary" onClick={handleDeleteWaste} disabled={deletingWaste}>
+                        {deletingWaste ? '삭제 중...' : '삭제'}
                       </button>
                     </div>
                   </div>
