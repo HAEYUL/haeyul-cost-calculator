@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useParams } from 'react-router-dom'
 import { useStore } from '../context/StoreContext'
 import { supabase } from '../lib/supabaseClient'
 import { compressImage } from '../lib/compressImage'
@@ -98,7 +98,10 @@ function findItemMismatches(items) {
 export default function InvoiceScreen() {
   const { store } = useStore()
   const navigate = useNavigate()
+  const { batchId } = useParams()
+  const editMode = Boolean(batchId)
 
+  const [loadingEdit, setLoadingEdit] = useState(editMode)
   const [previewUrl, setPreviewUrl] = useState(null)
   const [pendingImage, setPendingImage] = useState(null)
   const [analyzing, setAnalyzing] = useState(false)
@@ -147,6 +150,42 @@ export default function InvoiceScreen() {
         if (!err) setItemNames([...new Set((data ?? []).map((r) => r.item_name))])
       })
   }, [store, historyKey])
+
+  // 수정 모드: 기존 명세표와 품목을 불러와 입력 폼에 채워 넣는다.
+  useEffect(() => {
+    if (!editMode || !store) return
+    if (!supabase) {
+      setLoadingEdit(false)
+      return
+    }
+    setLoadingEdit(true)
+    setError('')
+    supabase
+      .from('invoice_batches')
+      .select('id, vendor_id, invoice_date, statement_balance, total_amount, invoices(item_name, quantity, unit_price, unit, amount)')
+      .eq('id', batchId)
+      .single()
+      .then(({ data, error: err }) => {
+        setLoadingEdit(false)
+        if (err) {
+          setError(err.message)
+          return
+        }
+        setVendorId(data.vendor_id)
+        setDate(data.invoice_date ?? '')
+        setStatementBalance(data.statement_balance != null ? String(data.statement_balance) : '')
+        setInvoiceTotal(data.total_amount != null ? String(data.total_amount) : '')
+        setItems(
+          (data.invoices ?? []).map((item) => ({
+            name: item.item_name ?? '',
+            quantity: item.quantity ?? '',
+            unitPrice: item.unit_price ?? '',
+            unit: item.unit ?? 'kg',
+            amount: item.amount ?? '',
+          })),
+        )
+      })
+  }, [editMode, batchId, store])
 
   if (!store) return null
 
@@ -278,6 +317,59 @@ export default function InvoiceScreen() {
     }
 
     const validItems = items.filter((item) => item.name.trim())
+
+    // 수정 모드: 새 명세표를 만드는 대신 기존 전표(batch)와 그 품목들을 덮어쓴다.
+    // 중복 검사·단가 변동 알림은 새로 입고된 게 아니라 오입력을 고치는 것이므로 건너뛴다.
+    if (editMode) {
+      const editTotalAmount = validItems.reduce((sum, item) => sum + itemAmount(item), 0)
+
+      const { error: updateErr } = await supabase
+        .from('invoice_batches')
+        .update({
+          vendor_id: resolvedVendorId,
+          invoice_date: date || null,
+          total_amount: editTotalAmount,
+          statement_balance: statementBalance === '' ? null : Number(statementBalance),
+        })
+        .eq('id', batchId)
+
+      if (updateErr) {
+        setSaving(false)
+        setError(updateErr.message)
+        return
+      }
+
+      const { error: deleteOldErr } = await supabase.from('invoices').delete().eq('batch_id', batchId)
+      if (deleteOldErr) {
+        setSaving(false)
+        setError(deleteOldErr.message)
+        return
+      }
+
+      const editRows = validItems.map((item) => ({
+        store_code: store.code,
+        vendor: resolvedVendorName,
+        vendor_id: resolvedVendorId,
+        batch_id: batchId,
+        item_name: item.name.trim(),
+        quantity: item.quantity === '' ? null : Number(item.quantity),
+        unit_price: item.unitPrice === '' ? null : Number(item.unitPrice),
+        unit: item.unit || null,
+        amount: item.amount === '' ? null : Number(item.amount),
+        invoice_date: date || null,
+      }))
+
+      const { error: insertEditErr } = await supabase.from('invoices').insert(editRows)
+      setSaving(false)
+      if (insertEditErr) {
+        setError(insertEditErr.message)
+        return
+      }
+
+      if (didCreateVendor) setVendorsVersion((v) => v + 1)
+      navigate(`/vendors/${resolvedVendorId}`)
+      return
+    }
 
     // 같은 거래처 + 같은 날짜로 이미 저장된 전표가 있으면 같은 사진을 다시 올린 게
     // 아닌지 저장 전에 경고한다 (날짜 미입력이면 비교할 수 없어 건너뜀).
@@ -474,31 +566,41 @@ export default function InvoiceScreen() {
             거래처 관리 →
           </button>
         </div>
-        <h1>입고 입력</h1>
-        <p className="subtitle">{store.name} · 거래명세표 사진을 올리면 자동으로 읽어드려요</p>
+        <h1>{editMode ? '입고 수정' : '입고 입력'}</h1>
+        <p className="subtitle">
+          {editMode
+            ? `${store.name} · 저장된 명세표의 품목을 고쳐서 다시 저장해요`
+            : `${store.name} · 거래명세표 사진을 올리면 자동으로 읽어드려요`}
+        </p>
       </div>
 
-      <div className="upload-btn-row">
-        <label className="upload-btn">
-          {previewUrl ? '다른 파일 선택' : '파일 선택'}
-          <input type="file" accept="image/*" onChange={handleFileChange} hidden />
-        </label>
-        <label className="upload-btn">
-          카메라로 촬영
-          <input type="file" accept="image/*" capture="environment" onChange={handleFileChange} hidden />
-        </label>
-      </div>
+      {loadingEdit && <p className="hint">불러오는 중...</p>}
 
-      {previewUrl && (
-        <div className="photo-preview">
-          <img src={previewUrl} alt="거래명세표 미리보기" />
-        </div>
-      )}
+      {!editMode && (
+        <>
+          <div className="upload-btn-row">
+            <label className="upload-btn">
+              {previewUrl ? '다른 파일 선택' : '파일 선택'}
+              <input type="file" accept="image/*" onChange={handleFileChange} hidden />
+            </label>
+            <label className="upload-btn">
+              카메라로 촬영
+              <input type="file" accept="image/*" capture="environment" onChange={handleFileChange} hidden />
+            </label>
+          </div>
 
-      {previewUrl && (
-        <button type="button" className="btn-primary" onClick={handleAnalyze} disabled={analyzing || analyzed}>
-          {analyzing ? '분석 중...' : analyzed ? '분석완료' : '분석하기'}
-        </button>
+          {previewUrl && (
+            <div className="photo-preview">
+              <img src={previewUrl} alt="거래명세표 미리보기" />
+            </div>
+          )}
+
+          {previewUrl && (
+            <button type="button" className="btn-primary" onClick={handleAnalyze} disabled={analyzing || analyzed}>
+              {analyzing ? '분석 중...' : analyzed ? '분석완료' : '분석하기'}
+            </button>
+          )}
+        </>
       )}
 
       {error && <p className="error-text">{error}</p>}
@@ -753,12 +855,19 @@ export default function InvoiceScreen() {
                 ? '금액을 맞춰주세요'
                 : similarItemMatches.length > 0
                   ? '물품명을 확인해주세요'
-                  : '저장'}
+                  : editMode
+                    ? '수정 저장'
+                    : '저장'}
+          </button>
+        )}
+        {editMode && (
+          <button type="button" className="btn-secondary" onClick={() => navigate(-1)} disabled={saving}>
+            취소
           </button>
         )}
       </div>
 
-      <InvoiceHistory storeCode={store.code} refreshKey={historyKey} />
+      {!editMode && <InvoiceHistory storeCode={store.code} refreshKey={historyKey} />}
     </div>
   )
 }

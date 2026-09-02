@@ -23,6 +23,7 @@ export default function App() {
           <Route path="/" element={<StoreSelectScreen />} />
           <Route path="/menu" element={<MainMenuScreen />} />
           <Route path="/invoices" element={<InvoiceScreen />} />
+          <Route path="/invoices/edit/:batchId" element={<InvoiceScreen />} />
           <Route path="/price-alerts" element={<PriceAlertsScreen />} />
           <Route path="/vendors" element={<VendorScreen />} />
           <Route path="/vendors/:vendorId" element={<VendorDetailScreen />} />

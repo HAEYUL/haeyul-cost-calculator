@@ -415,6 +415,12 @@ h1 {
   gap: 4px;
 }
 
+.history-row-main-end .link-btn {
+  margin-top: 0;
+  padding: 0 4px;
+  font-size: 15px;
+}
+
 .history-vendor {
   color: var(--text-muted);
   font-size: 15px;

@@ -146,6 +146,7 @@ export default function MatchingScreen() {
 
   const unlink = async (ingredientName) => {
     if (!supabase) return
+    if (!window.confirm(`"${ingredientName}"의 연결을 해제할까요?`)) return
     const { error: err } = await supabase
       .from('ingredient_mapping')
       .delete()
