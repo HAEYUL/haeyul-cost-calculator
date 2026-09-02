@@ -10,6 +10,7 @@ import SpendingReportScreen from './screens/SpendingReportScreen'
 import ReorderAlertScreen from './screens/ReorderAlertScreen'
 import ConsumptionPatternScreen from './screens/ConsumptionPatternScreen'
 import WasteReportScreen from './screens/WasteReportScreen'
+import NotificationSettingsScreen from './screens/NotificationSettingsScreen'
 import InventoryScreen from './screens/InventoryScreen'
 import InventoryDetailScreen from './screens/InventoryDetailScreen'
 import PriceTrendScreen from './screens/PriceTrendScreen'
@@ -35,6 +36,7 @@ export default function App() {
           <Route path="/reorder-alerts" element={<ReorderAlertScreen />} />
           <Route path="/consumption-pattern" element={<ConsumptionPatternScreen />} />
           <Route path="/waste-report" element={<WasteReportScreen />} />
+          <Route path="/notification-settings" element={<NotificationSettingsScreen />} />
           <Route path="/inventory" element={<InventoryScreen />} />
           <Route path="/inventory/:itemName/:unit" element={<InventoryDetailScreen />} />
           <Route path="/price-trend" element={<PriceTrendScreen />} />
