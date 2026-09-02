@@ -381,10 +381,16 @@ export default function InvoiceScreen() {
         <p className="subtitle">{store.name} · 거래명세표 사진을 올리면 자동으로 읽어드려요</p>
       </div>
 
-      <label className="upload-btn">
-        {previewUrl ? '다른 사진 선택' : '거래명세표 사진 선택'}
-        <input type="file" accept="image/*" onChange={handleFileChange} hidden />
-      </label>
+      <div className="upload-btn-row">
+        <label className="upload-btn">
+          {previewUrl ? '다른 사진 선택' : '사진 선택'}
+          <input type="file" accept="image/*" onChange={handleFileChange} hidden />
+        </label>
+        <label className="upload-btn">
+          카메라로 촬영
+          <input type="file" accept="image/*" capture="environment" onChange={handleFileChange} hidden />
+        </label>
+      </div>
 
       {previewUrl && (
         <div className="photo-preview">

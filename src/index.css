@@ -153,6 +153,16 @@ h1 {
   cursor: pointer;
 }
 
+.upload-btn-row {
+  display: flex;
+  gap: 8px;
+}
+
+.upload-btn-row .upload-btn {
+  flex: 1;
+  min-width: 0;
+}
+
 .photo-preview {
   margin-top: 16px;
   border-radius: var(--radius);
