@@ -8,16 +8,16 @@ import { computeReorderAlerts } from '../lib/reorderCalc'
 const MENU_ITEMS = [
   { label: '입고 입력', path: '/invoices' },
   { label: '거래처 관리', path: '/vendors' },
-  { label: '지출 리포트', path: '/spending-report' },
   { label: '재고 관리', path: '/inventory' },
-  { label: '재주문 알림', path: '/reorder-alerts' },
-  { label: '소비 패턴 분석', path: '/consumption-pattern' },
-  { label: '폐기/손실 리포트', path: '/waste-report' },
-  { label: '알림 설정', path: '/notification-settings' },
   { label: '단가 추이 조회', path: '/price-trend' },
   { label: '레시피 입력', path: '/recipes' },
   { label: '재료 매칭', path: '/ingredient-matching' },
   { label: '원가 확인', path: '/cost' },
+  { label: '지출 리포트', path: '/spending-report' },
+  { label: '재주문 알림', path: '/reorder-alerts' },
+  { label: '소비 패턴 분석', path: '/consumption-pattern' },
+  { label: '폐기/손실 리포트', path: '/waste-report' },
+  { label: '알림 설정', path: '/notification-settings' },
 ]
 
 const UNIT_LABELS = { g: 'g', kg: 'kg', ea: '개', other: '기타' }
