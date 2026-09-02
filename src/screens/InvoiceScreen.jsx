@@ -244,12 +244,15 @@ export default function InvoiceScreen() {
 
     const validItems = items.filter((item) => item.name.trim())
 
-    // 같은 거래처 + 같은 날짜로 이미 저장된 전표가 있고 물품 구성까지 같으면 같은 사진을
-    // 다시 올린 것으로 보고 저장 전에 경고한다 (날짜 미입력이면 비교할 수 없어 건너뜀).
+    // 같은 거래처 + 같은 날짜로 이미 저장된 전표가 있으면 같은 사진을 다시 올린 게
+    // 아닌지 저장 전에 경고한다 (날짜 미입력이면 비교할 수 없어 건너뜀).
+    // 우선순위: 명세표 총잔액이 둘 다 있고 값이 같으면(가장 확실한 신호) 바로 중복으로 본다.
+    // 총잔액이 없는 경우엔 물품명이 하나라도 겹치면 중복 가능성으로 본다 — AI가 재분석 때
+    // 품목을 살짝 다르게 읽어도(순서·표기 차이) 잡아내기 위해 완전 일치 대신 겹침으로 비교한다.
     if (!skipDuplicateCheck && date) {
       const { data: existingBatches, error: dupErr } = await supabase
         .from('invoice_batches')
-        .select('id, invoices(item_name)')
+        .select('id, statement_balance, invoices(item_name)')
         .eq('store_code', store.code)
         .eq('vendor_id', resolvedVendorId)
         .eq('invoice_date', date)
@@ -260,10 +263,21 @@ export default function InvoiceScreen() {
         return
       }
 
+      const currentBalance = statementBalance === '' ? null : Number(statementBalance)
       const currentNames = new Set(validItems.map((item) => item.name.trim()))
+      let matchReason = null
+      let overlappingNames = []
       const duplicateBatch = (existingBatches ?? []).find((b) => {
+        if (currentBalance != null && b.statement_balance != null && Number(b.statement_balance) === currentBalance) {
+          matchReason = 'balance'
+          return true
+        }
         const existingNames = new Set((b.invoices ?? []).map((i) => i.item_name))
-        return existingNames.size === currentNames.size && [...existingNames].every((n) => currentNames.has(n))
+        const overlap = [...currentNames].filter((n) => existingNames.has(n))
+        if (overlap.length === 0) return false
+        matchReason = 'items'
+        overlappingNames = overlap
+        return true
       })
 
       if (duplicateBatch) {
@@ -271,7 +285,9 @@ export default function InvoiceScreen() {
         setDuplicateWarning({
           vendorName: resolvedVendorName,
           date,
-          itemNames: [...currentNames],
+          matchReason,
+          balance: currentBalance,
+          itemNames: overlappingNames,
         })
         if (didCreateVendor) setVendorsVersion((v) => v + 1)
         return
@@ -439,8 +455,11 @@ export default function InvoiceScreen() {
         <div className="price-alert-box">
           <p className="price-alert-title">이미 입고된 내역이 있어요</p>
           <p className="hint">
-            {duplicateWarning.vendorName} · {duplicateWarning.date} 에 같은 물품({duplicateWarning.itemNames.join(', ')})으로
-            저장된 입고 내역이 있습니다. 같은 사진을 다시 올린 게 아닌지 확인해주세요.
+            {duplicateWarning.vendorName} · {duplicateWarning.date}에 이미 저장된 입고 내역이 있습니다.{' '}
+            {duplicateWarning.matchReason === 'balance'
+              ? `명세표 총잔액(${Math.round(duplicateWarning.balance).toLocaleString()}원)이 같아요.`
+              : `물품(${duplicateWarning.itemNames.join(', ')})이 겹쳐요.`}{' '}
+            같은 사진을 다시 올린 게 아닌지 확인해주세요.
           </p>
           <div className="invoice-form">
             <button type="button" className="btn-secondary" onClick={() => setDuplicateWarning(null)}>
