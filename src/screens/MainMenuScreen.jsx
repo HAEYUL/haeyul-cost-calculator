@@ -13,6 +13,7 @@ const MENU_ITEMS = [
   { label: '재주문 알림', path: '/reorder-alerts' },
   { label: '소비 패턴 분석', path: '/consumption-pattern' },
   { label: '폐기/손실 리포트', path: '/waste-report' },
+  { label: '알림 설정', path: '/notification-settings' },
   { label: '단가 추이 조회', path: '/price-trend' },
   { label: '레시피 입력', path: '/recipes' },
   { label: '재료 매칭', path: '/ingredient-matching' },

@@ -207,6 +207,36 @@ create policy "waste_records are publicly insertable"
   on waste_records for insert
   with check (true);
 
+-- notification_settings: 매장별로 어떤 알림(재주문 시점/원가율 경고/재고 부족)을 받을지와
+-- 받을 연락처를 저장한다. 매장당 한 행. 실제 문자·카카오톡 발송 연동 전까지는 화면에서
+-- 설정만 저장해 두고, 발송 서비스를 정하면 이 설정을 그대로 사용해 연결할 예정이다.
+create table if not exists notification_settings (
+  store_code text primary key references stores(code),
+  reorder_alert_enabled boolean not null default true,
+  margin_alert_enabled boolean not null default true,
+  low_stock_alert_enabled boolean not null default true,
+  phone_number text,
+  updated_at timestamptz not null default now()
+);
+
+alter table notification_settings enable row level security;
+
+drop policy if exists "notification_settings are publicly readable" on notification_settings;
+create policy "notification_settings are publicly readable"
+  on notification_settings for select
+  using (true);
+
+drop policy if exists "notification_settings are publicly insertable" on notification_settings;
+create policy "notification_settings are publicly insertable"
+  on notification_settings for insert
+  with check (true);
+
+drop policy if exists "notification_settings are publicly updatable" on notification_settings;
+create policy "notification_settings are publicly updatable"
+  on notification_settings for update
+  using (true)
+  with check (true);
+
 drop policy if exists "waste_records are publicly deletable" on waste_records;
 create policy "waste_records are publicly deletable"
   on waste_records for delete
