@@ -129,6 +129,37 @@ create policy "stock_usage is publicly insertable"
   on stock_usage for insert
   with check (true);
 
+-- inventory_pins: 재고 관리 화면에서 "관심 품목"으로 선택해 상단에 항상 보이게 한
+-- 품목(+단위) 목록. 품목이 많아 한눈에 보기 힘들 때, 자주 확인하고 싶은 것만 골라
+-- 두는 용도. 매장 전체가 공유하는 설정이라 기기와 무관하게 같은 화면이 보인다.
+create table if not exists inventory_pins (
+  id uuid primary key default gen_random_uuid(),
+  store_code text not null references stores(code),
+  item_name text not null,
+  unit text,
+  created_at timestamptz not null default now(),
+  unique (store_code, item_name, unit)
+);
+
+create index if not exists inventory_pins_store_idx on inventory_pins (store_code);
+
+alter table inventory_pins enable row level security;
+
+drop policy if exists "inventory_pins are publicly readable" on inventory_pins;
+create policy "inventory_pins are publicly readable"
+  on inventory_pins for select
+  using (true);
+
+drop policy if exists "inventory_pins are publicly insertable" on inventory_pins;
+create policy "inventory_pins are publicly insertable"
+  on inventory_pins for insert
+  with check (true);
+
+drop policy if exists "inventory_pins are publicly deletable" on inventory_pins;
+create policy "inventory_pins are publicly deletable"
+  on inventory_pins for delete
+  using (true);
+
 -- invoices: 입고 내역. 한 품목당 한 행. store_code로 매장별 데이터를 분리한다.
 -- 로그인/비밀번호가 없는 앱이므로 매장 분리는 애플리케이션 레벨(선택된 매장 코드로 필터)에서
 -- 이루어지고, RLS는 anon 키로 읽기/쓰기를 허용한다.
