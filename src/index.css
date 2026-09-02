@@ -402,6 +402,15 @@ h1 {
   font-size: 14px;
 }
 
+.price-alert-box-danger {
+  border-color: #d84343;
+  background: rgba(216, 67, 67, 0.08);
+}
+
+.price-alert-box-danger .price-alert-title {
+  color: #d84343;
+}
+
 .alert-up {
   color: #d84343;
   font-weight: 500;

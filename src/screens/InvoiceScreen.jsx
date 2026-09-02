@@ -58,6 +58,21 @@ function itemAmount(item) {
   return q != null && p != null ? q * p : 0
 }
 
+// 반올림 오차 등을 감안한 허용 오차(원)
+const AMOUNT_TOLERANCE = 1
+
+// 수량×단가와 입력된 금액이 다른 품목을 찾는다 (세 값이 모두 있을 때만 검사)
+function findItemMismatches(items) {
+  return items
+    .filter((item) => item.name.trim() && item.quantity !== '' && item.unitPrice !== '' && item.amount !== '')
+    .map((item) => {
+      const expected = Number(item.quantity) * Number(item.unitPrice)
+      const actual = Number(item.amount)
+      return Math.abs(expected - actual) > AMOUNT_TOLERANCE ? { name: item.name.trim(), expected, actual } : null
+    })
+    .filter(Boolean)
+}
+
 export default function InvoiceScreen() {
   const { store } = useStore()
   const navigate = useNavigate()
@@ -74,6 +89,7 @@ export default function InvoiceScreen() {
   const [similarVendorPrompt, setSimilarVendorPrompt] = useState(null)
   const [date, setDate] = useState('')
   const [statementBalance, setStatementBalance] = useState('')
+  const [invoiceTotal, setInvoiceTotal] = useState('')
   const [items, setItems] = useState([])
   const [saving, setSaving] = useState(false)
   const [saveMessage, setSaveMessage] = useState('')
@@ -113,6 +129,7 @@ export default function InvoiceScreen() {
       setSimilarVendorPrompt(null)
       setDate('')
       setStatementBalance('')
+      setInvoiceTotal('')
       setItems([])
       setDuplicateWarning(null)
       setAnalyzed(false)
@@ -157,6 +174,7 @@ export default function InvoiceScreen() {
       }
       setDate(data.date ?? '')
       setStatementBalance(data.statementBalance != null ? String(data.statementBalance) : '')
+      setInvoiceTotal(data.totalAmount != null ? String(data.totalAmount) : '')
       setItems(
         (data.items ?? []).map((item) => ({
           name: item.name ?? '',
@@ -356,9 +374,19 @@ export default function InvoiceScreen() {
     setSimilarVendorPrompt(null)
     setDate('')
     setStatementBalance('')
+    setInvoiceTotal('')
     setItems([])
     if (didCreateVendor) setVendorsVersion((v) => v + 1)
   }
+
+  const itemMismatches = findItemMismatches(items)
+  const validItemsForSum = items.filter((item) => item.name.trim())
+  const itemsSum = validItemsForSum.reduce((sum, item) => sum + itemAmount(item), 0)
+  const totalMismatch =
+    invoiceTotal !== '' && Math.abs(itemsSum - Number(invoiceTotal)) > AMOUNT_TOLERANCE
+      ? { itemsSum, invoiceTotal: Number(invoiceTotal) }
+      : null
+  const hasAmountMismatch = itemMismatches.length > 0 || totalMismatch != null
 
   return (
     <div className="screen screen-wide">
@@ -522,6 +550,38 @@ export default function InvoiceScreen() {
           placeholder="예: 3054500"
         />
       </div>
+      <div className="field">
+        <label htmlFor="invoiceTotal">명세표 총액(당일합계, 있으면)</label>
+        <input
+          id="invoiceTotal"
+          className="input"
+          inputMode="decimal"
+          value={invoiceTotal}
+          onChange={(e) => setInvoiceTotal(e.target.value)}
+          placeholder="예: 300000"
+        />
+      </div>
+
+      {hasAmountMismatch && (
+        <div className="price-alert-box price-alert-box-danger">
+          <p className="price-alert-title">⚠️ 금액이 맞지 않아요</p>
+          <ul className="price-alert-list">
+            {itemMismatches.map((m) => (
+              <li key={m.name} className="alert-up">
+                {m.name}: 수량×단가 {Math.round(m.expected).toLocaleString()}원 ≠ 입력된 금액{' '}
+                {Math.round(m.actual).toLocaleString()}원
+              </li>
+            ))}
+            {totalMismatch && (
+              <li className="alert-up">
+                품목 합계 {Math.round(totalMismatch.itemsSum).toLocaleString()}원 ≠ 명세표 총액{' '}
+                {Math.round(totalMismatch.invoiceTotal).toLocaleString()}원
+              </li>
+            )}
+          </ul>
+          <p className="hint">품목의 수량·단가·금액이나 명세표 총액을 확인해서 맞춰주세요. 맞아야 저장할 수 있어요.</p>
+        </div>
+      )}
 
       {items.length > 0 && (
         <div className="item-table-wrap">
@@ -588,8 +648,8 @@ export default function InvoiceScreen() {
           + 품목 추가
         </button>
         {(vendorId || items.length > 0) && (
-          <button type="button" className="btn-primary" onClick={() => handleSave()} disabled={saving}>
-            {saving ? '저장 중...' : '저장'}
+          <button type="button" className="btn-primary" onClick={() => handleSave()} disabled={saving || hasAmountMismatch}>
+            {saving ? '저장 중...' : hasAmountMismatch ? '금액을 맞춰주세요' : '저장'}
           </button>
         )}
       </div>
