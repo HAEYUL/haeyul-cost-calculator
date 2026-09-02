@@ -329,12 +329,15 @@ export default function InvoiceScreen() {
       }
     }
 
-    // 같은 거래처의 이전 입고 내역에서 품목별 최근 단가를 조회 (물품명 정확히 일치만 비교)
+    // 같은 거래처의 이전 입고 내역에서 품목별 최근 단가를 조회 (물품명 정확히 일치만 비교).
+    // "가장 최근"은 저장한 순서가 아니라 명세표상 입고일 기준이다 — 예전 명세표를 나중에
+    // 몰아서 입력해도(입력 순서가 뒤섞여도) 항상 실제 입고 순서대로 직전 단가를 비교하기 위함.
     const { data: history, error: historyErr } = await supabase
       .from('invoices')
-      .select('item_name, unit_price, created_at')
+      .select('item_name, unit_price, invoice_date, created_at')
       .eq('store_code', store.code)
       .eq('vendor_id', resolvedVendorId)
+      .order('invoice_date', { ascending: false, nullsFirst: false })
       .order('created_at', { ascending: false })
 
     if (historyErr) {
@@ -408,6 +411,7 @@ export default function InvoiceScreen() {
         item_name: c.itemName,
         previous_price: c.previousPrice,
         new_price: c.newPrice,
+        invoice_date: date || null,
       }))
       const { error: changeErr } = await supabase.from('price_changes').insert(changeRows)
       if (changeErr) console.error(changeErr)

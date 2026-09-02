@@ -3,6 +3,11 @@ import { useNavigate } from 'react-router-dom'
 import { useStore } from '../context/StoreContext'
 import { supabase } from '../lib/supabaseClient'
 
+// 명세표상 입고일을 기준으로 정렬·표시한다. 입고일이 없는(예전) 기록만 저장한 시각으로 대신한다.
+function rowDateValue(row) {
+  return new Date(row.invoice_date ?? row.changed_at).getTime()
+}
+
 export default function PriceAlertsScreen() {
   const { store } = useStore()
   const navigate = useNavigate()
@@ -20,12 +25,11 @@ export default function PriceAlertsScreen() {
     setError('')
     supabase
       .from('price_changes')
-      .select('id, vendor, item_name, previous_price, new_price, changed_at')
+      .select('id, vendor, item_name, previous_price, new_price, changed_at, invoice_date')
       .eq('store_code', store.code)
-      .order('changed_at', { ascending: false })
       .then(({ data, error: err }) => {
         if (err) setError(err.message)
-        else setAlerts(data ?? [])
+        else setAlerts((data ?? []).sort((a, b) => rowDateValue(b) - rowDateValue(a)))
         setLoading(false)
       })
   }, [store])
@@ -73,7 +77,7 @@ export default function PriceAlertsScreen() {
                 {pct !== null && ` (${up ? '▲' : '▼'}${Math.abs(pct).toFixed(1)}%)`}
               </div>
               <div className="history-row-sub">
-                <span>{new Date(a.changed_at).toLocaleDateString('ko-KR')}</span>
+                <span>{a.invoice_date ?? new Date(a.changed_at).toLocaleDateString('ko-KR')}</span>
               </div>
             </li>
           )
