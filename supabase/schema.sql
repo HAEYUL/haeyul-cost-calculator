@@ -179,6 +179,39 @@ create policy "stock_usage is publicly deletable"
   on stock_usage for delete
   using (true);
 
+-- waste_records: 상하거나 조리 실수 등으로 버린(폐기) 물량 기록. stock_usage(정상 사용)와는
+-- 별도로 관리해서, 현재고 계산(입고 − 사용 − 폐기)과 손실 금액 리포트에 모두 반영한다.
+create table if not exists waste_records (
+  id uuid primary key default gen_random_uuid(),
+  store_code text not null references stores(code),
+  item_name text not null,
+  unit text,
+  qty numeric not null,
+  waste_date date,
+  reason text,
+  memo text,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists waste_records_store_item_idx on waste_records (store_code, item_name, unit);
+
+alter table waste_records enable row level security;
+
+drop policy if exists "waste_records are publicly readable" on waste_records;
+create policy "waste_records are publicly readable"
+  on waste_records for select
+  using (true);
+
+drop policy if exists "waste_records are publicly insertable" on waste_records;
+create policy "waste_records are publicly insertable"
+  on waste_records for insert
+  with check (true);
+
+drop policy if exists "waste_records are publicly deletable" on waste_records;
+create policy "waste_records are publicly deletable"
+  on waste_records for delete
+  using (true);
+
 -- pinned_items: 재고 관리 · 단가 추이 조회 화면이 공유하는 "관심 품목" 목록. 한쪽
 -- 화면에서 찜하면 다른 화면에도 그대로 반영된다. 예전에는 화면별로 inventory_pins(품목+단위),
 -- price_trend_pins(품목명)가 따로 있었는데, 통합하면서 단가 추이 조회와 같은 기준인

@@ -31,8 +31,9 @@ export default function ReorderAlertScreen() {
     Promise.all([
       supabase.from('invoices').select('item_name, unit, quantity, invoice_date').eq('store_code', store.code),
       supabase.from('stock_usage').select('item_name, unit, used_qty').eq('store_code', store.code),
-    ]).then(([invoicesRes, usageRes]) => {
-      const err = invoicesRes.error || usageRes.error
+      supabase.from('waste_records').select('item_name, unit, qty').eq('store_code', store.code),
+    ]).then(([invoicesRes, usageRes, wasteRes]) => {
+      const err = invoicesRes.error || usageRes.error || wasteRes.error
       if (err) {
         setError(err.message)
         setLoading(false)
@@ -53,6 +54,10 @@ export default function ReorderAlertScreen() {
       for (const row of usageRes.data ?? []) {
         const key = ensure(row.item_name, row.unit)
         stock.set(key, stock.get(key) - Number(row.used_qty))
+      }
+      for (const row of wasteRes.data ?? []) {
+        const key = ensure(row.item_name, row.unit)
+        stock.set(key, stock.get(key) - Number(row.qty))
       }
 
       setAlerts(computeReorderAlerts(invoicesRes.data ?? []))

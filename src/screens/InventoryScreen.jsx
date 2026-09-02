@@ -34,9 +34,10 @@ export default function InventoryScreen() {
     Promise.all([
       supabase.from('invoices').select('item_name, unit, quantity').eq('store_code', store.code),
       supabase.from('stock_usage').select('item_name, unit, used_qty').eq('store_code', store.code),
+      supabase.from('waste_records').select('item_name, unit, qty').eq('store_code', store.code),
       supabase.from('pinned_items').select('item_name').eq('store_code', store.code),
-    ]).then(([invoicesRes, usageRes, pinsRes]) => {
-      const err = invoicesRes.error || usageRes.error || pinsRes.error
+    ]).then(([invoicesRes, usageRes, wasteRes, pinsRes]) => {
+      const err = invoicesRes.error || usageRes.error || wasteRes.error || pinsRes.error
       if (err) {
         setError(err.message)
         setLoading(false)
@@ -46,7 +47,7 @@ export default function InventoryScreen() {
       const stock = new Map()
       const ensure = (itemName, unit) => {
         const key = stockKey(itemName, unit)
-        if (!stock.has(key)) stock.set(key, { itemName, unit, received: 0, used: 0 })
+        if (!stock.has(key)) stock.set(key, { itemName, unit, received: 0, used: 0, wasted: 0 })
         return stock.get(key)
       }
 
@@ -57,9 +58,12 @@ export default function InventoryScreen() {
       for (const row of usageRes.data ?? []) {
         ensure(row.item_name, row.unit).used += Number(row.used_qty)
       }
+      for (const row of wasteRes.data ?? []) {
+        ensure(row.item_name, row.unit).wasted += Number(row.qty)
+      }
 
       const list = [...stock.values()]
-        .map((r) => ({ ...r, current: r.received - r.used }))
+        .map((r) => ({ ...r, current: r.received - r.used - r.wasted }))
         .sort((a, b) => a.itemName.localeCompare(b.itemName))
 
       setRows(list)
@@ -119,6 +123,7 @@ export default function InventoryScreen() {
         <div className="history-row-sub">
           <span>입고 {r.received.toLocaleString()}</span>
           <span>사용 {r.used.toLocaleString()}</span>
+          {r.wasted > 0 && <span>폐기 {r.wasted.toLocaleString()}</span>}
         </div>
       </button>
       <div className="inventory-row-actions">

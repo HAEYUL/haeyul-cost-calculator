@@ -12,6 +12,7 @@ const MENU_ITEMS = [
   { label: '재고 관리', path: '/inventory' },
   { label: '재주문 알림', path: '/reorder-alerts' },
   { label: '소비 패턴 분석', path: '/consumption-pattern' },
+  { label: '폐기/손실 리포트', path: '/waste-report' },
   { label: '단가 추이 조회', path: '/price-trend' },
   { label: '레시피 입력', path: '/recipes' },
   { label: '재료 매칭', path: '/ingredient-matching' },
@@ -80,15 +81,22 @@ export default function MainMenuScreen() {
         .select('item_name, unit, quantity, unit_price, invoice_date, created_at')
         .eq('store_code', store.code),
       supabase.from('stock_usage').select('item_name, unit, used_qty').eq('store_code', store.code),
+      supabase.from('waste_records').select('item_name, unit, qty').eq('store_code', store.code),
       supabase.from('recipes').select('menu_name, ingredient_name, amount_g').eq('store_code', store.code),
       supabase
         .from('ingredient_mapping')
         .select('recipe_ingredient_name, invoice_item_name')
         .eq('store_code', store.code),
       supabase.from('menu_prices').select('menu_name, selling_price').eq('store_code', store.code),
-    ]).then(([batchesRes, invoicesRes, usageRes, recipesRes, mappingRes, pricesRes]) => {
+    ]).then(([batchesRes, invoicesRes, usageRes, wasteRes, recipesRes, mappingRes, pricesRes]) => {
       const err =
-        batchesRes.error || invoicesRes.error || usageRes.error || recipesRes.error || mappingRes.error || pricesRes.error
+        batchesRes.error ||
+        invoicesRes.error ||
+        usageRes.error ||
+        wasteRes.error ||
+        recipesRes.error ||
+        mappingRes.error ||
+        pricesRes.error
       if (err) {
         setError(err.message)
         setLoading(false)
@@ -134,7 +142,7 @@ export default function MainMenuScreen() {
       const stock = new Map()
       const ensure = (itemName, unit) => {
         const key = stockKey(itemName, unit)
-        if (!stock.has(key)) stock.set(key, { itemName, unit, received: 0, used: 0 })
+        if (!stock.has(key)) stock.set(key, { itemName, unit, received: 0, used: 0, wasted: 0 })
         return stock.get(key)
       }
       for (const row of invoicesRes.data ?? []) {
@@ -144,8 +152,11 @@ export default function MainMenuScreen() {
       for (const row of usageRes.data ?? []) {
         ensure(row.item_name, row.unit).used += Number(row.used_qty)
       }
+      for (const row of wasteRes.data ?? []) {
+        ensure(row.item_name, row.unit).wasted += Number(row.qty)
+      }
       const negativeStock = [...stock.values()]
-        .map((r) => ({ ...r, current: r.received - r.used }))
+        .map((r) => ({ ...r, current: r.received - r.used - r.wasted }))
         .filter((r) => r.current < 0)
         .sort((a, b) => a.current - b.current)
 
