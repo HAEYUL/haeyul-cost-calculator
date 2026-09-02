@@ -212,6 +212,102 @@ export default function PriceTrendScreen() {
 
       {loadingItems && <p className="hint">물품 목록을 불러오는 중...</p>}
 
+      {selectedItem && (
+        <>
+          <h2 className="section-title">거래처별 단가 비교 — {selectedItem}</h2>
+          {loadingRows && <p className="hint">불러오는 중...</p>}
+          {!loadingRows && comparisonRows.length === 0 && <p className="hint">이 물품의 입고 단가 기록이 없습니다.</p>}
+          <ul className="history-list">
+            {comparisonRows.map((r, i) => (
+              <li key={r.vendor} className="history-row">
+                <div className="history-row-main">
+                  <span className="history-item">
+                    {r.vendor}
+                    {i === 0 && comparisonRows.length > 1 && <span className="cost-badge"> 최저가</span>}
+                  </span>
+                  <span>
+                    {Number(r.unit_price).toLocaleString()}원{r.unit ? `/${UNIT_LABELS[r.unit] ?? r.unit}` : ''}
+                  </span>
+                </div>
+                <div className="history-row-sub">
+                  <span>{r.invoice_date ?? new Date(r.created_at).toLocaleDateString('ko-KR')} 기준</span>
+                </div>
+              </li>
+            ))}
+          </ul>
+
+          <h2 className="section-title">가격 추이</h2>
+          <div className="field">
+            <label htmlFor="vendorFilter">거래처</label>
+            <select
+              id="vendorFilter"
+              className="select select-block"
+              value={vendorFilter}
+              onChange={(e) => setVendorFilter(e.target.value)}
+            >
+              <option value="all">전체 거래처</option>
+              {vendorNames.map((v) => (
+                <option key={v} value={v}>
+                  {v}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="date-range">
+            <input
+              type="date"
+              className="input"
+              value={dateFrom}
+              onChange={(e) => setDateFrom(e.target.value)}
+              aria-label="시작일"
+            />
+            <span className="date-range-sep">~</span>
+            <input
+              type="date"
+              className="input"
+              value={dateTo}
+              onChange={(e) => setDateTo(e.target.value)}
+              aria-label="종료일"
+            />
+          </div>
+
+          {trendDiff != null && (
+            <div className="cost-summary">
+              <div className="cost-summary-row">
+                <span>기간 내 가격 변동</span>
+                <strong className={trendDiff > 0 ? 'alert-up' : trendDiff < 0 ? 'alert-down' : ''}>
+                  {Number(firstPrice).toLocaleString()}원 → {Number(lastPrice).toLocaleString()}원
+                  {trendPct !== null && ` (${trendDiff > 0 ? '▲' : trendDiff < 0 ? '▼' : ''}${Math.abs(trendPct).toFixed(1)}%)`}
+                </strong>
+              </div>
+            </div>
+          )}
+
+          {!loadingRows && trendRows.length === 0 && <p className="hint">조건에 맞는 입고 기록이 없습니다.</p>}
+          <ul className="history-list">
+            {trendRowsDesc.map((r, i) => (
+              <li key={`${r.created_at}-${i}`} className="history-row">
+                <div className="history-row-main">
+                  <span className="history-item">{r.invoice_date ?? new Date(r.created_at).toLocaleDateString('ko-KR')}</span>
+                  <span>
+                    {Number(r.unit_price).toLocaleString()}원{r.unit ? `/${UNIT_LABELS[r.unit] ?? r.unit}` : ''}
+                  </span>
+                </div>
+                {vendorFilter === 'all' && (
+                  <div className="history-row-sub">
+                    <span>{r.vendor}</span>
+                  </div>
+                )}
+              </li>
+            ))}
+          </ul>
+
+          <button type="button" className="btn-secondary" onClick={() => setSelectedItem('')}>
+            닫기
+          </button>
+        </>
+      )}
+
       {!loadingItems && itemFilterVendor && itemNames.length > 0 && (
         <>
           <h2 className="section-title">관심 품목</h2>
@@ -267,89 +363,6 @@ export default function PriceTrendScreen() {
               {showAllItems ? '접기' : `품목 모두보기 (전체 ${itemNames.length}개)`}
             </button>
           )}
-        </>
-      )}
-
-      {selectedItem && (
-        <>
-          <h2 className="section-title">거래처별 단가 비교</h2>
-          {loadingRows && <p className="hint">불러오는 중...</p>}
-          {!loadingRows && comparisonRows.length === 0 && <p className="hint">이 물품의 입고 단가 기록이 없습니다.</p>}
-          <ul className="history-list">
-            {comparisonRows.map((r, i) => (
-              <li key={r.vendor} className="history-row">
-                <div className="history-row-main">
-                  <span className="history-item">
-                    {r.vendor}
-                    {i === 0 && comparisonRows.length > 1 && <span className="cost-badge"> 최저가</span>}
-                  </span>
-                  <span>
-                    {Number(r.unit_price).toLocaleString()}원{r.unit ? `/${UNIT_LABELS[r.unit] ?? r.unit}` : ''}
-                  </span>
-                </div>
-                <div className="history-row-sub">
-                  <span>{r.invoice_date ?? new Date(r.created_at).toLocaleDateString('ko-KR')} 기준</span>
-                </div>
-              </li>
-            ))}
-          </ul>
-
-          <h2 className="section-title">가격 추이</h2>
-          <div className="field">
-            <label htmlFor="vendorFilter">거래처</label>
-            <select
-              id="vendorFilter"
-              className="select select-block"
-              value={vendorFilter}
-              onChange={(e) => setVendorFilter(e.target.value)}
-            >
-              <option value="all">전체 거래처</option>
-              {vendorNames.map((v) => (
-                <option key={v} value={v}>
-                  {v}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className="field">
-            <label htmlFor="dateFrom">시작일</label>
-            <input id="dateFrom" className="input" type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
-          </div>
-          <div className="field">
-            <label htmlFor="dateTo">종료일</label>
-            <input id="dateTo" className="input" type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
-          </div>
-
-          {trendDiff != null && (
-            <div className="cost-summary">
-              <div className="cost-summary-row">
-                <span>기간 내 가격 변동</span>
-                <strong className={trendDiff > 0 ? 'alert-up' : trendDiff < 0 ? 'alert-down' : ''}>
-                  {Number(firstPrice).toLocaleString()}원 → {Number(lastPrice).toLocaleString()}원
-                  {trendPct !== null && ` (${trendDiff > 0 ? '▲' : trendDiff < 0 ? '▼' : ''}${Math.abs(trendPct).toFixed(1)}%)`}
-                </strong>
-              </div>
-            </div>
-          )}
-
-          {!loadingRows && trendRows.length === 0 && <p className="hint">조건에 맞는 입고 기록이 없습니다.</p>}
-          <ul className="history-list">
-            {trendRowsDesc.map((r, i) => (
-              <li key={`${r.created_at}-${i}`} className="history-row">
-                <div className="history-row-main">
-                  <span className="history-item">{r.invoice_date ?? new Date(r.created_at).toLocaleDateString('ko-KR')}</span>
-                  <span>
-                    {Number(r.unit_price).toLocaleString()}원{r.unit ? `/${UNIT_LABELS[r.unit] ?? r.unit}` : ''}
-                  </span>
-                </div>
-                {vendorFilter === 'all' && (
-                  <div className="history-row-sub">
-                    <span>{r.vendor}</span>
-                  </div>
-                )}
-              </li>
-            ))}
-          </ul>
         </>
       )}
     </div>
