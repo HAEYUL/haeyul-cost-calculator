@@ -236,6 +236,10 @@ create table if not exists price_changes (
 
 alter table price_changes add column if not exists vendor_id uuid references vendors(id);
 
+-- invoice_date: 명세표에 적힌 실제 입고일. 알림함은 저장(등록)한 시각(changed_at)이 아니라
+-- 이 값을 기준으로 정렬·표시한다(입고일 미입력 건은 changed_at으로 대신 표시).
+alter table price_changes add column if not exists invoice_date date;
+
 create index if not exists price_changes_store_idx on price_changes (store_code, changed_at desc);
 
 alter table price_changes enable row level security;
