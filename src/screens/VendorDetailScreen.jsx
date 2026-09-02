@@ -93,9 +93,6 @@ export default function VendorDetailScreen() {
 
   if (!store) return null
 
-  const totalAmount = batches.reduce((sum, b) => sum + Number(b.total_amount), 0)
-  const totalPaid = payments.reduce((sum, p) => sum + Number(p.amount), 0)
-
   // 미지급금은 결제 기록 기반 계산 대신, 가장 최근 명세표에 인쇄된 잔액을 우선 보여준다.
   // batches는 이미 최신순으로 정렬돼 있으니 잔액이 기록된 첫 항목을 찾으면 된다.
   // (위 요약 수치들은 기간 필터와 무관하게 항상 전체 기간 기준이다)
@@ -104,11 +101,21 @@ export default function VendorDetailScreen() {
   // 그 명세표보다 더 최근인데 잔액이 안 적힌 명세표들 — 미지급금이 최신 상태가 아닐 수 있다는 경고용
   const missingBalanceBatches = latestBatchWithBalanceIndex >= 0 ? batches.slice(0, latestBatchWithBalanceIndex) : []
 
-  // 아래 "입고 내역" 목록만 기간으로 좁혀서 보여준다.
+  // "입고 내역" 목록과 아래 누적 입고액/결제액 요약이 함께 이 기간을 따른다.
   const filteredBatches = batches.filter((b) => {
     const d = rowDateStr(b)
     return (!dateFrom || d >= dateFrom) && (!dateTo || d <= dateTo)
   })
+
+  const periodTotalAmount = filteredBatches.reduce((sum, b) => sum + Number(b.total_amount), 0)
+
+  // 결제액(추정, 단순 방식) = 기간 입고액 − 기간 종료일 시점의 미지급 잔액.
+  // 기간 종료일 이전(포함)에 잔액이 기록된 가장 최근 명세표를 찾는다(batches는 이미 최신순 정렬).
+  const balanceAtPeriodEnd = batches.find((b) => {
+    const d = rowDateStr(b)
+    return b.statement_balance != null && (!dateTo || d <= dateTo)
+  })?.statement_balance
+  const periodEstimatedPayment = balanceAtPeriodEnd != null ? periodTotalAmount - Number(balanceAtPeriodEnd) : null
 
   const handleAddPayment = async () => {
     const amount = Number(paymentAmount)
@@ -176,6 +183,27 @@ export default function VendorDetailScreen() {
 
       {!loading && supabase && (
         <>
+          <div className="date-range">
+            <input
+              type="date"
+              className="input"
+              value={dateFrom}
+              onChange={(e) => setDateFrom(e.target.value)}
+              aria-label="시작일"
+            />
+            <span className="date-range-sep">~</span>
+            <input
+              type="date"
+              className="input"
+              value={dateTo}
+              onChange={(e) => setDateTo(e.target.value)}
+              aria-label="종료일"
+            />
+          </div>
+          <p className="hint">
+            아래 누적 입고액·누적 결제액·입고 내역은 이 기간 기준이에요. 기본은 이번 달이고, 원하는 기간으로 바꿀 수 있어요.
+          </p>
+
           <div className="cost-summary">
             <div className="cost-summary-row">
               <span>미지급금{latestBatchWithBalance ? ` (${latestBatchWithBalance.invoice_date ?? '날짜 미입력'} 명세표 기준)` : ''}</span>
@@ -188,14 +216,21 @@ export default function VendorDetailScreen() {
               )}
             </div>
             <div className="cost-summary-row">
-              <span>누적 입고액</span>
-              <strong>{Math.round(totalAmount).toLocaleString()}원</strong>
+              <span>누적 입고액(기간)</span>
+              <strong>{Math.round(periodTotalAmount).toLocaleString()}원</strong>
             </div>
             <div className="cost-summary-row">
-              <span>누적 결제액</span>
-              <strong>{Math.round(totalPaid).toLocaleString()}원</strong>
+              <span>누적 결제액(추정, 기간)</span>
+              {periodEstimatedPayment != null ? (
+                <strong>{Math.round(periodEstimatedPayment).toLocaleString()}원</strong>
+              ) : (
+                <span className="hint">잔액 정보 없음</span>
+              )}
             </div>
           </div>
+          <p className="hint">
+            누적 결제액은 실제 결제 기록이 아니라, 기간 입고액에서 기간 종료일 시점 미지급 잔액을 뺀 추정치예요.
+          </p>
 
           {missingBalanceBatches.length > 0 && (
             <div className="price-alert-box price-alert-box-danger">
@@ -263,24 +298,6 @@ export default function VendorDetailScreen() {
           </ul>
 
           <h2 className="section-title">입고 내역 ({filteredBatches.length}건)</h2>
-          <div className="date-range">
-            <input
-              type="date"
-              className="input"
-              value={dateFrom}
-              onChange={(e) => setDateFrom(e.target.value)}
-              aria-label="시작일"
-            />
-            <span className="date-range-sep">~</span>
-            <input
-              type="date"
-              className="input"
-              value={dateTo}
-              onChange={(e) => setDateTo(e.target.value)}
-              aria-label="종료일"
-            />
-          </div>
-          <p className="hint">기본으로 이번 달 내역만 보여요. 기간을 바꾸면 다른 달도 볼 수 있어요.</p>
           {batches.length === 0 && <p className="hint">아직 입고 내역이 없습니다.</p>}
           {batches.length > 0 && filteredBatches.length === 0 && (
             <p className="hint">이 기간에 입고 내역이 없습니다.</p>
