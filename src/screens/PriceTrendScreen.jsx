@@ -24,6 +24,10 @@ export default function PriceTrendScreen() {
   const [loadingRows, setLoadingRows] = useState(false)
   const [error, setError] = useState('')
 
+  const [pinnedItemNames, setPinnedItemNames] = useState(new Set())
+  const [showAllItems, setShowAllItems] = useState(false)
+  const [pinsKey, setPinsKey] = useState(0)
+
   const [vendorFilter, setVendorFilter] = useState('all')
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo] = useState('')
@@ -50,6 +54,17 @@ export default function PriceTrendScreen() {
         setLoadingItems(false)
       })
   }, [store])
+
+  useEffect(() => {
+    if (!store || !supabase) return
+    supabase
+      .from('price_trend_pins')
+      .select('item_name')
+      .eq('store_code', store.code)
+      .then(({ data, error: err }) => {
+        if (!err) setPinnedItemNames(new Set((data ?? []).map((r) => r.item_name)))
+      })
+  }, [store, pinsKey])
 
   useEffect(() => {
     if (!store || !supabase || !selectedItem) {
@@ -92,6 +107,36 @@ export default function PriceTrendScreen() {
   const handleItemFilterVendorChange = (value) => {
     setItemFilterVendor(value)
     setSelectedItem('')
+  }
+
+  const pinnedItems = itemNames.filter((name) => pinnedItemNames.has(name))
+  const otherItems = itemNames.filter((name) => !pinnedItemNames.has(name))
+  const effectiveShowAllItems = showAllItems || pinnedItems.length === 0
+
+  const handlePinItem = async (name) => {
+    if (!supabase) return
+    const { error: err } = await supabase
+      .from('price_trend_pins')
+      .upsert({ store_code: store.code, item_name: name }, { onConflict: 'store_code,item_name' })
+    if (err) {
+      setError(err.message)
+      return
+    }
+    setPinsKey((k) => k + 1)
+  }
+
+  const handleUnpinItem = async (name) => {
+    if (!supabase) return
+    const { error: err } = await supabase
+      .from('price_trend_pins')
+      .delete()
+      .eq('store_code', store.code)
+      .eq('item_name', name)
+    if (err) {
+      setError(err.message)
+      return
+    }
+    setPinsKey((k) => k + 1)
   }
 
   // 거래처별 최신 단가 비교: 거래처마다 가장 최근 입고 단가를 뽑아 저렴한 순으로 정렬
@@ -153,24 +198,65 @@ export default function PriceTrendScreen() {
         </select>
       </div>
 
-      <div className="field">
-        <label htmlFor="itemSelect">물품 선택</label>
-        <select
-          id="itemSelect"
-          className="select select-block"
-          value={selectedItem}
-          onChange={(e) => setSelectedItem(e.target.value)}
-        >
-          <option value="">물품 선택...</option>
-          {itemNames.map((name) => (
-            <option key={name} value={name}>
-              {name}
-            </option>
-          ))}
-        </select>
-      </div>
-
       {loadingItems && <p className="hint">물품 목록을 불러오는 중...</p>}
+
+      {!loadingItems && itemNames.length > 0 && (
+        <>
+          <h2 className="section-title">관심 품목</h2>
+          {pinnedItems.length === 0 && <p className="hint">아직 선택한 품목이 없어요. 아래 전체 목록에서 골라주세요.</p>}
+          {pinnedItems.length > 0 && (
+            <ul className="history-list">
+              {pinnedItems.map((name) => (
+                <li key={name} className="history-row">
+                  <button type="button" className="cost-row-btn" onClick={() => setSelectedItem(name)}>
+                    <div className="history-row-main">
+                      <span className="history-item">{name}</span>
+                      {selectedItem === name && <span className="cost-badge">선택됨</span>}
+                    </div>
+                  </button>
+                  <div className="inventory-row-actions">
+                    <button type="button" className="link-btn" onClick={() => handleUnpinItem(name)}>
+                      숨기기
+                    </button>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+
+          {pinnedItems.length > 0 && (
+            <button type="button" className="btn-secondary" onClick={() => setShowAllItems((v) => !v)}>
+              {showAllItems ? '접기' : `품목 모두보기 (전체 ${itemNames.length}개)`}
+            </button>
+          )}
+
+          {effectiveShowAllItems && (
+            <>
+              {pinnedItems.length > 0 && <h2 className="section-title">전체 품목</h2>}
+              <ul className="history-list">
+                {otherItems.map((name) => (
+                  <li key={name} className="history-row">
+                    <button type="button" className="cost-row-btn" onClick={() => setSelectedItem(name)}>
+                      <div className="history-row-main">
+                        <span className="history-item">{name}</span>
+                        {selectedItem === name && <span className="cost-badge">선택됨</span>}
+                      </div>
+                    </button>
+                    <div className="inventory-row-actions">
+                      <button type="button" className="link-btn" onClick={() => handlePinItem(name)}>
+                        + 관심 품목에 추가
+                      </button>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+              {pinnedItems.length > 0 && otherItems.length === 0 && (
+                <p className="hint">모든 품목을 관심 품목에 추가했어요.</p>
+              )}
+            </>
+          )}
+        </>
+      )}
 
       {selectedItem && (
         <>
