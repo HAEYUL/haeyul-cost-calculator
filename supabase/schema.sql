@@ -160,6 +160,36 @@ create policy "inventory_pins are publicly deletable"
   on inventory_pins for delete
   using (true);
 
+-- price_trend_pins: 단가 추이 조회 화면에서 "관심 품목"으로 선택해 상단에 항상 보이게
+-- 한 품목 목록. inventory_pins와 달리 단가 추이는 단위 구분 없이 품목명만으로 비교하니
+-- unit 컬럼은 두지 않는다.
+create table if not exists price_trend_pins (
+  id uuid primary key default gen_random_uuid(),
+  store_code text not null references stores(code),
+  item_name text not null,
+  created_at timestamptz not null default now(),
+  unique (store_code, item_name)
+);
+
+create index if not exists price_trend_pins_store_idx on price_trend_pins (store_code);
+
+alter table price_trend_pins enable row level security;
+
+drop policy if exists "price_trend_pins are publicly readable" on price_trend_pins;
+create policy "price_trend_pins are publicly readable"
+  on price_trend_pins for select
+  using (true);
+
+drop policy if exists "price_trend_pins are publicly insertable" on price_trend_pins;
+create policy "price_trend_pins are publicly insertable"
+  on price_trend_pins for insert
+  with check (true);
+
+drop policy if exists "price_trend_pins are publicly deletable" on price_trend_pins;
+create policy "price_trend_pins are publicly deletable"
+  on price_trend_pins for delete
+  using (true);
+
 -- invoices: 입고 내역. 한 품목당 한 행. store_code로 매장별 데이터를 분리한다.
 -- 로그인/비밀번호가 없는 앱이므로 매장 분리는 애플리케이션 레벨(선택된 매장 코드로 필터)에서
 -- 이루어지고, RLS는 anon 키로 읽기/쓰기를 허용한다.
