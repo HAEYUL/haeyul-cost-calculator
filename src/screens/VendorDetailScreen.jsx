@@ -286,24 +286,6 @@ export default function VendorDetailScreen() {
             <p className="hint">이 기간에 입고 내역이 없습니다.</p>
           )}
 
-          {deleteTarget && (
-            <div className="price-alert-box price-alert-box-danger">
-              <p className="price-alert-title">이 명세표를 삭제할까요?</p>
-              <p className="hint">
-                {deleteTarget.invoice_date ?? '날짜 미입력'} · {Math.round(Number(deleteTarget.total_amount)).toLocaleString()}원 —
-                딸린 품목별 단가·수량·금액도 모두 함께 삭제되고, 되돌릴 수 없어요.
-              </p>
-              <div className="invoice-form">
-                <button type="button" className="btn-secondary" onClick={() => setDeleteTarget(null)} disabled={deleting}>
-                  취소
-                </button>
-                <button type="button" className="btn-primary" onClick={handleDeleteBatch} disabled={deleting}>
-                  {deleting ? '삭제 중...' : '삭제'}
-                </button>
-              </div>
-            </div>
-          )}
-
           <ul className="history-list">
             {filteredBatches.map((batch) => (
               <li key={batch.id} className="history-row">
@@ -321,6 +303,27 @@ export default function VendorDetailScreen() {
                     </button>
                   </div>
                 </div>
+
+                {deleteTarget?.id === batch.id && (
+                  <div className="price-alert-box price-alert-box-danger">
+                    <p className="price-alert-title">이 명세표를 삭제할까요?</p>
+                    <p className="hint">딸린 품목별 단가·수량·금액도 모두 함께 삭제되고, 되돌릴 수 없어요.</p>
+                    <div className="invoice-form">
+                      <button
+                        type="button"
+                        className="btn-secondary"
+                        onClick={() => setDeleteTarget(null)}
+                        disabled={deleting}
+                      >
+                        취소
+                      </button>
+                      <button type="button" className="btn-primary" onClick={handleDeleteBatch} disabled={deleting}>
+                        {deleting ? '삭제 중...' : '삭제'}
+                      </button>
+                    </div>
+                  </div>
+                )}
+
                 {batch.statement_balance != null && (
                   <div className="history-row-sub">
                     <span>명세표 잔액 {Math.round(Number(batch.statement_balance)).toLocaleString()}원</span>
