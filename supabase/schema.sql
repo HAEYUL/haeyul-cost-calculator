@@ -80,6 +80,13 @@ create policy "invoice_batches are publicly deletable"
   on invoice_batches for delete
   using (true);
 
+-- 이미 저장한 명세표를 통째로 다시 입력하지 않고 고칠 수 있어야 한다.
+drop policy if exists "invoice_batches are publicly updatable" on invoice_batches;
+create policy "invoice_batches are publicly updatable"
+  on invoice_batches for update
+  using (true)
+  with check (true);
+
 -- vendor_payments: 거래처에 지급(결제)한 금액 기록. 거래처별 미지급금(잔액)은
 -- invoice_batches.total_amount 합계 - vendor_payments.amount 합계로 계산한다.
 create table if not exists vendor_payments (
@@ -105,6 +112,12 @@ drop policy if exists "vendor_payments are publicly insertable" on vendor_paymen
 create policy "vendor_payments are publicly insertable"
   on vendor_payments for insert
   with check (true);
+
+-- 잘못 입력한 결제 기록을 지울 수 있어야 한다.
+drop policy if exists "vendor_payments are publicly deletable" on vendor_payments;
+create policy "vendor_payments are publicly deletable"
+  on vendor_payments for delete
+  using (true);
 
 -- stock_usage: 당일 재료 사용량 수동 기록. 현재고는 invoices.quantity 합계(품목명+단위
 -- 기준) 에서 이 테이블의 used_qty 합계를 뺀 값으로 계산한다. item_name/unit이 자유
@@ -134,6 +147,12 @@ drop policy if exists "stock_usage is publicly insertable" on stock_usage;
 create policy "stock_usage is publicly insertable"
   on stock_usage for insert
   with check (true);
+
+-- 잘못 입력한 사용량 기록을 지울 수 있어야 한다.
+drop policy if exists "stock_usage is publicly deletable" on stock_usage;
+create policy "stock_usage is publicly deletable"
+  on stock_usage for delete
+  using (true);
 
 -- pinned_items: 재고 관리 · 단가 추이 조회 화면이 공유하는 "관심 품목" 목록. 한쪽
 -- 화면에서 찜하면 다른 화면에도 그대로 반영된다. 예전에는 화면별로 inventory_pins(품목+단위),

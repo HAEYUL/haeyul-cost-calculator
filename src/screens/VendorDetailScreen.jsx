@@ -51,6 +51,9 @@ export default function VendorDetailScreen() {
   const [deleteTarget, setDeleteTarget] = useState(null)
   const [deleting, setDeleting] = useState(false)
 
+  const [deletePaymentTarget, setDeletePaymentTarget] = useState(null)
+  const [deletingPayment, setDeletingPayment] = useState(false)
+
   useEffect(() => {
     if (!store) navigate('/', { replace: true })
   }, [store, navigate])
@@ -140,6 +143,22 @@ export default function VendorDetailScreen() {
     setPaymentAmount('')
     setPaymentDate('')
     setPaymentMemo('')
+    setDataKey((k) => k + 1)
+  }
+
+  const handleDeletePayment = async () => {
+    if (!deletePaymentTarget || !supabase) return
+    setDeletingPayment(true)
+    setError('')
+
+    const { error: err } = await supabase.from('vendor_payments').delete().eq('id', deletePaymentTarget.id)
+    setDeletingPayment(false)
+    if (err) {
+      setError(err.message)
+      return
+    }
+
+    setDeletePaymentTarget(null)
     setDataKey((k) => k + 1)
   }
 
@@ -286,11 +305,41 @@ export default function VendorDetailScreen() {
               <li key={p.id} className="history-row">
                 <div className="history-row-main">
                   <span className="history-item">{p.paid_date ?? '날짜 미입력'}</span>
-                  <span>{Math.round(Number(p.amount)).toLocaleString()}원</span>
+                  <div className="history-row-main-end">
+                    <span>{Math.round(Number(p.amount)).toLocaleString()}원</span>
+                    <button
+                      type="button"
+                      className="icon-btn"
+                      aria-label="결제 기록 삭제"
+                      onClick={() => setDeletePaymentTarget(p)}
+                    >
+                      ✕
+                    </button>
+                  </div>
                 </div>
                 {p.memo && (
                   <div className="history-row-sub">
                     <span>{p.memo}</span>
+                  </div>
+                )}
+
+                {deletePaymentTarget?.id === p.id && (
+                  <div className="price-alert-box price-alert-box-danger">
+                    <p className="price-alert-title">이 결제 기록을 삭제할까요?</p>
+                    <p className="hint">잘못 입력한 결제 기록만 지워지고, 되돌릴 수 없어요.</p>
+                    <div className="invoice-form">
+                      <button
+                        type="button"
+                        className="btn-secondary"
+                        onClick={() => setDeletePaymentTarget(null)}
+                        disabled={deletingPayment}
+                      >
+                        취소
+                      </button>
+                      <button type="button" className="btn-primary" onClick={handleDeletePayment} disabled={deletingPayment}>
+                        {deletingPayment ? '삭제 중...' : '삭제'}
+                      </button>
+                    </div>
                   </div>
                 )}
               </li>
@@ -310,6 +359,13 @@ export default function VendorDetailScreen() {
                   <span className="history-item">{batch.invoice_date ?? '날짜 미입력'}</span>
                   <div className="history-row-main-end">
                     <span>{Math.round(Number(batch.total_amount)).toLocaleString()}원</span>
+                    <button
+                      type="button"
+                      className="link-btn"
+                      onClick={() => navigate(`/invoices/edit/${batch.id}`)}
+                    >
+                      수정
+                    </button>
                     <button
                       type="button"
                       className="icon-btn"

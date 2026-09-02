@@ -39,6 +39,8 @@ export default function VendorScreen() {
   const [newName, setNewName] = useState('')
   const [saving, setSaving] = useState(false)
   const [dataKey, setDataKey] = useState(0)
+  const [searchOpen, setSearchOpen] = useState(false)
+  const [searchQuery, setSearchQuery] = useState('')
 
   useEffect(() => {
     if (!store) navigate('/', { replace: true })
@@ -152,6 +154,11 @@ export default function VendorScreen() {
 
   const totalBalance = vendorsWithBalance.reduce((sum, v) => sum + (v.balance ?? 0), 0)
 
+  const trimmedQuery = searchQuery.trim()
+  const visibleVendors = trimmedQuery
+    ? vendorsWithBalance.filter((v) => v.name.includes(trimmedQuery))
+    : vendorsWithBalance
+
   const handleAdd = async () => {
     const trimmed = newName.trim()
     if (!trimmed || !supabase) return
@@ -208,8 +215,41 @@ export default function VendorScreen() {
       {error && <p className="error-text">{error}</p>}
       {!loading && !error && vendors.length === 0 && <p className="hint">등록된 거래처가 없습니다.</p>}
 
+      {!loading && vendors.length > 0 && (
+        <div className="history-header">
+          <h2 className="section-title">거래처 목록</h2>
+          <button
+            type="button"
+            className="icon-btn"
+            aria-label="거래처 검색"
+            onClick={() => {
+              setSearchOpen((v) => !v)
+              setSearchQuery('')
+            }}
+          >
+            🔍
+          </button>
+        </div>
+      )}
+
+      {searchOpen && (
+        <div className="field">
+          <input
+            type="text"
+            className="input"
+            placeholder="거래처명으로 검색"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            autoFocus
+          />
+        </div>
+      )}
+
+      {trimmedQuery && <p className="hint">검색 결과 {visibleVendors.length}개</p>}
+      {trimmedQuery && visibleVendors.length === 0 && <p className="hint">일치하는 거래처가 없어요.</p>}
+
       <ul className="history-list">
-        {vendorsWithBalance.map((v) => (
+        {visibleVendors.map((v) => (
           <li key={v.id} className="history-row">
             <button type="button" className="cost-row-btn" onClick={() => navigate(`/vendors/${v.id}`)}>
               <div className="history-row-main">

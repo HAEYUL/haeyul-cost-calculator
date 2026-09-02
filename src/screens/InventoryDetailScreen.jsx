@@ -24,6 +24,12 @@ export default function InventoryDetailScreen() {
   const [usageMemo, setUsageMemo] = useState('')
   const [saving, setSaving] = useState(false)
 
+  const [deleteUsageTarget, setDeleteUsageTarget] = useState(null)
+  const [deletingUsage, setDeletingUsage] = useState(false)
+
+  const [dateFrom, setDateFrom] = useState('')
+  const [dateTo, setDateTo] = useState('')
+
   useEffect(() => {
     if (!store) navigate('/', { replace: true })
   }, [store, navigate])
@@ -95,6 +101,26 @@ export default function InventoryDetailScreen() {
     setUsageMemo('')
     setDataKey((k) => k + 1)
   }
+
+  const handleDeleteUsage = async () => {
+    if (!deleteUsageTarget || !supabase) return
+    setDeletingUsage(true)
+    setError('')
+
+    const { error: err } = await supabase.from('stock_usage').delete().eq('id', deleteUsageTarget.id)
+    setDeletingUsage(false)
+    if (err) {
+      setError(err.message)
+      return
+    }
+
+    setDeleteUsageTarget(null)
+    setDataKey((k) => k + 1)
+  }
+
+  const inRange = (dateStr) => (!dateFrom || !dateStr || dateStr >= dateFrom) && (!dateTo || !dateStr || dateStr <= dateTo)
+  const visibleUsageRows = usageRows.filter((r) => inRange(r.used_date))
+  const visibleReceipts = receipts.filter((r) => inRange(r.invoice_date))
 
   return (
     <div className="screen screen-wide">
@@ -172,31 +198,88 @@ export default function InventoryDetailScreen() {
             {saving ? '저장 중...' : '사용량 기록'}
           </button>
 
-          <h2 className="section-title">사용 내역 ({usageRows.length}건)</h2>
+          <div className="date-range">
+            <input
+              type="date"
+              className="input"
+              value={dateFrom}
+              onChange={(e) => setDateFrom(e.target.value)}
+              aria-label="시작일"
+            />
+            <span className="date-range-sep">~</span>
+            <input
+              type="date"
+              className="input"
+              value={dateTo}
+              onChange={(e) => setDateTo(e.target.value)}
+              aria-label="종료일"
+            />
+          </div>
+          <p className="hint">
+            위 현재고·누적 수치는 항상 전체 기간 기준이고, 아래 내역 목록만 이 기간으로 좁혀서 볼 수 있어요.
+          </p>
+
+          <h2 className="section-title">사용 내역 ({visibleUsageRows.length}건)</h2>
           {usageRows.length === 0 && <p className="hint">아직 기록된 사용량이 없습니다.</p>}
+          {usageRows.length > 0 && visibleUsageRows.length === 0 && (
+            <p className="hint">이 기간에 사용 기록이 없습니다.</p>
+          )}
           <ul className="history-list">
-            {usageRows.map((r) => (
+            {visibleUsageRows.map((r) => (
               <li key={r.id} className="history-row">
                 <div className="history-row-main">
                   <span className="history-item">{r.used_date ?? '날짜 미입력'}</span>
-                  <span>
-                    -{Number(r.used_qty).toLocaleString()}
-                    {unitLabel}
-                  </span>
+                  <div className="history-row-main-end">
+                    <span>
+                      -{Number(r.used_qty).toLocaleString()}
+                      {unitLabel}
+                    </span>
+                    <button
+                      type="button"
+                      className="icon-btn"
+                      aria-label="사용 내역 삭제"
+                      onClick={() => setDeleteUsageTarget(r)}
+                    >
+                      ✕
+                    </button>
+                  </div>
                 </div>
                 {r.memo && (
                   <div className="history-row-sub">
                     <span>{r.memo}</span>
                   </div>
                 )}
+
+                {deleteUsageTarget?.id === r.id && (
+                  <div className="price-alert-box price-alert-box-danger">
+                    <p className="price-alert-title">이 사용 내역을 삭제할까요?</p>
+                    <p className="hint">잘못 입력한 사용량 기록만 지워지고, 되돌릴 수 없어요.</p>
+                    <div className="invoice-form">
+                      <button
+                        type="button"
+                        className="btn-secondary"
+                        onClick={() => setDeleteUsageTarget(null)}
+                        disabled={deletingUsage}
+                      >
+                        취소
+                      </button>
+                      <button type="button" className="btn-primary" onClick={handleDeleteUsage} disabled={deletingUsage}>
+                        {deletingUsage ? '삭제 중...' : '삭제'}
+                      </button>
+                    </div>
+                  </div>
+                )}
               </li>
             ))}
           </ul>
 
-          <h2 className="section-title">입고 내역 ({receipts.length}건)</h2>
+          <h2 className="section-title">입고 내역 ({visibleReceipts.length}건)</h2>
           {receipts.length === 0 && <p className="hint">아직 입고 내역이 없습니다.</p>}
+          {receipts.length > 0 && visibleReceipts.length === 0 && (
+            <p className="hint">이 기간에 입고 내역이 없습니다.</p>
+          )}
           <ul className="history-list">
-            {receipts.map((r) => (
+            {visibleReceipts.map((r) => (
               <li key={r.id} className="history-row">
                 <div className="history-row-main">
                   <span className="history-vendor">{r.vendor}</span>
