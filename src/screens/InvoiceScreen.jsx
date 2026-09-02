@@ -383,7 +383,7 @@ export default function InvoiceScreen() {
 
       <div className="upload-btn-row">
         <label className="upload-btn">
-          {previewUrl ? '다른 사진 선택' : '사진 선택'}
+          {previewUrl ? '다른 파일 선택' : '파일 선택'}
           <input type="file" accept="image/*" onChange={handleFileChange} hidden />
         </label>
         <label className="upload-btn">
