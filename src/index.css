@@ -412,6 +412,15 @@ h1 {
   margin-top: 0;
 }
 
+.inventory-row-actions {
+  margin-top: 4px;
+}
+
+.inventory-row-actions .link-btn {
+  margin-top: 0;
+  padding: 0;
+}
+
 .link-btn-danger {
   color: #d84343;
 }
