@@ -83,18 +83,20 @@ export default function MainMenuScreen() {
         .eq('store_code', store.code),
       supabase.from('stock_usage').select('item_name, unit, used_qty').eq('store_code', store.code),
       supabase.from('waste_records').select('item_name, unit, qty').eq('store_code', store.code),
+      supabase.from('stock_adjustments').select('item_name, unit, delta').eq('store_code', store.code),
       supabase.from('recipes').select('menu_name, ingredient_name, amount_g').eq('store_code', store.code),
       supabase
         .from('ingredient_mapping')
         .select('recipe_ingredient_name, invoice_item_name')
         .eq('store_code', store.code),
       supabase.from('menu_prices').select('menu_name, selling_price').eq('store_code', store.code),
-    ]).then(([batchesRes, invoicesRes, usageRes, wasteRes, recipesRes, mappingRes, pricesRes]) => {
+    ]).then(([batchesRes, invoicesRes, usageRes, wasteRes, adjustmentsRes, recipesRes, mappingRes, pricesRes]) => {
       const err =
         batchesRes.error ||
         invoicesRes.error ||
         usageRes.error ||
         wasteRes.error ||
+        adjustmentsRes.error ||
         recipesRes.error ||
         mappingRes.error ||
         pricesRes.error
@@ -143,7 +145,7 @@ export default function MainMenuScreen() {
       const stock = new Map()
       const ensure = (itemName, unit) => {
         const key = stockKey(itemName, unit)
-        if (!stock.has(key)) stock.set(key, { itemName, unit, received: 0, used: 0, wasted: 0 })
+        if (!stock.has(key)) stock.set(key, { itemName, unit, received: 0, used: 0, wasted: 0, adjusted: 0 })
         return stock.get(key)
       }
       for (const row of invoicesRes.data ?? []) {
@@ -156,8 +158,11 @@ export default function MainMenuScreen() {
       for (const row of wasteRes.data ?? []) {
         ensure(row.item_name, row.unit).wasted += Number(row.qty)
       }
+      for (const row of adjustmentsRes.data ?? []) {
+        ensure(row.item_name, row.unit).adjusted += Number(row.delta)
+      }
       const negativeStock = [...stock.values()]
-        .map((r) => ({ ...r, current: r.received - r.used - r.wasted }))
+        .map((r) => ({ ...r, current: r.received - r.used - r.wasted + r.adjusted }))
         .filter((r) => r.current < 0)
         .sort((a, b) => a.current - b.current)
 
