@@ -51,6 +51,28 @@ function findSimilarVendor(vendors, name) {
   return bestSimilarity >= 0.6 ? best : null
 }
 
+// 완전히 같은 이름은 아니지만 오타/표기 차이로 같은 물품일 가능성이 있는 기존 물품명을 찾는다.
+// 거래처(0.6)보다 훨씬 엄격한 기준(0.9)을 쓰는 이유는, 물품명은 "돼지고기 앞다리" vs
+// "돼지고기 뒷다리"처럼 비슷해 보여도 실제로는 다른 품목인 경우가 많기 때문이다.
+function findSimilarItemName(existingNames, name) {
+  const norm = name.trim()
+  if (!norm) return null
+  let best = null
+  let bestSimilarity = 0
+  for (const existing of existingNames) {
+    const eNorm = existing.trim()
+    if (eNorm === norm) continue
+    const maxLen = Math.max(norm.length, eNorm.length)
+    if (maxLen === 0) continue
+    const similarity = 1 - levenshtein(norm, eNorm) / maxLen
+    if (similarity > bestSimilarity) {
+      bestSimilarity = similarity
+      best = eNorm
+    }
+  }
+  return bestSimilarity >= 0.9 ? best : null
+}
+
 function itemAmount(item) {
   if (item.amount !== '') return Number(item.amount)
   const q = item.quantity === '' ? null : Number(item.quantity)
@@ -84,6 +106,8 @@ export default function InvoiceScreen() {
   const [error, setError] = useState('')
   const [vendors, setVendors] = useState([])
   const [vendorsVersion, setVendorsVersion] = useState(0)
+  const [itemNames, setItemNames] = useState([])
+  const [dismissedSimilarItems, setDismissedSimilarItems] = useState(new Set())
   const [vendorId, setVendorId] = useState('')
   const [newVendorName, setNewVendorName] = useState('')
   const [similarVendorPrompt, setSimilarVendorPrompt] = useState(null)
@@ -112,6 +136,17 @@ export default function InvoiceScreen() {
         if (!err) setVendors(data ?? [])
       })
   }, [store, vendorsVersion])
+
+  useEffect(() => {
+    if (!store || !supabase) return
+    supabase
+      .from('invoices')
+      .select('item_name')
+      .eq('store_code', store.code)
+      .then(({ data, error: err }) => {
+        if (!err) setItemNames([...new Set((data ?? []).map((r) => r.item_name))])
+      })
+  }, [store, historyKey])
 
   if (!store) return null
 
@@ -404,6 +439,20 @@ export default function InvoiceScreen() {
       : null
   const hasAmountMismatch = itemMismatches.length > 0 || totalMismatch != null
 
+  // 이미 있는 물품명과 90% 이상 비슷하지만 완전히 같지는 않은 항목을 찾는다. 새 물품으로
+  // 바로 저장하지 않고 먼저 확인받아서, 오타로 같은 품목이 여러 개로 쪼개지는 걸 막는다.
+  const similarItemMatches = items
+    .map((item, index) => {
+      const typed = item.name.trim()
+      if (!typed || itemNames.includes(typed)) return null
+      const suggestion = findSimilarItemName(itemNames, typed)
+      if (!suggestion) return null
+      const key = `${typed}→${suggestion}`
+      if (dismissedSimilarItems.has(key)) return null
+      return { index, typed, suggestion, key }
+    })
+    .filter(Boolean)
+
   return (
     <div className="screen screen-wide">
       <div className="screen-header">
@@ -602,6 +651,27 @@ export default function InvoiceScreen() {
         </div>
       )}
 
+      {similarItemMatches.map((m) => (
+        <div key={m.key} className="price-alert-box">
+          <p className="price-alert-title">비슷한 물품이 있어요</p>
+          <p className="hint">
+            "{m.typed}"과(와) 기존 물품 "{m.suggestion}"이(가) 같은 물품인가요?
+          </p>
+          <div className="invoice-form">
+            <button
+              type="button"
+              className="btn-secondary"
+              onClick={() => setDismissedSimilarItems((prev) => new Set(prev).add(m.key))}
+            >
+              아니요, 다른 물품이에요
+            </button>
+            <button type="button" className="btn-primary" onClick={() => updateItem(m.index, 'name', m.suggestion)}>
+              네, 같은 물품이에요
+            </button>
+          </div>
+        </div>
+      ))}
+
       {items.length > 0 && (
         <div className="item-table-wrap">
           <div className="item-table">
@@ -667,8 +737,19 @@ export default function InvoiceScreen() {
           + 품목 추가
         </button>
         {(vendorId || items.length > 0) && (
-          <button type="button" className="btn-primary" onClick={() => handleSave()} disabled={saving || hasAmountMismatch}>
-            {saving ? '저장 중...' : hasAmountMismatch ? '금액을 맞춰주세요' : '저장'}
+          <button
+            type="button"
+            className="btn-primary"
+            onClick={() => handleSave()}
+            disabled={saving || hasAmountMismatch || similarItemMatches.length > 0}
+          >
+            {saving
+              ? '저장 중...'
+              : hasAmountMismatch
+                ? '금액을 맞춰주세요'
+                : similarItemMatches.length > 0
+                  ? '물품명을 확인해주세요'
+                  : '저장'}
           </button>
         )}
       </div>

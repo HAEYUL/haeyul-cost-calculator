@@ -33,6 +33,7 @@ export default function VendorScreen() {
   const [monthlyTotalByVendor, setMonthlyTotalByVendor] = useState(new Map())
   const [estimatedPaymentByVendor, setEstimatedPaymentByVendor] = useState(new Map())
   const [latestBalanceByVendor, setLatestBalanceByVendor] = useState(new Map())
+  const [staleBalanceVendors, setStaleBalanceVendors] = useState(new Set())
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [newName, setNewName] = useState('')
@@ -66,6 +67,7 @@ export default function VendorScreen() {
       const latestBalance = new Map() // 전체 기간 중 가장 최근 잔액 (우측 표시용)
       const monthLatestBalance = new Map() // 이번 달 안에서 가장 최근 잔액
       const prevBalance = new Map() // 이번 달 시작 전 마지막 잔액
+      const latestAnyDateValue = new Map() // 잔액 유무와 무관한, 진짜 가장 최근 명세표 날짜
 
       for (const b of batchesRes.data ?? []) {
         const dateStr = rowDateStr(b)
@@ -74,6 +76,11 @@ export default function VendorScreen() {
 
         if (isThisMonth) {
           monthlyTotal.set(b.vendor_id, (monthlyTotal.get(b.vendor_id) ?? 0) + Number(b.total_amount))
+        }
+
+        const existingAnyDate = latestAnyDateValue.get(b.vendor_id)
+        if (!existingAnyDate || dateValue > existingAnyDate) {
+          latestAnyDateValue.set(b.vendor_id, dateValue)
         }
 
         if (b.statement_balance != null) {
@@ -107,10 +114,21 @@ export default function VendorScreen() {
         estimatedPayment.set(vendorId, monthTotal - (monthBalance - prev))
       }
 
+      // 잔액이 적힌 것보다 더 최근 명세표가 있으면(그 명세표엔 잔액이 없다는 뜻) 미지급금이
+      // 최신이 아닐 수 있다는 표시를 해준다.
+      const stale = new Set()
+      for (const [vendorId, balanceInfo] of latestBalance) {
+        const anyDateValue = latestAnyDateValue.get(vendorId)
+        if (anyDateValue != null && anyDateValue > balanceInfo.dateValue) {
+          stale.add(vendorId)
+        }
+      }
+
       setVendors(vendorsRes.data ?? [])
       setMonthlyTotalByVendor(monthlyTotal)
       setEstimatedPaymentByVendor(estimatedPayment)
       setLatestBalanceByVendor(latestBalance)
+      setStaleBalanceVendors(stale)
       setLoading(false)
     })
   }, [store, dataKey])
@@ -122,7 +140,8 @@ export default function VendorScreen() {
       const monthTotal = monthlyTotalByVendor.get(v.id) ?? 0
       const estimatedPayment = estimatedPaymentByVendor.has(v.id) ? estimatedPaymentByVendor.get(v.id) : null
       const balance = latestBalanceByVendor.get(v.id)?.value ?? null
-      return { ...v, monthTotal, estimatedPayment, balance }
+      const isStale = staleBalanceVendors.has(v.id)
+      return { ...v, monthTotal, estimatedPayment, balance, isStale }
     })
     .sort((a, b) => {
       if (a.balance == null && b.balance == null) return a.name.localeCompare(b.name)
@@ -205,6 +224,7 @@ export default function VendorScreen() {
                 <span>당월 입고 {Math.round(v.monthTotal).toLocaleString()}원</span>
                 <span>결제(추정) {v.estimatedPayment != null ? `${Math.round(v.estimatedPayment).toLocaleString()}원` : '-'}</span>
               </div>
+              {v.isStale && <p className="hint alert-up">⚠️ 더 최근 명세표에 잔액이 기록 안 됨</p>}
             </button>
           </li>
         ))}

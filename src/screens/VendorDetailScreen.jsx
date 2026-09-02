@@ -96,7 +96,10 @@ export default function VendorDetailScreen() {
   // 미지급금은 결제 기록 기반 계산 대신, 가장 최근 명세표에 인쇄된 잔액을 우선 보여준다.
   // batches는 이미 최신순으로 정렬돼 있으니 잔액이 기록된 첫 항목을 찾으면 된다.
   // (위 요약 수치들은 기간 필터와 무관하게 항상 전체 기간 기준이다)
-  const latestBatchWithBalance = batches.find((b) => b.statement_balance != null)
+  const latestBatchWithBalanceIndex = batches.findIndex((b) => b.statement_balance != null)
+  const latestBatchWithBalance = latestBatchWithBalanceIndex >= 0 ? batches[latestBatchWithBalanceIndex] : undefined
+  // 그 명세표보다 더 최근인데 잔액이 안 적힌 명세표들 — 미지급금이 최신 상태가 아닐 수 있다는 경고용
+  const missingBalanceBatches = latestBatchWithBalanceIndex >= 0 ? batches.slice(0, latestBatchWithBalanceIndex) : []
 
   // 아래 "입고 내역" 목록만 기간으로 좁혀서 보여준다.
   const filteredBatches = batches.filter((b) => {
@@ -166,6 +169,17 @@ export default function VendorDetailScreen() {
               <strong>{Math.round(totalPaid).toLocaleString()}원</strong>
             </div>
           </div>
+
+          {missingBalanceBatches.length > 0 && (
+            <div className="price-alert-box price-alert-box-danger">
+              <p className="price-alert-title">
+                ⚠️{' '}
+                {missingBalanceBatches.map((b) => b.invoice_date ?? '날짜 미입력').join(', ')} 명세표에는 잔액이
+                기록되지 않았어요
+              </p>
+              <p className="hint">위 미지급금이 최신 상태가 아닐 수 있어요. 해당 명세표에 잔액을 입력해주세요.</p>
+            </div>
+          )}
 
           <h2 className="section-title">결제 입력</h2>
           <div className="field">
