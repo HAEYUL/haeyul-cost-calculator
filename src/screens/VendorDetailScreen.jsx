@@ -5,6 +5,28 @@ import { supabase } from '../lib/supabaseClient'
 
 const UNIT_LABELS = { g: 'g', kg: 'kg', ea: '개', other: '기타' }
 
+// 명세표에 적힌 입고일(invoice_date)을 우선 기준으로 삼고, 없는 옛 데이터만 저장 시각
+// (created_at)의 날짜로 대신한다.
+function rowDateStr(row) {
+  if (row.invoice_date) return row.invoice_date
+  const d = new Date(row.created_at)
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
+}
+
+// 이번 달의 시작일~마지막 날짜 (기간 필터 기본값)
+function monthRange() {
+  const now = new Date()
+  const y = now.getFullYear()
+  const m = now.getMonth()
+  const start = `${y}-${String(m + 1).padStart(2, '0')}-01`
+  const lastDay = new Date(y, m + 1, 0).getDate()
+  const end = `${y}-${String(m + 1).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`
+  return { start, end }
+}
+
 export default function VendorDetailScreen() {
   const { store } = useStore()
   const navigate = useNavigate()
@@ -16,6 +38,10 @@ export default function VendorDetailScreen() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [dataKey, setDataKey] = useState(0)
+
+  const defaultRange = monthRange()
+  const [dateFrom, setDateFrom] = useState(defaultRange.start)
+  const [dateTo, setDateTo] = useState(defaultRange.end)
 
   const [paymentAmount, setPaymentAmount] = useState('')
   const [paymentDate, setPaymentDate] = useState('')
@@ -69,7 +95,14 @@ export default function VendorDetailScreen() {
 
   // 미지급금은 결제 기록 기반 계산 대신, 가장 최근 명세표에 인쇄된 잔액을 우선 보여준다.
   // batches는 이미 최신순으로 정렬돼 있으니 잔액이 기록된 첫 항목을 찾으면 된다.
+  // (위 요약 수치들은 기간 필터와 무관하게 항상 전체 기간 기준이다)
   const latestBatchWithBalance = batches.find((b) => b.statement_balance != null)
+
+  // 아래 "입고 내역" 목록만 기간으로 좁혀서 보여준다.
+  const filteredBatches = batches.filter((b) => {
+    const d = rowDateStr(b)
+    return (!dateFrom || d >= dateFrom) && (!dateTo || d <= dateTo)
+  })
 
   const handleAddPayment = async () => {
     const amount = Number(paymentAmount)
@@ -188,11 +221,32 @@ export default function VendorDetailScreen() {
             ))}
           </ul>
 
-          <h2 className="section-title">입고 내역 ({batches.length}건)</h2>
+          <h2 className="section-title">입고 내역 ({filteredBatches.length}건)</h2>
+          <div className="date-range">
+            <input
+              type="date"
+              className="input"
+              value={dateFrom}
+              onChange={(e) => setDateFrom(e.target.value)}
+              aria-label="시작일"
+            />
+            <span className="date-range-sep">~</span>
+            <input
+              type="date"
+              className="input"
+              value={dateTo}
+              onChange={(e) => setDateTo(e.target.value)}
+              aria-label="종료일"
+            />
+          </div>
+          <p className="hint">기본으로 이번 달 내역만 보여요. 기간을 바꾸면 다른 달도 볼 수 있어요.</p>
           {batches.length === 0 && <p className="hint">아직 입고 내역이 없습니다.</p>}
+          {batches.length > 0 && filteredBatches.length === 0 && (
+            <p className="hint">이 기간에 입고 내역이 없습니다.</p>
+          )}
 
           <ul className="history-list">
-            {batches.map((batch) => (
+            {filteredBatches.map((batch) => (
               <li key={batch.id} className="history-row">
                 <div className="history-row-main">
                   <span className="history-item">{batch.invoice_date ?? '날짜 미입력'}</span>
