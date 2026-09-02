@@ -363,6 +363,12 @@ h1 {
   font-weight: 500;
 }
 
+.history-row-main-end {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
 .history-vendor {
   color: var(--text-muted);
   font-size: 13px;

@@ -74,6 +74,12 @@ create policy "invoice_batches are publicly insertable"
   on invoice_batches for insert
   with check (true);
 
+-- 중복/오입력된 명세표를 화면에서 지울 수 있어야 한다.
+drop policy if exists "invoice_batches are publicly deletable" on invoice_batches;
+create policy "invoice_batches are publicly deletable"
+  on invoice_batches for delete
+  using (true);
+
 -- vendor_payments: 거래처에 지급(결제)한 금액 기록. 거래처별 미지급금(잔액)은
 -- invoice_batches.total_amount 합계 - vendor_payments.amount 합계로 계산한다.
 create table if not exists vendor_payments (
@@ -221,6 +227,12 @@ drop policy if exists "invoices are publicly insertable" on invoices;
 create policy "invoices are publicly insertable"
   on invoices for insert
   with check (true);
+
+-- 중복/오입력된 명세표를 지울 때 딸린 품목 행도 함께 지울 수 있어야 한다.
+drop policy if exists "invoices are publicly deletable" on invoices;
+create policy "invoices are publicly deletable"
+  on invoices for delete
+  using (true);
 
 -- price_changes: 단가가 바뀐 시점을 쌓아두는 알림 로그. 입고 저장 시 같은 거래처+물품명
 -- (정확히 일치하는 경우만)의 직전 단가와 다르면 한 행씩 기록된다.

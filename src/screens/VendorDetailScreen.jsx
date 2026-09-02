@@ -48,6 +48,9 @@ export default function VendorDetailScreen() {
   const [paymentMemo, setPaymentMemo] = useState('')
   const [savingPayment, setSavingPayment] = useState(false)
 
+  const [deleteTarget, setDeleteTarget] = useState(null)
+  const [deleting, setDeleting] = useState(false)
+
   useEffect(() => {
     if (!store) navigate('/', { replace: true })
   }, [store, navigate])
@@ -130,6 +133,30 @@ export default function VendorDetailScreen() {
     setPaymentAmount('')
     setPaymentDate('')
     setPaymentMemo('')
+    setDataKey((k) => k + 1)
+  }
+
+  // 명세표(전표) 삭제 시 그에 딸린 품목별 단가·수량·금액(invoices)까지 함께 지운다.
+  const handleDeleteBatch = async () => {
+    if (!deleteTarget || !supabase) return
+    setDeleting(true)
+    setError('')
+
+    const { error: itemsErr } = await supabase.from('invoices').delete().eq('batch_id', deleteTarget.id)
+    if (itemsErr) {
+      setDeleting(false)
+      setError(itemsErr.message)
+      return
+    }
+
+    const { error: batchErr } = await supabase.from('invoice_batches').delete().eq('id', deleteTarget.id)
+    setDeleting(false)
+    if (batchErr) {
+      setError(batchErr.message)
+      return
+    }
+
+    setDeleteTarget(null)
     setDataKey((k) => k + 1)
   }
 
@@ -259,12 +286,40 @@ export default function VendorDetailScreen() {
             <p className="hint">이 기간에 입고 내역이 없습니다.</p>
           )}
 
+          {deleteTarget && (
+            <div className="price-alert-box price-alert-box-danger">
+              <p className="price-alert-title">이 명세표를 삭제할까요?</p>
+              <p className="hint">
+                {deleteTarget.invoice_date ?? '날짜 미입력'} · {Math.round(Number(deleteTarget.total_amount)).toLocaleString()}원 —
+                딸린 품목별 단가·수량·금액도 모두 함께 삭제되고, 되돌릴 수 없어요.
+              </p>
+              <div className="invoice-form">
+                <button type="button" className="btn-secondary" onClick={() => setDeleteTarget(null)} disabled={deleting}>
+                  취소
+                </button>
+                <button type="button" className="btn-primary" onClick={handleDeleteBatch} disabled={deleting}>
+                  {deleting ? '삭제 중...' : '삭제'}
+                </button>
+              </div>
+            </div>
+          )}
+
           <ul className="history-list">
             {filteredBatches.map((batch) => (
               <li key={batch.id} className="history-row">
                 <div className="history-row-main">
                   <span className="history-item">{batch.invoice_date ?? '날짜 미입력'}</span>
-                  <span>{Math.round(Number(batch.total_amount)).toLocaleString()}원</span>
+                  <div className="history-row-main-end">
+                    <span>{Math.round(Number(batch.total_amount)).toLocaleString()}원</span>
+                    <button
+                      type="button"
+                      className="icon-btn"
+                      aria-label="명세표 삭제"
+                      onClick={() => setDeleteTarget(batch)}
+                    >
+                      ✕
+                    </button>
+                  </div>
                 </div>
                 {batch.statement_balance != null && (
                   <div className="history-row-sub">
