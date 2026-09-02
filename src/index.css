@@ -240,6 +240,8 @@ h1 {
   font-weight: 500;
   border-radius: var(--radius);
   cursor: pointer;
+  text-align: center;
+  text-decoration: none;
 }
 
 .btn-primary {
