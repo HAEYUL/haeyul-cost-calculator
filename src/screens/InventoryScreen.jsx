@@ -20,6 +20,8 @@ export default function InventoryScreen() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [dataKey, setDataKey] = useState(0)
+  const [searchOpen, setSearchOpen] = useState(false)
+  const [searchQuery, setSearchQuery] = useState('')
 
   useEffect(() => {
     if (!store) navigate('/', { replace: true })
@@ -68,6 +70,8 @@ export default function InventoryScreen() {
 
   if (!store) return null
 
+  const trimmedQuery = searchQuery.trim()
+  const searchResults = trimmedQuery ? rows.filter((r) => r.itemName.includes(trimmedQuery)) : []
   const pinnedRows = rows.filter((r) => pinnedNames.has(r.itemName))
   const otherRows = rows.filter((r) => !pinnedNames.has(r.itemName))
   const effectiveShowAll = showAll || pinnedNames.size === 0
@@ -153,24 +157,65 @@ export default function InventoryScreen() {
 
       {!loading && rows.length > 0 && (
         <>
-          <h2 className="section-title">관심 품목</h2>
-          {pinnedNames.size === 0 && <p className="hint">아직 선택한 품목이 없어요. 아래 전체 목록에서 골라주세요.</p>}
-          {pinnedNames.size > 0 && (
-            <ul className="history-list">{pinnedRows.map((r) => renderRow(r, { pinned: true }))}</ul>
-          )}
-
-          {effectiveShowAll && (
-            <>
-              {pinnedNames.size > 0 && <h2 className="section-title">전체 품목</h2>}
-              <ul className="history-list">{otherRows.map((r) => renderRow(r, { pinned: false }))}</ul>
-              {pinnedNames.size > 0 && otherRows.length === 0 && <p className="hint">모든 품목을 관심 품목에 추가했어요.</p>}
-            </>
-          )}
-
-          {pinnedNames.size > 0 && (
-            <button type="button" className="btn-secondary" onClick={() => setShowAll((v) => !v)}>
-              {showAll ? '접기' : `품목 모두보기 (전체 ${rows.length}개)`}
+          <div className="history-header">
+            <h2 className="section-title">관심 품목</h2>
+            <button
+              type="button"
+              className="icon-btn"
+              aria-label="품목 검색"
+              onClick={() => {
+                setSearchOpen((v) => !v)
+                setSearchQuery('')
+              }}
+            >
+              🔍
             </button>
+          </div>
+
+          {searchOpen && (
+            <div className="field">
+              <input
+                type="text"
+                className="input"
+                placeholder="품목명으로 검색"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                autoFocus
+              />
+            </div>
+          )}
+
+          {trimmedQuery ? (
+            <>
+              <p className="hint">검색 결과 {searchResults.length}개</p>
+              {searchResults.length === 0 && <p className="hint">일치하는 품목이 없어요.</p>}
+              <ul className="history-list">
+                {searchResults.map((r) => renderRow(r, { pinned: pinnedNames.has(r.itemName) }))}
+              </ul>
+            </>
+          ) : (
+            <>
+              {pinnedNames.size === 0 && <p className="hint">아직 선택한 품목이 없어요. 아래 전체 목록에서 골라주세요.</p>}
+              {pinnedNames.size > 0 && (
+                <ul className="history-list">{pinnedRows.map((r) => renderRow(r, { pinned: true }))}</ul>
+              )}
+
+              {effectiveShowAll && (
+                <>
+                  {pinnedNames.size > 0 && <h2 className="section-title">전체 품목</h2>}
+                  <ul className="history-list">{otherRows.map((r) => renderRow(r, { pinned: false }))}</ul>
+                  {pinnedNames.size > 0 && otherRows.length === 0 && (
+                    <p className="hint">모든 품목을 관심 품목에 추가했어요.</p>
+                  )}
+                </>
+              )}
+
+              {pinnedNames.size > 0 && (
+                <button type="button" className="btn-secondary" onClick={() => setShowAll((v) => !v)}>
+                  {showAll ? '접기' : `품목 모두보기 (전체 ${rows.length}개)`}
+                </button>
+              )}
+            </>
           )}
         </>
       )}
