@@ -26,7 +26,6 @@ export default function PriceTrendScreen() {
 
   const [pinnedItemNames, setPinnedItemNames] = useState(new Set())
   const [showAllItems, setShowAllItems] = useState(false)
-  const [pinsKey, setPinsKey] = useState(0)
 
   const [vendorFilter, setVendorFilter] = useState('all')
   const [dateFrom, setDateFrom] = useState('')
@@ -58,13 +57,13 @@ export default function PriceTrendScreen() {
   useEffect(() => {
     if (!store || !supabase) return
     supabase
-      .from('price_trend_pins')
+      .from('pinned_items')
       .select('item_name')
       .eq('store_code', store.code)
       .then(({ data, error: err }) => {
         if (!err) setPinnedItemNames(new Set((data ?? []).map((r) => r.item_name)))
       })
-  }, [store, pinsKey])
+  }, [store])
 
   useEffect(() => {
     if (!store || !supabase || !selectedItem) {
@@ -93,16 +92,17 @@ export default function PriceTrendScreen() {
 
   if (!store) return null
 
-  // 거래처를 고르면 그 거래처가 납품한 물품으로만 물품 목록을 좁혀서 찾기 쉽게 한다.
+  // 거래처를 골라야만 그 거래처가 납품한 물품으로 목록을 보여준다. 거래처를 안 고르면
+  // 어떤 물품 목록도 보여주지 않는다(전체 거래처 뒤섞인 목록을 없애기 위함).
   // (아래 "거래처별 단가 비교"는 이 필터와 무관하게 항상 전체 거래처를 비교한다)
   const itemFilterVendors = [...new Set(invoiceIndex.map((r) => r.vendor))].sort((a, b) => a.localeCompare(b))
-  const itemNames = [
-    ...new Set(
-      invoiceIndex
-        .filter((r) => !itemFilterVendor || r.vendor === itemFilterVendor)
-        .map((r) => r.item_name),
-    ),
-  ].sort((a, b) => a.localeCompare(b))
+  const itemNames = itemFilterVendor
+    ? [
+        ...new Set(
+          invoiceIndex.filter((r) => r.vendor === itemFilterVendor).map((r) => r.item_name),
+        ),
+      ].sort((a, b) => a.localeCompare(b))
+    : []
 
   const handleItemFilterVendorChange = (value) => {
     setItemFilterVendor(value)
@@ -115,28 +115,36 @@ export default function PriceTrendScreen() {
 
   const handlePinItem = async (name) => {
     if (!supabase) return
+    setPinnedItemNames((prev) => new Set(prev).add(name))
     const { error: err } = await supabase
-      .from('price_trend_pins')
+      .from('pinned_items')
       .upsert({ store_code: store.code, item_name: name }, { onConflict: 'store_code,item_name' })
     if (err) {
       setError(err.message)
-      return
+      setPinnedItemNames((prev) => {
+        const next = new Set(prev)
+        next.delete(name)
+        return next
+      })
     }
-    setPinsKey((k) => k + 1)
   }
 
   const handleUnpinItem = async (name) => {
     if (!supabase) return
+    setPinnedItemNames((prev) => {
+      const next = new Set(prev)
+      next.delete(name)
+      return next
+    })
     const { error: err } = await supabase
-      .from('price_trend_pins')
+      .from('pinned_items')
       .delete()
       .eq('store_code', store.code)
       .eq('item_name', name)
     if (err) {
       setError(err.message)
-      return
+      setPinnedItemNames((prev) => new Set(prev).add(name))
     }
-    setPinsKey((k) => k + 1)
   }
 
   // 거래처별 최신 단가 비교: 거래처마다 가장 최근 입고 단가를 뽑아 저렴한 순으로 정렬
@@ -189,7 +197,9 @@ export default function PriceTrendScreen() {
           value={itemFilterVendor}
           onChange={(e) => handleItemFilterVendorChange(e.target.value)}
         >
-          <option value="">전체 거래처</option>
+          <option value="" disabled>
+            거래처를 선택하세요
+          </option>
           {itemFilterVendors.map((v) => (
             <option key={v} value={v}>
               {v}
@@ -198,9 +208,11 @@ export default function PriceTrendScreen() {
         </select>
       </div>
 
+      {!itemFilterVendor && <p className="hint">거래처를 먼저 선택해주세요.</p>}
+
       {loadingItems && <p className="hint">물품 목록을 불러오는 중...</p>}
 
-      {!loadingItems && itemNames.length > 0 && (
+      {!loadingItems && itemFilterVendor && itemNames.length > 0 && (
         <>
           <h2 className="section-title">관심 품목</h2>
           {pinnedItems.length === 0 && <p className="hint">아직 선택한 품목이 없어요. 아래 전체 목록에서 골라주세요.</p>}
@@ -222,12 +234,6 @@ export default function PriceTrendScreen() {
                 </li>
               ))}
             </ul>
-          )}
-
-          {pinnedItems.length > 0 && (
-            <button type="button" className="btn-secondary" onClick={() => setShowAllItems((v) => !v)}>
-              {showAllItems ? '접기' : `품목 모두보기 (전체 ${itemNames.length}개)`}
-            </button>
           )}
 
           {effectiveShowAllItems && (
@@ -254,6 +260,12 @@ export default function PriceTrendScreen() {
                 <p className="hint">모든 품목을 관심 품목에 추가했어요.</p>
               )}
             </>
+          )}
+
+          {pinnedItems.length > 0 && (
+            <button type="button" className="btn-secondary" onClick={() => setShowAllItems((v) => !v)}>
+              {showAllItems ? '접기' : `품목 모두보기 (전체 ${itemNames.length}개)`}
+            </button>
           )}
         </>
       )}
