@@ -10,16 +10,12 @@ function stockKey(itemName, unit) {
   return `${itemName}||${unit ?? ''}`
 }
 
-function unitEqFilter(query, unit) {
-  return unit == null ? query.is('unit', null) : query.eq('unit', unit)
-}
-
 export default function InventoryScreen() {
   const { store } = useStore()
   const navigate = useNavigate()
 
   const [rows, setRows] = useState([])
-  const [pinnedKeys, setPinnedKeys] = useState(new Set())
+  const [pinnedNames, setPinnedNames] = useState(new Set())
   const [showAll, setShowAll] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
@@ -36,7 +32,7 @@ export default function InventoryScreen() {
     Promise.all([
       supabase.from('invoices').select('item_name, unit, quantity').eq('store_code', store.code),
       supabase.from('stock_usage').select('item_name, unit, used_qty').eq('store_code', store.code),
-      supabase.from('inventory_pins').select('item_name, unit').eq('store_code', store.code),
+      supabase.from('pinned_items').select('item_name').eq('store_code', store.code),
     ]).then(([invoicesRes, usageRes, pinsRes]) => {
       const err = invoicesRes.error || usageRes.error || pinsRes.error
       if (err) {
@@ -65,22 +61,22 @@ export default function InventoryScreen() {
         .sort((a, b) => a.itemName.localeCompare(b.itemName))
 
       setRows(list)
-      setPinnedKeys(new Set((pinsRes.data ?? []).map((p) => stockKey(p.item_name, p.unit))))
+      setPinnedNames(new Set((pinsRes.data ?? []).map((p) => p.item_name)))
       setLoading(false)
     })
   }, [store, dataKey])
 
   if (!store) return null
 
-  const pinnedRows = rows.filter((r) => pinnedKeys.has(stockKey(r.itemName, r.unit)))
-  const otherRows = rows.filter((r) => !pinnedKeys.has(stockKey(r.itemName, r.unit)))
-  const effectiveShowAll = showAll || pinnedKeys.size === 0
+  const pinnedRows = rows.filter((r) => pinnedNames.has(r.itemName))
+  const otherRows = rows.filter((r) => !pinnedNames.has(r.itemName))
+  const effectiveShowAll = showAll || pinnedNames.size === 0
 
   const handlePin = async (r) => {
     if (!supabase) return
     const { error: err } = await supabase
-      .from('inventory_pins')
-      .upsert({ store_code: store.code, item_name: r.itemName, unit: r.unit }, { onConflict: 'store_code,item_name,unit' })
+      .from('pinned_items')
+      .upsert({ store_code: store.code, item_name: r.itemName }, { onConflict: 'store_code,item_name' })
     if (err) {
       setError(err.message)
       return
@@ -90,9 +86,11 @@ export default function InventoryScreen() {
 
   const handleUnpin = async (r) => {
     if (!supabase) return
-    let query = supabase.from('inventory_pins').delete().eq('store_code', store.code).eq('item_name', r.itemName)
-    query = unitEqFilter(query, r.unit)
-    const { error: err } = await query
+    const { error: err } = await supabase
+      .from('pinned_items')
+      .delete()
+      .eq('store_code', store.code)
+      .eq('item_name', r.itemName)
     if (err) {
       setError(err.message)
       return
@@ -156,23 +154,23 @@ export default function InventoryScreen() {
       {!loading && rows.length > 0 && (
         <>
           <h2 className="section-title">관심 품목</h2>
-          {pinnedKeys.size === 0 && <p className="hint">아직 선택한 품목이 없어요. 아래 전체 목록에서 골라주세요.</p>}
-          {pinnedKeys.size > 0 && (
+          {pinnedNames.size === 0 && <p className="hint">아직 선택한 품목이 없어요. 아래 전체 목록에서 골라주세요.</p>}
+          {pinnedNames.size > 0 && (
             <ul className="history-list">{pinnedRows.map((r) => renderRow(r, { pinned: true }))}</ul>
-          )}
-
-          {pinnedKeys.size > 0 && (
-            <button type="button" className="btn-secondary" onClick={() => setShowAll((v) => !v)}>
-              {showAll ? '접기' : `품목 모두보기 (전체 ${rows.length}개)`}
-            </button>
           )}
 
           {effectiveShowAll && (
             <>
-              {pinnedKeys.size > 0 && <h2 className="section-title">전체 품목</h2>}
+              {pinnedNames.size > 0 && <h2 className="section-title">전체 품목</h2>}
               <ul className="history-list">{otherRows.map((r) => renderRow(r, { pinned: false }))}</ul>
-              {pinnedKeys.size > 0 && otherRows.length === 0 && <p className="hint">모든 품목을 관심 품목에 추가했어요.</p>}
+              {pinnedNames.size > 0 && otherRows.length === 0 && <p className="hint">모든 품목을 관심 품목에 추가했어요.</p>}
             </>
+          )}
+
+          {pinnedNames.size > 0 && (
+            <button type="button" className="btn-secondary" onClick={() => setShowAll((v) => !v)}>
+              {showAll ? '접기' : `품목 모두보기 (전체 ${rows.length}개)`}
+            </button>
           )}
         </>
       )}

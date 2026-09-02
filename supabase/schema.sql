@@ -129,41 +129,11 @@ create policy "stock_usage is publicly insertable"
   on stock_usage for insert
   with check (true);
 
--- inventory_pins: 재고 관리 화면에서 "관심 품목"으로 선택해 상단에 항상 보이게 한
--- 품목(+단위) 목록. 품목이 많아 한눈에 보기 힘들 때, 자주 확인하고 싶은 것만 골라
--- 두는 용도. 매장 전체가 공유하는 설정이라 기기와 무관하게 같은 화면이 보인다.
-create table if not exists inventory_pins (
-  id uuid primary key default gen_random_uuid(),
-  store_code text not null references stores(code),
-  item_name text not null,
-  unit text,
-  created_at timestamptz not null default now(),
-  unique (store_code, item_name, unit)
-);
-
-create index if not exists inventory_pins_store_idx on inventory_pins (store_code);
-
-alter table inventory_pins enable row level security;
-
-drop policy if exists "inventory_pins are publicly readable" on inventory_pins;
-create policy "inventory_pins are publicly readable"
-  on inventory_pins for select
-  using (true);
-
-drop policy if exists "inventory_pins are publicly insertable" on inventory_pins;
-create policy "inventory_pins are publicly insertable"
-  on inventory_pins for insert
-  with check (true);
-
-drop policy if exists "inventory_pins are publicly deletable" on inventory_pins;
-create policy "inventory_pins are publicly deletable"
-  on inventory_pins for delete
-  using (true);
-
--- price_trend_pins: 단가 추이 조회 화면에서 "관심 품목"으로 선택해 상단에 항상 보이게
--- 한 품목 목록. inventory_pins와 달리 단가 추이는 단위 구분 없이 품목명만으로 비교하니
--- unit 컬럼은 두지 않는다.
-create table if not exists price_trend_pins (
+-- pinned_items: 재고 관리 · 단가 추이 조회 화면이 공유하는 "관심 품목" 목록. 한쪽
+-- 화면에서 찜하면 다른 화면에도 그대로 반영된다. 예전에는 화면별로 inventory_pins(품목+단위),
+-- price_trend_pins(품목명)가 따로 있었는데, 통합하면서 단가 추이 조회와 같은 기준인
+-- 품목명 단위로만 관리한다(재고 관리도 이제 단위 구분 없이 품목명으로 찜한다).
+create table if not exists pinned_items (
   id uuid primary key default gen_random_uuid(),
   store_code text not null references stores(code),
   item_name text not null,
@@ -171,24 +141,44 @@ create table if not exists price_trend_pins (
   unique (store_code, item_name)
 );
 
-create index if not exists price_trend_pins_store_idx on price_trend_pins (store_code);
+create index if not exists pinned_items_store_idx on pinned_items (store_code);
 
-alter table price_trend_pins enable row level security;
+alter table pinned_items enable row level security;
 
-drop policy if exists "price_trend_pins are publicly readable" on price_trend_pins;
-create policy "price_trend_pins are publicly readable"
-  on price_trend_pins for select
+drop policy if exists "pinned_items are publicly readable" on pinned_items;
+create policy "pinned_items are publicly readable"
+  on pinned_items for select
   using (true);
 
-drop policy if exists "price_trend_pins are publicly insertable" on price_trend_pins;
-create policy "price_trend_pins are publicly insertable"
-  on price_trend_pins for insert
+drop policy if exists "pinned_items are publicly insertable" on pinned_items;
+create policy "pinned_items are publicly insertable"
+  on pinned_items for insert
   with check (true);
 
-drop policy if exists "price_trend_pins are publicly deletable" on price_trend_pins;
-create policy "price_trend_pins are publicly deletable"
-  on price_trend_pins for delete
+drop policy if exists "pinned_items are publicly deletable" on pinned_items;
+create policy "pinned_items are publicly deletable"
+  on pinned_items for delete
   using (true);
+
+-- 예전 inventory_pins/price_trend_pins에 저장돼 있던 관심 품목이 있다면 새 테이블로
+-- 옮기고 정리한다. 둘 다 없는(아직 한 번도 만든 적 없는) 매장에서도 안전하게 실행된다.
+do $$
+begin
+  if to_regclass('public.inventory_pins') is not null then
+    insert into pinned_items (store_code, item_name)
+    select store_code, item_name from inventory_pins
+    on conflict (store_code, item_name) do nothing;
+  end if;
+
+  if to_regclass('public.price_trend_pins') is not null then
+    insert into pinned_items (store_code, item_name)
+    select store_code, item_name from price_trend_pins
+    on conflict (store_code, item_name) do nothing;
+  end if;
+end $$;
+
+drop table if exists inventory_pins;
+drop table if exists price_trend_pins;
 
 -- invoices: 입고 내역. 한 품목당 한 행. store_code로 매장별 데이터를 분리한다.
 -- 로그인/비밀번호가 없는 앱이므로 매장 분리는 애플리케이션 레벨(선택된 매장 코드로 필터)에서
