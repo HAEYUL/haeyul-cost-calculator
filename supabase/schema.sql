@@ -1,6 +1,5 @@
 -- stores: 매장 마스터 테이블. 이후 단계의 invoices/recipes/ingredient_mapping 테이블이
--- store_code(text, stores.code 참조)로 데이터를 매장별로 분리한다. 비밀번호 컬럼 없음 —
--- 매장 선택만으로 진입한다.
+-- store_code(text, stores.code 참조)로 데이터를 매장별로 분리한다.
 create table if not exists stores (
   id uuid primary key default gen_random_uuid(),
   code text unique not null,
@@ -21,6 +20,26 @@ drop policy if exists "stores are publicly readable" on stores;
 create policy "stores are publicly readable"
   on stores for select
   using (true);
+
+-- 매장별 4자리 비밀번호(원문 대신 해시만 저장, pinHash.js와 같은 방식: sha256(pin || ':' || code))
+-- 와 5회 오답 시 잠금을 위한 컬럼. 로그인 시스템은 아니고, 같은 팀 안에서 매장 화면을
+-- 실수로/함부로 들어가지 못하게 막는 정도의 가벼운 잠금이다.
+alter table stores add column if not exists pin_hash text;
+alter table stores add column if not exists failed_attempts integer not null default 0;
+alter table stores add column if not exists locked_until timestamptz;
+
+drop policy if exists "stores are publicly updatable" on stores;
+create policy "stores are publicly updatable"
+  on stores for update
+  using (true)
+  with check (true);
+
+-- 초기 비밀번호를 4자리 "1234"로 맞춘다. 이미 비밀번호가 설정된 매장은 건드리지 않는다.
+create extension if not exists pgcrypto with schema extensions;
+
+update stores
+set pin_hash = encode(extensions.digest('1234:' || code, 'sha256'), 'hex')
+where pin_hash is null;
 
 -- vendors: 거래처 마스터. 입고 저장 시 자유 텍스트로 흩어지던 거래처명을 하나로 묶어서
 -- 오탈자로 같은 거래처가 여러 개로 나뉘는 걸 막는다. 매장별로 이름 유일.
