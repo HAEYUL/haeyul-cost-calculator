@@ -599,6 +599,40 @@ h1 {
   text-align: left;
 }
 
+.section-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 24px 0 8px;
+}
+
+.section-title-row .section-title {
+  margin: 0;
+  flex-shrink: 0;
+}
+
+.item-search {
+  position: relative;
+  flex: 1;
+  max-width: 180px;
+}
+
+.item-search .input {
+  width: 100%;
+  padding-left: 30px;
+}
+
+.item-search-icon {
+  position: absolute;
+  left: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 14px;
+  pointer-events: none;
+  opacity: 0.6;
+}
+
 .match-ingredient-btn {
   display: block;
   width: 100%;
