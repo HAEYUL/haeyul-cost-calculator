@@ -86,12 +86,33 @@ h1 {
 }
 
 .dashboard-card {
+  position: relative;
   cursor: pointer;
   margin-top: 0;
 }
 
 .dashboard-card:active {
   opacity: 0.85;
+}
+
+/* 카드마다 padding shorthand를 나중에 다시 정의하는 클래스(.cost-summary, .price-alert-box)와
+   함께 쓰이므로, 이 규칙이 항상 이기도록 클래스 두 개를 겹쳐서 우선순위를 높인다. */
+.cost-summary.dashboard-card,
+.price-alert-box.dashboard-card {
+  padding-right: 40px;
+}
+
+.dashboard-card-dismiss {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  border: none;
+  background: none;
+  color: var(--text-muted);
+  font-size: 17px;
+  line-height: 1;
+  padding: 6px;
+  cursor: pointer;
 }
 
 .store-btn,
