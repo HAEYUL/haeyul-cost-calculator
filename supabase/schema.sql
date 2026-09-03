@@ -277,6 +277,36 @@ create policy "stock_adjustments are publicly deletable"
   on stock_adjustments for delete
   using (true);
 
+-- dashboard_dismissals: 홈 대시보드 알림 카드를 확인(X)했을 때, 그 시점의 알림 내용을
+-- signature(문자열)로 같이 저장해 둔다. 다음에 다시 열었을 때 같은 내용이면 계속 숨기고,
+-- 내용이 바뀌면(새 품목이 추가되거나 수치가 달라지면) 다시 보여준다. 카드 종류(card_key)
+-- 마다 매장당 최신 확인 상태 하나만 있으면 되므로 (store_code, card_key)가 기본키다.
+create table if not exists dashboard_dismissals (
+  store_code text not null references stores(code),
+  card_key text not null,
+  signature text not null,
+  dismissed_at timestamptz not null default now(),
+  primary key (store_code, card_key)
+);
+
+alter table dashboard_dismissals enable row level security;
+
+drop policy if exists "dashboard_dismissals are publicly readable" on dashboard_dismissals;
+create policy "dashboard_dismissals are publicly readable"
+  on dashboard_dismissals for select
+  using (true);
+
+drop policy if exists "dashboard_dismissals are publicly insertable" on dashboard_dismissals;
+create policy "dashboard_dismissals are publicly insertable"
+  on dashboard_dismissals for insert
+  with check (true);
+
+drop policy if exists "dashboard_dismissals are publicly updatable" on dashboard_dismissals;
+create policy "dashboard_dismissals are publicly updatable"
+  on dashboard_dismissals for update
+  using (true)
+  with check (true);
+
 -- pinned_items: 재고 관리 · 단가 추이 조회 화면이 공유하는 "관심 품목" 목록. 한쪽
 -- 화면에서 찜하면 다른 화면에도 그대로 반영된다. 예전에는 화면별로 inventory_pins(품목+단위),
 -- price_trend_pins(품목명)가 따로 있었는데, 통합하면서 단가 추이 조회와 같은 기준인

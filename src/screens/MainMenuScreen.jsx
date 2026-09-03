@@ -27,6 +27,12 @@ function stockKey(itemName, unit) {
   return `${itemName}||${unit ?? ''}`
 }
 
+// 알림 카드를 확인(X)했을 때 그 시점의 내용을 문자열로 남겨서, 다음에 열었을 때 내용이
+// 같으면 계속 숨기고 달라지면 다시 보여주는 데 쓴다.
+function makeSignature(parts) {
+  return [...parts].sort().join('|')
+}
+
 // 명세표에 적힌 입고일(invoice_date)을 우선 기준으로 삼고, 없는 옛 데이터만 저장 시각
 // (created_at)의 날짜로 대신한다.
 function rowDateStr(row) {
@@ -63,6 +69,8 @@ export default function MainMenuScreen() {
   const [marginWarningMenus, setMarginWarningMenus] = useState([])
   const [marginWarningCount, setMarginWarningCount] = useState(0)
   const [reorderAlerts, setReorderAlerts] = useState([])
+  const [signatures, setSignatures] = useState({})
+  const [dismissals, setDismissals] = useState(new Map())
 
   useEffect(() => {
     if (!store) navigate('/', { replace: true })
@@ -90,7 +98,8 @@ export default function MainMenuScreen() {
         .select('recipe_ingredient_name, invoice_item_name')
         .eq('store_code', store.code),
       supabase.from('menu_prices').select('menu_name, selling_price').eq('store_code', store.code),
-    ]).then(([batchesRes, invoicesRes, usageRes, wasteRes, adjustmentsRes, recipesRes, mappingRes, pricesRes]) => {
+      supabase.from('dashboard_dismissals').select('card_key, signature').eq('store_code', store.code),
+    ]).then(([batchesRes, invoicesRes, usageRes, wasteRes, adjustmentsRes, recipesRes, mappingRes, pricesRes, dismissalsRes]) => {
       const err =
         batchesRes.error ||
         invoicesRes.error ||
@@ -99,7 +108,8 @@ export default function MainMenuScreen() {
         adjustmentsRes.error ||
         recipesRes.error ||
         mappingRes.error ||
-        pricesRes.error
+        pricesRes.error ||
+        dismissalsRes.error
       if (err) {
         setError(err.message)
         setLoading(false)
@@ -187,6 +197,8 @@ export default function MainMenuScreen() {
         .filter((m) => m.ratio != null && m.ratio >= MARGIN_WARNING_RATIO)
         .sort((a, b) => b.ratio - a.ratio)
 
+      const reorderAlertsResult = computeReorderAlerts(invoicesRes.data ?? [])
+
       setTotalBalance(balanceSum)
       setStaleVendorCount(staleCount)
       setMonthTotal(monthSum)
@@ -194,10 +206,34 @@ export default function MainMenuScreen() {
       setNegativeStockCount(negativeStock.length)
       setMarginWarningMenus(marginWarnings.slice(0, 5))
       setMarginWarningCount(marginWarnings.length)
-      setReorderAlerts(computeReorderAlerts(invoicesRes.data ?? []))
+      setReorderAlerts(reorderAlertsResult)
+
+      setSignatures({
+        balance: makeSignature([`${Math.round(balanceSum)}`, `${staleCount}`, `${Math.round(monthSum)}`]),
+        negativeStock: makeSignature(negativeStock.map((r) => `${stockKey(r.itemName, r.unit)}:${r.current}`)),
+        marginWarning: makeSignature(marginWarnings.map((m) => `${m.menuName}:${m.ratio.toFixed(1)}`)),
+        reorder: makeSignature(reorderAlertsResult.map((a) => `${stockKey(a.itemName, a.unit)}:${a.status}`)),
+      })
+      setDismissals(new Map((dismissalsRes.data ?? []).map((d) => [d.card_key, d.signature])))
       setLoading(false)
     })
   }, [store])
+
+  const handleDismiss = async (e, cardKey) => {
+    e.stopPropagation()
+    if (!supabase) return
+    const signature = signatures[cardKey] ?? ''
+    setDismissals((prev) => new Map(prev).set(cardKey, signature))
+    const { error: err } = await supabase
+      .from('dashboard_dismissals')
+      .upsert(
+        { store_code: store.code, card_key: cardKey, signature, dismissed_at: new Date().toISOString() },
+        { onConflict: 'store_code,card_key' },
+      )
+    if (err) setError(err.message)
+  }
+
+  const isDismissed = (cardKey) => signatures[cardKey] != null && dismissals.get(cardKey) === signatures[cardKey]
 
   if (!store) return null
 
@@ -207,22 +243,42 @@ export default function MainMenuScreen() {
 
       {!loading && !error && supabase && (
         <div className="dashboard">
-          <div className="cost-summary dashboard-card" onClick={() => navigate('/vendors')}>
-            <div className="cost-summary-row">
-              <span>전체 미지급금</span>
-              <strong className={totalBalance > 0 ? 'alert-up' : ''}>{Math.round(totalBalance).toLocaleString()}원</strong>
+          {!isDismissed('balance') && (
+            <div className="cost-summary dashboard-card" onClick={() => navigate('/vendors')}>
+              <button
+                type="button"
+                className="dashboard-card-dismiss"
+                aria-label="미지급금 알림 닫기"
+                onClick={(e) => handleDismiss(e, 'balance')}
+              >
+                ✕
+              </button>
+              <div className="cost-summary-row">
+                <span>전체 미지급금</span>
+                <strong className={totalBalance > 0 ? 'alert-up' : ''}>
+                  {Math.round(totalBalance).toLocaleString()}원
+                </strong>
+              </div>
+              <div className="cost-summary-row">
+                <span>이번 달 입고 총액</span>
+                <strong>{Math.round(monthTotal).toLocaleString()}원</strong>
+              </div>
+              {staleVendorCount > 0 && (
+                <p className="hint alert-up">⚠️ 거래처 {staleVendorCount}곳은 잔액이 최신이 아닐 수 있어요</p>
+              )}
             </div>
-            <div className="cost-summary-row">
-              <span>이번 달 입고 총액</span>
-              <strong>{Math.round(monthTotal).toLocaleString()}원</strong>
-            </div>
-            {staleVendorCount > 0 && (
-              <p className="hint alert-up">⚠️ 거래처 {staleVendorCount}곳은 잔액이 최신이 아닐 수 있어요</p>
-            )}
-          </div>
+          )}
 
-          {negativeStockCount > 0 && (
+          {negativeStockCount > 0 && !isDismissed('negativeStock') && (
             <div className="price-alert-box price-alert-box-danger dashboard-card" onClick={() => navigate('/inventory')}>
+              <button
+                type="button"
+                className="dashboard-card-dismiss"
+                aria-label="재고 부족 알림 닫기"
+                onClick={(e) => handleDismiss(e, 'negativeStock')}
+              >
+                ✕
+              </button>
               <p className="price-alert-title">⚠️ 재고 부족 품목 {negativeStockCount}개</p>
               <ul className="price-alert-list">
                 {negativeStockItems.map((r) => (
@@ -238,8 +294,16 @@ export default function MainMenuScreen() {
             </div>
           )}
 
-          {marginWarningCount > 0 && (
+          {marginWarningCount > 0 && !isDismissed('marginWarning') && (
             <div className="price-alert-box price-alert-box-danger dashboard-card" onClick={() => navigate('/cost')}>
+              <button
+                type="button"
+                className="dashboard-card-dismiss"
+                aria-label="원가율 경고 닫기"
+                onClick={(e) => handleDismiss(e, 'marginWarning')}
+              >
+                ✕
+              </button>
               <p className="price-alert-title">⚠️ 원가율 {MARGIN_WARNING_RATIO}% 이상 메뉴 {marginWarningCount}개</p>
               <ul className="price-alert-list">
                 {marginWarningMenus.map((m) => (
@@ -254,8 +318,16 @@ export default function MainMenuScreen() {
             </div>
           )}
 
-          {reorderAlerts.length > 0 && (
+          {reorderAlerts.length > 0 && !isDismissed('reorder') && (
             <div className="cost-summary dashboard-card" onClick={() => navigate('/reorder-alerts')}>
+              <button
+                type="button"
+                className="dashboard-card-dismiss"
+                aria-label="재주문 알림 닫기"
+                onClick={(e) => handleDismiss(e, 'reorder')}
+              >
+                ✕
+              </button>
               <p className="price-alert-title">🔔 재주문할 때가 된 품목 {reorderAlerts.length}개</p>
               <ul className="price-alert-list">
                 {reorderAlerts.slice(0, 5).map((a) => (
