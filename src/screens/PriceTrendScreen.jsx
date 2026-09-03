@@ -33,6 +33,7 @@ export default function PriceTrendScreen() {
   const [pinnedItemNames, setPinnedItemNames] = useState(new Set())
   const [showAllItems, setShowAllItems] = useState(false)
   const [itemSearch, setItemSearch] = useState('')
+  const [foodspringQuery, setFoodspringQuery] = useState('')
 
   const [vendorFilter, setVendorFilter] = useState('all')
   const [dateFrom, setDateFrom] = useState('')
@@ -71,6 +72,13 @@ export default function PriceTrendScreen() {
         if (!err) setPinnedItemNames(new Set((data ?? []).map((r) => r.item_name)))
       })
   }, [store])
+
+  // 물품명에 산지·중량·보관방법 같은 수식어가 붙어 있으면 그대로 검색했을 때
+  // 식봄 검색 결과가 안 나오는 경우가 많아, 검색어를 물품 선택할 때마다 기본값으로
+  // 채워주되 직접 지워서 핵심 단어만 남기고 검색할 수 있게 한다.
+  useEffect(() => {
+    setFoodspringQuery(selectedItem)
+  }, [selectedItem])
 
   useEffect(() => {
     if (!store || !supabase || !selectedItem) {
@@ -298,8 +306,24 @@ export default function PriceTrendScreen() {
             </div>
           )}
 
-          <a className="btn-secondary" href={foodspringSearchUrl(selectedItem)} target="_blank" rel="noreferrer">
-            🔍 식봄에서 "{selectedItem}" 검색
+          <div className="field">
+            <label htmlFor="foodspringQuery">식봄 검색어</label>
+            <input
+              id="foodspringQuery"
+              className="input"
+              value={foodspringQuery}
+              onChange={(e) => setFoodspringQuery(e.target.value)}
+              placeholder="예: 돼지고기 목살"
+            />
+            <p className="hint">물품명이 그대로 검색되면 결과가 잘 안 나올 수 있어요. 핵심 단어만 남기고 검색해보세요.</p>
+          </div>
+          <a
+            className="btn-secondary"
+            href={foodspringSearchUrl(foodspringQuery.trim() || selectedItem)}
+            target="_blank"
+            rel="noreferrer"
+          >
+            🔍 식봄에서 "{foodspringQuery.trim() || selectedItem}" 검색
           </a>
 
           {!loadingRows && trendRows.length === 0 && <p className="hint">조건에 맞는 입고 기록이 없습니다.</p>}
