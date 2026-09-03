@@ -721,6 +721,16 @@ h1 {
   margin-bottom: 4px;
 }
 
+.item-name-suggestions {
+  min-width: 600px;
+  margin: -2px 0 10px;
+}
+
+.item-name-suggestions .chip {
+  padding: 6px 12px;
+  font-size: 13px;
+}
+
 .spend-bar-track {
   margin-top: 8px;
   height: 8px;
