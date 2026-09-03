@@ -239,6 +239,18 @@ export default function MainMenuScreen() {
 
   return (
     <div className="screen">
+      <div className="screen-header">
+        <button
+          type="button"
+          className="link-btn"
+          onClick={() => {
+            setStore(null)
+            navigate('/')
+          }}
+        >
+          ← 매장 변경
+        </button>
+      </div>
       <div className="store-badge">{store.name}</div>
 
       {!loading && !error && supabase && (
@@ -353,16 +365,6 @@ export default function MainMenuScreen() {
           </button>
         ))}
       </div>
-      <button
-        type="button"
-        className="link-btn"
-        onClick={() => {
-          setStore(null)
-          navigate('/')
-        }}
-      >
-        매장 변경
-      </button>
     </div>
   )
 }
