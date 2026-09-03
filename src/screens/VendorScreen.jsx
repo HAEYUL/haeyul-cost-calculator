@@ -179,8 +179,8 @@ export default function VendorScreen() {
   return (
     <div className="screen screen-wide">
       <div className="screen-header">
-        <button type="button" className="link-btn" onClick={() => navigate('/invoices')}>
-          ← 입고 입력
+        <button type="button" className="link-btn" onClick={() => navigate('/menu')}>
+          ← 메인 메뉴
         </button>
         <h1>거래처 관리</h1>
         <p className="subtitle">{store.name} · 거래처별 당월 입고·결제와 최근 명세표 잔액을 확인해요</p>

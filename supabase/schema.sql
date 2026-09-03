@@ -1,6 +1,5 @@
 -- stores: 매장 마스터 테이블. 이후 단계의 invoices/recipes/ingredient_mapping 테이블이
--- store_code(text, stores.code 참조)로 데이터를 매장별로 분리한다. 비밀번호 컬럼 없음 —
--- 매장 선택만으로 진입한다.
+-- store_code(text, stores.code 참조)로 데이터를 매장별로 분리한다.
 create table if not exists stores (
   id uuid primary key default gen_random_uuid(),
   code text unique not null,
@@ -21,6 +20,26 @@ drop policy if exists "stores are publicly readable" on stores;
 create policy "stores are publicly readable"
   on stores for select
   using (true);
+
+-- 매장별 4자리 비밀번호(원문 대신 해시만 저장, pinHash.js와 같은 방식: sha256(pin || ':' || code))
+-- 와 5회 오답 시 잠금을 위한 컬럼. 로그인 시스템은 아니고, 같은 팀 안에서 매장 화면을
+-- 실수로/함부로 들어가지 못하게 막는 정도의 가벼운 잠금이다.
+alter table stores add column if not exists pin_hash text;
+alter table stores add column if not exists failed_attempts integer not null default 0;
+alter table stores add column if not exists locked_until timestamptz;
+
+drop policy if exists "stores are publicly updatable" on stores;
+create policy "stores are publicly updatable"
+  on stores for update
+  using (true)
+  with check (true);
+
+-- 초기 비밀번호를 4자리 "1234"로 맞춘다. 이미 비밀번호가 설정된 매장은 건드리지 않는다.
+create extension if not exists pgcrypto with schema extensions;
+
+update stores
+set pin_hash = encode(extensions.digest('1234:' || code, 'sha256'), 'hex')
+where pin_hash is null;
 
 -- vendors: 거래처 마스터. 입고 저장 시 자유 텍스트로 흩어지던 거래처명을 하나로 묶어서
 -- 오탈자로 같은 거래처가 여러 개로 나뉘는 걸 막는다. 매장별로 이름 유일.
@@ -306,6 +325,46 @@ create policy "dashboard_dismissals are publicly updatable"
   on dashboard_dismissals for update
   using (true)
   with check (true);
+
+-- vendor_opening_balances: 거래처와 이 앱을 쓰기 전부터 거래해 온 경우, 특정 날짜(as_of_date)
+-- 기준으로 그 이전까지의 이월 미지급 잔액을 기준일별로 여러 개 기억해 둔다. 거래처 상세의
+-- 기간 결제액(추정) = 기초 잔액(선택한 시작일 이하 중 가장 최근 as_of_date) + 기간 입고액
+-- − 기말 잔액으로 계산할 때 쓰인다. 같은 거래처+기준일로 다시 저장하면 값을 덮어쓴다.
+create table if not exists vendor_opening_balances (
+  id uuid primary key default gen_random_uuid(),
+  store_code text not null references stores(code),
+  vendor_id uuid not null references vendors(id),
+  as_of_date date not null,
+  balance numeric not null,
+  memo text,
+  created_at timestamptz not null default now(),
+  unique (vendor_id, as_of_date)
+);
+
+create index if not exists vendor_opening_balances_vendor_idx on vendor_opening_balances (vendor_id, as_of_date);
+
+alter table vendor_opening_balances enable row level security;
+
+drop policy if exists "vendor_opening_balances are publicly readable" on vendor_opening_balances;
+create policy "vendor_opening_balances are publicly readable"
+  on vendor_opening_balances for select
+  using (true);
+
+drop policy if exists "vendor_opening_balances are publicly insertable" on vendor_opening_balances;
+create policy "vendor_opening_balances are publicly insertable"
+  on vendor_opening_balances for insert
+  with check (true);
+
+drop policy if exists "vendor_opening_balances are publicly updatable" on vendor_opening_balances;
+create policy "vendor_opening_balances are publicly updatable"
+  on vendor_opening_balances for update
+  using (true)
+  with check (true);
+
+drop policy if exists "vendor_opening_balances are publicly deletable" on vendor_opening_balances;
+create policy "vendor_opening_balances are publicly deletable"
+  on vendor_opening_balances for delete
+  using (true);
 
 -- pinned_items: 재고 관리 · 단가 추이 조회 화면이 공유하는 "관심 품목" 목록. 한쪽
 -- 화면에서 찜하면 다른 화면에도 그대로 반영된다. 예전에는 화면별로 inventory_pins(품목+단위),

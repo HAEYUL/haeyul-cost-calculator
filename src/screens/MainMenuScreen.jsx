@@ -18,6 +18,7 @@ const MENU_ITEMS = [
   { label: '소비 패턴 분석', path: '/consumption-pattern' },
   { label: '폐기/손실 리포트', path: '/waste-report' },
   { label: '알림 설정', path: '/notification-settings' },
+  { label: '매장 비밀번호 변경', path: '/change-pin' },
 ]
 
 const UNIT_LABELS = { g: 'g', kg: 'kg', ea: '개', other: '기타' }
@@ -239,6 +240,18 @@ export default function MainMenuScreen() {
 
   return (
     <div className="screen">
+      <div className="screen-header">
+        <button
+          type="button"
+          className="link-btn"
+          onClick={() => {
+            setStore(null)
+            navigate('/')
+          }}
+        >
+          ← 매장 변경
+        </button>
+      </div>
       <div className="store-badge">{store.name}</div>
 
       {!loading && !error && supabase && (
@@ -353,16 +366,6 @@ export default function MainMenuScreen() {
           </button>
         ))}
       </div>
-      <button
-        type="button"
-        className="link-btn"
-        onClick={() => {
-          setStore(null)
-          navigate('/')
-        }}
-      >
-        매장 변경
-      </button>
     </div>
   )
 }
