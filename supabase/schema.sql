@@ -307,6 +307,46 @@ create policy "dashboard_dismissals are publicly updatable"
   using (true)
   with check (true);
 
+-- vendor_opening_balances: 거래처와 이 앱을 쓰기 전부터 거래해 온 경우, 특정 날짜(as_of_date)
+-- 기준으로 그 이전까지의 이월 미지급 잔액을 기준일별로 여러 개 기억해 둔다. 거래처 상세의
+-- 기간 결제액(추정) = 기초 잔액(선택한 시작일 이하 중 가장 최근 as_of_date) + 기간 입고액
+-- − 기말 잔액으로 계산할 때 쓰인다. 같은 거래처+기준일로 다시 저장하면 값을 덮어쓴다.
+create table if not exists vendor_opening_balances (
+  id uuid primary key default gen_random_uuid(),
+  store_code text not null references stores(code),
+  vendor_id uuid not null references vendors(id),
+  as_of_date date not null,
+  balance numeric not null,
+  memo text,
+  created_at timestamptz not null default now(),
+  unique (vendor_id, as_of_date)
+);
+
+create index if not exists vendor_opening_balances_vendor_idx on vendor_opening_balances (vendor_id, as_of_date);
+
+alter table vendor_opening_balances enable row level security;
+
+drop policy if exists "vendor_opening_balances are publicly readable" on vendor_opening_balances;
+create policy "vendor_opening_balances are publicly readable"
+  on vendor_opening_balances for select
+  using (true);
+
+drop policy if exists "vendor_opening_balances are publicly insertable" on vendor_opening_balances;
+create policy "vendor_opening_balances are publicly insertable"
+  on vendor_opening_balances for insert
+  with check (true);
+
+drop policy if exists "vendor_opening_balances are publicly updatable" on vendor_opening_balances;
+create policy "vendor_opening_balances are publicly updatable"
+  on vendor_opening_balances for update
+  using (true)
+  with check (true);
+
+drop policy if exists "vendor_opening_balances are publicly deletable" on vendor_opening_balances;
+create policy "vendor_opening_balances are publicly deletable"
+  on vendor_opening_balances for delete
+  using (true);
+
 -- pinned_items: 재고 관리 · 단가 추이 조회 화면이 공유하는 "관심 품목" 목록. 한쪽
 -- 화면에서 찜하면 다른 화면에도 그대로 반영된다. 예전에는 화면별로 inventory_pins(품목+단위),
 -- price_trend_pins(품목명)가 따로 있었는데, 통합하면서 단가 추이 조회와 같은 기준인

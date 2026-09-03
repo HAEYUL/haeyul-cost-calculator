@@ -54,6 +54,13 @@ export default function VendorDetailScreen() {
   const [deletePaymentTarget, setDeletePaymentTarget] = useState(null)
   const [deletingPayment, setDeletingPayment] = useState(false)
 
+  const [openingBalances, setOpeningBalances] = useState([])
+  const [openingBalanceInput, setOpeningBalanceInput] = useState('')
+  const [savingOpeningBalance, setSavingOpeningBalance] = useState(false)
+
+  const [deleteOpeningBalanceTarget, setDeleteOpeningBalanceTarget] = useState(null)
+  const [deletingOpeningBalance, setDeletingOpeningBalance] = useState(false)
+
   useEffect(() => {
     if (!store) navigate('/', { replace: true })
   }, [store, navigate])
@@ -80,8 +87,14 @@ export default function VendorDetailScreen() {
         .eq('vendor_id', vendorId)
         .order('paid_date', { ascending: false, nullsFirst: false })
         .order('created_at', { ascending: false }),
-    ]).then(([vendorRes, batchesRes, paymentsRes]) => {
-      const err = vendorRes.error || batchesRes.error || paymentsRes.error
+      supabase
+        .from('vendor_opening_balances')
+        .select('id, as_of_date, balance, memo')
+        .eq('store_code', store.code)
+        .eq('vendor_id', vendorId)
+        .order('as_of_date', { ascending: false }),
+    ]).then(([vendorRes, batchesRes, paymentsRes, openingBalancesRes]) => {
+      const err = vendorRes.error || batchesRes.error || paymentsRes.error || openingBalancesRes.error
       if (err) {
         setError(err.message)
         setLoading(false)
@@ -90,9 +103,17 @@ export default function VendorDetailScreen() {
       setVendor(vendorRes.data)
       setBatches(batchesRes.data ?? [])
       setPayments(paymentsRes.data ?? [])
+      setOpeningBalances(openingBalancesRes.data ?? [])
       setLoading(false)
     })
   }, [store, vendorId, dataKey])
+
+  // 시작일이 바뀌면, 그 날짜로 정확히 저장해 둔 기초 잔액이 있으면 입력칸에 불러오고
+  // 없으면 비운다(새로 입력하라는 뜻).
+  useEffect(() => {
+    const exact = openingBalances.find((b) => b.as_of_date === dateFrom)
+    setOpeningBalanceInput(exact ? String(exact.balance) : '')
+  }, [dateFrom, openingBalances])
 
   if (!store) return null
 
@@ -112,13 +133,22 @@ export default function VendorDetailScreen() {
 
   const periodTotalAmount = filteredBatches.reduce((sum, b) => sum + Number(b.total_amount), 0)
 
-  // 결제액(추정, 단순 방식) = 기간 입고액 − 기간 종료일 시점의 미지급 잔액.
+  // 기초 잔액: 시작일 이하 기준일 중 가장 최근에 입력해 둔 이월 잔액을 찾는다.
+  // (이 앱을 쓰기 전부터 있던 미지급 잔액을 반영하기 위함 — 안 넣었으면 0원으로 본다.)
+  const effectiveOpeningBalance = openingBalances
+    .filter((b) => b.as_of_date <= dateFrom)
+    .sort((a, b) => (a.as_of_date < b.as_of_date ? 1 : -1))[0]
+
+  // 결제액(추정) = 기초 잔액 + 기간 입고액 − 기간 종료일 시점의 미지급 잔액.
   // 기간 종료일 이전(포함)에 잔액이 기록된 가장 최근 명세표를 찾는다(batches는 이미 최신순 정렬).
   const balanceAtPeriodEnd = batches.find((b) => {
     const d = rowDateStr(b)
     return b.statement_balance != null && (!dateTo || d <= dateTo)
   })?.statement_balance
-  const periodEstimatedPayment = balanceAtPeriodEnd != null ? periodTotalAmount - Number(balanceAtPeriodEnd) : null
+  const periodEstimatedPayment =
+    balanceAtPeriodEnd != null
+      ? (effectiveOpeningBalance ? Number(effectiveOpeningBalance.balance) : 0) + periodTotalAmount - Number(balanceAtPeriodEnd)
+      : null
 
   const handleAddPayment = async () => {
     const amount = Number(paymentAmount)
@@ -159,6 +189,42 @@ export default function VendorDetailScreen() {
     }
 
     setDeletePaymentTarget(null)
+    setDataKey((k) => k + 1)
+  }
+
+  const handleSaveOpeningBalance = async () => {
+    const balance = Number(openingBalanceInput)
+    if (openingBalanceInput === '' || !Number.isFinite(balance) || !supabase) {
+      setError('기초 잔액을 숫자로 입력하세요.')
+      return
+    }
+    setSavingOpeningBalance(true)
+    setError('')
+    const { error: err } = await supabase.from('vendor_opening_balances').upsert(
+      { store_code: store.code, vendor_id: vendorId, as_of_date: dateFrom, balance },
+      { onConflict: 'vendor_id,as_of_date' },
+    )
+    setSavingOpeningBalance(false)
+    if (err) {
+      setError(err.message)
+      return
+    }
+    setDataKey((k) => k + 1)
+  }
+
+  const handleDeleteOpeningBalance = async () => {
+    if (!deleteOpeningBalanceTarget || !supabase) return
+    setDeletingOpeningBalance(true)
+    setError('')
+
+    const { error: err } = await supabase.from('vendor_opening_balances').delete().eq('id', deleteOpeningBalanceTarget.id)
+    setDeletingOpeningBalance(false)
+    if (err) {
+      setError(err.message)
+      return
+    }
+
+    setDeleteOpeningBalanceTarget(null)
     setDataKey((k) => k + 1)
   }
 
@@ -235,6 +301,74 @@ export default function VendorDetailScreen() {
             아래 누적 입고액·누적 결제액·입고 내역은 이 기간 기준이에요. 기본은 이번 달이고, 원하는 기간으로 바꿀 수 있어요.
           </p>
 
+          <div className="field">
+            <label htmlFor="openingBalance">기초 잔액 ({dateFrom} 이전 이월 미지급 잔액)</label>
+            <input
+              id="openingBalance"
+              className="input"
+              inputMode="decimal"
+              value={openingBalanceInput}
+              onChange={(e) => setOpeningBalanceInput(e.target.value)}
+              placeholder="예: 6000000"
+            />
+          </div>
+          <button type="button" className="btn-secondary" onClick={handleSaveOpeningBalance} disabled={savingOpeningBalance}>
+            {savingOpeningBalance ? '저장 중...' : '기초 잔액 저장'}
+          </button>
+          <p className="hint">
+            {effectiveOpeningBalance
+              ? `${effectiveOpeningBalance.as_of_date} 기준으로 저장한 ${Math.round(Number(effectiveOpeningBalance.balance)).toLocaleString()}원을 기초 잔액으로 반영했어요.`
+              : '아직 기초 잔액을 입력하지 않아 0원으로 계산했어요. 이 거래처와 이 앱을 쓰기 전부터 거래해오셨다면, 입력하면 아래 누적 결제액이 더 정확해져요.'}
+          </p>
+
+          {openingBalances.length > 0 && (
+            <ul className="history-list">
+              {openingBalances.map((b) => (
+                <li key={b.id} className="history-row">
+                  <div className="history-row-main">
+                    <span className="history-item">{b.as_of_date} 기준</span>
+                    <div className="history-row-main-end">
+                      <span>{Math.round(Number(b.balance)).toLocaleString()}원</span>
+                      <button
+                        type="button"
+                        className="icon-btn"
+                        aria-label="기초 잔액 삭제"
+                        onClick={() => setDeleteOpeningBalanceTarget(b)}
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  </div>
+
+                  {deleteOpeningBalanceTarget?.id === b.id && (
+                    <div className="price-alert-box price-alert-box-danger">
+                      <p className="price-alert-title">이 기초 잔액을 삭제할까요?</p>
+                      <p className="hint">잘못 입력한 기초 잔액만 지워지고, 되돌릴 수 없어요.</p>
+                      <div className="invoice-form">
+                        <button
+                          type="button"
+                          className="btn-secondary"
+                          onClick={() => setDeleteOpeningBalanceTarget(null)}
+                          disabled={deletingOpeningBalance}
+                        >
+                          취소
+                        </button>
+                        <button
+                          type="button"
+                          className="btn-primary"
+                          onClick={handleDeleteOpeningBalance}
+                          disabled={deletingOpeningBalance}
+                        >
+                          {deletingOpeningBalance ? '삭제 중...' : '삭제'}
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </li>
+              ))}
+            </ul>
+          )}
+
           <div className="cost-summary">
             <div className="cost-summary-row">
               <span>미지급금{latestBatchWithBalance ? ` (${latestBatchWithBalance.invoice_date ?? '날짜 미입력'} 명세표 기준)` : ''}</span>
@@ -260,7 +394,8 @@ export default function VendorDetailScreen() {
             </div>
           </div>
           <p className="hint">
-            누적 결제액은 실제 결제 기록이 아니라, 기간 입고액에서 기간 종료일 시점 미지급 잔액을 뺀 추정치예요.
+            누적 결제액은 실제 결제 기록이 아니라, 기초 잔액 + 기간 입고액에서 기간 종료일 시점 미지급 잔액을 뺀
+            추정치예요.
           </p>
 
           {missingBalanceBatches.length > 0 && (
