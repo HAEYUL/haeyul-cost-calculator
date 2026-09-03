@@ -12,6 +12,12 @@ function rowDateValue(row) {
   return row.invoice_date ? new Date(row.invoice_date).getTime() : new Date(row.created_at).getTime()
 }
 
+// 식봄(foodspring.co.kr)의 통합검색 URL 패턴. 로그인 없이는 가격이 안 보이는 사이트라
+// 여기서는 검색 결과 화면만 새 탭으로 열어주고, 실제 가격 확인·비교는 사장님이 직접 한다.
+function foodspringSearchUrl(itemName) {
+  return `https://www.foodspring.co.kr/search/all?key=${encodeURIComponent(itemName)}`
+}
+
 export default function PriceTrendScreen() {
   const { store } = useStore()
   const navigate = useNavigate()
@@ -291,6 +297,10 @@ export default function PriceTrendScreen() {
               </div>
             </div>
           )}
+
+          <a className="btn-secondary" href={foodspringSearchUrl(selectedItem)} target="_blank" rel="noreferrer">
+            🔍 식봄에서 "{selectedItem}" 검색
+          </a>
 
           {!loadingRows && trendRows.length === 0 && <p className="hint">조건에 맞는 입고 기록이 없습니다.</p>}
           <ul className="history-list">
