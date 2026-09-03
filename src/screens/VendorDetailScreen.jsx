@@ -117,13 +117,56 @@ export default function VendorDetailScreen() {
 
   if (!store) return null
 
-  // 미지급금은 결제 기록 기반 계산 대신, 가장 최근 명세표에 인쇄된 잔액을 우선 보여준다.
-  // batches는 이미 최신순으로 정렬돼 있으니 잔액이 기록된 첫 항목을 찾으면 된다.
-  // (위 요약 수치들은 기간 필터와 무관하게 항상 전체 기간 기준이다)
+  // 미지급금(실시간) = "믿을 수 있는 기준 잔액(앵커)" + 그 이후 입고액 − 그 이후 결제액.
+  // 앵커는 총잔액이 적힌 명세표 중 가장 최근 것을 우선 쓰고, 그런 명세표가 아직 없으면
+  // 가장 최근 기초 잔액을 대신 쓴다(둘 다 없으면 0원부터 시작). batches는 이미 최신순 정렬이라
+  // 앵커보다 인덱스가 앞선(=더 최근인) 명세표들이 "앵커 이후 입고"가 된다.
+  // (위 미지급금은 기간 필터와 무관하게 항상 지금 이 순간 기준이다)
   const latestBatchWithBalanceIndex = batches.findIndex((b) => b.statement_balance != null)
   const latestBatchWithBalance = latestBatchWithBalanceIndex >= 0 ? batches[latestBatchWithBalanceIndex] : undefined
-  // 그 명세표보다 더 최근인데 잔액이 안 적힌 명세표들 — 미지급금이 최신 상태가 아닐 수 있다는 경고용
-  const missingBalanceBatches = latestBatchWithBalanceIndex >= 0 ? batches.slice(0, latestBatchWithBalanceIndex) : []
+  const latestOpeningBalance = [...openingBalances].sort((a, b) => (a.as_of_date < b.as_of_date ? 1 : -1))[0]
+
+  const anchorDate = latestBatchWithBalance ? rowDateStr(latestBatchWithBalance) : (latestOpeningBalance?.as_of_date ?? null)
+  const anchorBalance = latestBatchWithBalance
+    ? Number(latestBatchWithBalance.statement_balance)
+    : latestOpeningBalance
+      ? Number(latestOpeningBalance.balance)
+      : 0
+
+  const batchesSinceAnchor = latestBatchWithBalance ? batches.slice(0, latestBatchWithBalanceIndex) : batches
+  const invoicedSinceAnchor = batchesSinceAnchor.reduce((sum, b) => sum + Number(b.total_amount), 0)
+
+  // 앵커 이후 입력한 결제만 차감한다. 날짜를 안 넣은 결제는 최근에 입력한 것으로 보고 포함시킨다.
+  const paymentsSinceAnchor = payments
+    .filter((p) => !anchorDate || !p.paid_date || p.paid_date > anchorDate)
+    .reduce((sum, p) => sum + Number(p.amount), 0)
+
+  const liveBalance = anchorBalance + invoicedSinceAnchor - paymentsSinceAnchor
+
+  // 가장 최근 두 명세표 잔액을 대조해서, 그 사이 기록된 입고·결제만으로 설명이 안 되면
+  // (=기록이 빠졌을 수 있으면) 알려준다.
+  const statementBatches = batches.filter((b) => b.statement_balance != null)
+  let balanceMismatch = null
+  if (statementBatches.length >= 2) {
+    const newest = statementBatches[0]
+    const previous = statementBatches[1]
+    const newestIndex = batches.indexOf(newest)
+    const previousIndex = batches.indexOf(previous)
+    const previousDate = rowDateStr(previous)
+    const newestDate = rowDateStr(newest)
+
+    const between = batches.slice(newestIndex, previousIndex) // newest 포함, previous 미포함
+    const invoicedBetween = between.reduce((sum, b) => sum + Number(b.total_amount), 0)
+    const paidBetween = payments
+      .filter((p) => (!p.paid_date || p.paid_date > previousDate) && (!p.paid_date || p.paid_date <= newestDate))
+      .reduce((sum, p) => sum + Number(p.amount), 0)
+
+    const expected = Number(previous.statement_balance) + invoicedBetween - paidBetween
+    const actual = Number(newest.statement_balance)
+    if (Math.round(expected) !== Math.round(actual)) {
+      balanceMismatch = { newestDate, expected, actual, diff: actual - expected }
+    }
+  }
 
   // "입고 내역" 목록과 아래 누적 입고액/결제액 요약이 함께 이 기간을 따른다.
   const filteredBatches = batches.filter((b) => {
@@ -371,14 +414,18 @@ export default function VendorDetailScreen() {
 
           <div className="cost-summary">
             <div className="cost-summary-row">
-              <span>미지급금{latestBatchWithBalance ? ` (${latestBatchWithBalance.invoice_date ?? '날짜 미입력'} 명세표 기준)` : ''}</span>
-              {latestBatchWithBalance ? (
-                <strong className={Number(latestBatchWithBalance.statement_balance) > 0 ? 'alert-up' : ''}>
-                  {Math.round(Number(latestBatchWithBalance.statement_balance)).toLocaleString()}원
-                </strong>
-              ) : (
-                <span className="hint">명세표 잔액 정보 없음</span>
-              )}
+              <span>
+                미지급금
+                {anchorDate && (
+                  <>
+                    {' '}
+                    ({anchorDate} {latestBatchWithBalance ? '명세표' : '기초 잔액'} 기준 + 이후 실시간 반영)
+                  </>
+                )}
+              </span>
+              <strong className={liveBalance > 0 ? 'alert-up' : liveBalance < 0 ? 'alert-down' : ''}>
+                {Math.round(liveBalance).toLocaleString()}원
+              </strong>
             </div>
             <div className="cost-summary-row">
               <span>누적 입고액(기간)</span>
@@ -394,18 +441,21 @@ export default function VendorDetailScreen() {
             </div>
           </div>
           <p className="hint">
-            누적 결제액은 실제 결제 기록이 아니라, 기초 잔액 + 기간 입고액에서 기간 종료일 시점 미지급 잔액을 뺀
-            추정치예요.
+            미지급금은 가장 최근 명세표 잔액(또는 기초 잔액)에 그 이후의 입고·결제 기록을 실시간으로 반영한 값이에요.
+            누적 결제액(추정, 기간)은 이것과 별개로, 기초 잔액 + 기간 입고액에서 기간 종료일 시점 미지급 잔액을 뺀
+            참고용 추정치예요.
           </p>
 
-          {missingBalanceBatches.length > 0 && (
+          {balanceMismatch && (
             <div className="price-alert-box price-alert-box-danger">
-              <p className="price-alert-title">
-                ⚠️{' '}
-                {missingBalanceBatches.map((b) => b.invoice_date ?? '날짜 미입력').join(', ')} 명세표에는 잔액이
-                기록되지 않았어요
+              <p className="price-alert-title">⚠️ 결제 기록이 맞지 않으니 확인해 주세요.</p>
+              <p className="hint">
+                {balanceMismatch.newestDate} 명세표 잔액은 {Math.round(balanceMismatch.actual).toLocaleString()}
+                원인데, 직전 명세표 잔액에 그 사이 입고·결제 기록을 반영하면{' '}
+                {Math.round(balanceMismatch.expected).toLocaleString()}원이 나와요. (
+                {balanceMismatch.diff > 0 ? '+' : ''}
+                {Math.round(balanceMismatch.diff).toLocaleString()}원 차이)
               </p>
-              <p className="hint">위 미지급금이 최신 상태가 아닐 수 있어요. 해당 명세표에 잔액을 입력해주세요.</p>
             </div>
           )}
 
