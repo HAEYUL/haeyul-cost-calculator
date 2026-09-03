@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabaseClient'
 import { STORES } from '../data/stores'
 import { useStore } from '../context/StoreContext'
 import { hashPin } from '../lib/pinHash'
+import { useInstallPrompt } from '../lib/useInstallPrompt'
 
 const MAX_ATTEMPTS = 5
 const LOCK_MINUTES = 5
@@ -28,6 +29,17 @@ export default function StoreSelectScreen() {
   const [loadingAuth, setLoadingAuth] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [now, setNow] = useState(() => Date.now())
+
+  const { isStandalone, isIOS, canPromptInstall, promptInstall } = useInstallPrompt()
+  const [showInstallGuide, setShowInstallGuide] = useState(false)
+
+  const handleInstallClick = async () => {
+    if (canPromptInstall) {
+      await promptInstall()
+      return
+    }
+    setShowInstallGuide((v) => !v)
+  }
 
   useEffect(() => {
     if (!supabase) return
@@ -184,6 +196,25 @@ export default function StoreSelectScreen() {
           </button>
         ))}
       </div>
+
+      {!isStandalone && (
+        <>
+          <button type="button" className="btn-secondary" onClick={handleInstallClick}>
+            📱 홈 화면에 추가
+          </button>
+
+          {showInstallGuide && !canPromptInstall && (
+            <div className="price-alert-box">
+              <p className="price-alert-title">홈 화면에 추가하는 방법</p>
+              {isIOS ? (
+                <p className="hint">사파리 하단의 공유 버튼을 누르고 "홈 화면에 추가"를 선택하세요.</p>
+              ) : (
+                <p className="hint">브라우저 메뉴(점 3개)를 열고 "홈 화면에 추가" 또는 "앱 설치"를 선택하세요.</p>
+              )}
+            </div>
+          )}
+        </>
+      )}
     </div>
   )
 }
