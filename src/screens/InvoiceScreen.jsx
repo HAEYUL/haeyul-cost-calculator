@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { Fragment, useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useStore } from '../context/StoreContext'
 import { supabase } from '../lib/supabaseClient'
@@ -118,8 +118,9 @@ export default function InvoiceScreen() {
   const [error, setError] = useState('')
   const [vendors, setVendors] = useState([])
   const [vendorsVersion, setVendorsVersion] = useState(0)
-  const [itemNames, setItemNames] = useState([])
+  const [itemNameRecords, setItemNameRecords] = useState([])
   const [dismissedSimilarItems, setDismissedSimilarItems] = useState(new Set())
+  const [focusedNameIndex, setFocusedNameIndex] = useState(null)
   const [vendorId, setVendorId] = useState('')
   const [newVendorName, setNewVendorName] = useState('')
   const [similarVendorPrompt, setSimilarVendorPrompt] = useState(null)
@@ -154,10 +155,10 @@ export default function InvoiceScreen() {
     if (!store || !supabase) return
     supabase
       .from('invoices')
-      .select('item_name')
+      .select('item_name, vendor_id')
       .eq('store_code', store.code)
       .then(({ data, error: err }) => {
-        if (!err) setItemNames([...new Set((data ?? []).map((r) => r.item_name))])
+        if (!err) setItemNameRecords(data ?? [])
       })
   }, [store, historyKey])
 
@@ -601,6 +602,21 @@ export default function InvoiceScreen() {
     if (didCreateVendor) setVendorsVersion((v) => v + 1)
   }
 
+  const itemNames = [...new Set(itemNameRecords.map((r) => r.item_name))]
+
+  // 물품명 자동완성 후보: 이 거래처가 예전에 납품한 물품명을 우선 보여주고, 거래처를
+  // 아직 안 골랐거나 새 거래처를 추가하는 중이면 매장 전체 물품명에서 찾는다.
+  const autocompleteCandidates = (typed) => {
+    const norm = typed.trim()
+    if (!norm) return []
+    const pool =
+      vendorId && vendorId !== 'new'
+        ? itemNameRecords.filter((r) => r.vendor_id === vendorId)
+        : itemNameRecords
+    const names = [...new Set(pool.map((r) => r.item_name))]
+    return names.filter((n) => n !== norm && n.includes(norm)).slice(0, 8)
+  }
+
   const itemMismatches = findItemMismatches(items)
   const validItemsForSum = items.filter((item) => item.name.trim())
   const itemsSum = validItemsForSum.reduce((sum, item) => sum + itemAmount(item), 0)
@@ -884,11 +900,14 @@ export default function InvoiceScreen() {
               <span />
             </div>
             {items.map((item, index) => (
-              <div className="item-row" key={index}>
+              <Fragment key={index}>
+                <div className="item-row">
                 <input
                   className="input"
                   value={item.name}
                   onChange={(e) => updateItem(index, 'name', e.target.value)}
+                  onFocus={() => setFocusedNameIndex(index)}
+                  onBlur={() => setFocusedNameIndex((cur) => (cur === index ? null : cur))}
                   placeholder="물품명"
                 />
                 <select
@@ -926,7 +945,24 @@ export default function InvoiceScreen() {
                 <button type="button" className="icon-btn" onClick={() => removeItem(index)} aria-label="행 삭제">
                   ✕
                 </button>
-              </div>
+                </div>
+                {focusedNameIndex === index &&
+                  autocompleteCandidates(item.name).length > 0 && (
+                    <div className="preset-row item-name-suggestions">
+                      {autocompleteCandidates(item.name).map((name) => (
+                        <button
+                          type="button"
+                          key={name}
+                          className="chip"
+                          onMouseDown={(e) => e.preventDefault()}
+                          onClick={() => updateItem(index, 'name', name)}
+                        >
+                          {name}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+              </Fragment>
             ))}
           </div>
         </div>
