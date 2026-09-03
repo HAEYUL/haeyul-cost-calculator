@@ -26,6 +26,7 @@ export default function PriceTrendScreen() {
 
   const [pinnedItemNames, setPinnedItemNames] = useState(new Set())
   const [showAllItems, setShowAllItems] = useState(false)
+  const [itemSearch, setItemSearch] = useState('')
 
   const [vendorFilter, setVendorFilter] = useState('all')
   const [dateFrom, setDateFrom] = useState('')
@@ -107,11 +108,19 @@ export default function PriceTrendScreen() {
   const handleItemFilterVendorChange = (value) => {
     setItemFilterVendor(value)
     setSelectedItem('')
+    setItemSearch('')
   }
 
-  const pinnedItems = itemNames.filter((name) => pinnedItemNames.has(name))
-  const otherItems = itemNames.filter((name) => !pinnedItemNames.has(name))
-  const effectiveShowAllItems = showAllItems || pinnedItems.length === 0
+  // 검색어가 있으면 관심 품목/전체 품목 구분 없이 이름이 일치하는 품목만 보여준다.
+  // (검색 중에는 "품목 모두보기"를 펼치지 않아도 전체 품목에서 찾아준다)
+  const trimmedItemSearch = itemSearch.trim().toLowerCase()
+  const searchedItemNames = trimmedItemSearch
+    ? itemNames.filter((name) => name.toLowerCase().includes(trimmedItemSearch))
+    : itemNames
+
+  const pinnedItems = searchedItemNames.filter((name) => pinnedItemNames.has(name))
+  const otherItems = searchedItemNames.filter((name) => !pinnedItemNames.has(name))
+  const effectiveShowAllItems = showAllItems || pinnedItems.length === 0 || trimmedItemSearch !== ''
 
   const handlePinItem = async (name) => {
     if (!supabase) return
@@ -310,8 +319,25 @@ export default function PriceTrendScreen() {
 
       {!loadingItems && itemFilterVendor && itemNames.length > 0 && (
         <>
-          <h2 className="section-title">관심 품목</h2>
-          {pinnedItems.length === 0 && <p className="hint">아직 선택한 품목이 없어요. 아래 전체 목록에서 골라주세요.</p>}
+          <div className="section-title-row">
+            <h2 className="section-title">관심 품목</h2>
+            <div className="item-search">
+              <span className="item-search-icon">🔍</span>
+              <input
+                type="text"
+                className="input"
+                value={itemSearch}
+                onChange={(e) => setItemSearch(e.target.value)}
+                placeholder="품목 검색"
+                aria-label="품목 검색"
+              />
+            </div>
+          </div>
+
+          {trimmedItemSearch && pinnedItems.length === 0 && otherItems.length === 0 && (
+            <p className="hint">"{itemSearch}"와 일치하는 품목이 없어요.</p>
+          )}
+          {!trimmedItemSearch && pinnedItems.length === 0 && <p className="hint">아직 선택한 품목이 없어요. 아래 전체 목록에서 골라주세요.</p>}
           {pinnedItems.length > 0 && (
             <ul className="history-list">
               {pinnedItems.map((name) => (
@@ -358,7 +384,7 @@ export default function PriceTrendScreen() {
             </>
           )}
 
-          {pinnedItems.length > 0 && (
+          {!trimmedItemSearch && pinnedItems.length > 0 && (
             <button type="button" className="btn-secondary" onClick={() => setShowAllItems((v) => !v)}>
               {showAllItems ? '접기' : `품목 모두보기 (전체 ${itemNames.length}개)`}
             </button>
