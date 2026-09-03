@@ -7,6 +7,7 @@ import { hashPin } from '../lib/pinHash'
 
 const MAX_ATTEMPTS = 5
 const LOCK_MINUTES = 5
+const STORE_ORDER = STORES.map((s) => s.code)
 
 function formatRemaining(ms) {
   const totalSeconds = Math.max(0, Math.ceil(ms / 1000))
@@ -33,9 +34,12 @@ export default function StoreSelectScreen() {
     supabase
       .from('stores')
       .select('code, name')
-      .order('created_at')
       .then(({ data, error: err }) => {
-        if (!err && data?.length) setStores(data)
+        if (!err && data?.length) {
+          // DB에 저장된 순서(created_at 등)와 무관하게 항상 STORES에 정해둔 순서로 고정한다.
+          const sorted = [...data].sort((a, b) => STORE_ORDER.indexOf(a.code) - STORE_ORDER.indexOf(b.code))
+          setStores(sorted)
+        }
       })
   }, [])
 
