@@ -199,7 +199,7 @@ export default function StoreSelectScreen() {
 
       {!isStandalone && (
         <>
-          <button type="button" className="btn-secondary" onClick={handleInstallClick}>
+          <button type="button" className="btn-secondary install-btn" onClick={handleInstallClick}>
             📱 홈 화면에 추가
           </button>
 

@@ -284,6 +284,13 @@ h1 {
   box-shadow: var(--shadow-card);
 }
 
+.install-btn {
+  margin-top: 40px;
+  padding: 10px;
+  font-size: 14px;
+  color: var(--text-muted);
+}
+
 .error-text {
   margin-top: 12px;
   color: #d84343;
