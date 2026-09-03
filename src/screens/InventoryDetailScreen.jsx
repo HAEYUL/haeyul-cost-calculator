@@ -7,12 +7,6 @@ const UNIT_LABELS = { g: 'g', kg: 'kg', ea: '개', other: '기타' }
 const NO_UNIT_KEY = 'none'
 const WASTE_REASONS = ['상함/부패', '유통기한 경과', '조리 실수', '기타']
 
-// 식봄(foodspring.co.kr)의 통합검색 URL 패턴. 로그인 없이는 가격이 안 보이는 사이트라
-// 여기서는 검색 결과 화면만 새 탭으로 열어주고, 실제 가격 확인·비교는 사장님이 직접 한다.
-function foodspringSearchUrl(itemName) {
-  return `https://www.foodspring.co.kr/search/all?key=${encodeURIComponent(itemName)}`
-}
-
 export default function InventoryDetailScreen() {
   const { store } = useStore()
   const navigate = useNavigate()
@@ -275,10 +269,6 @@ export default function InventoryDetailScreen() {
         <h1>{itemName}</h1>
         <p className="subtitle">{store.name} · {unitLabel ? `${unitLabel} 단위 재고` : '재고'}</p>
       </div>
-
-      <a className="btn-secondary" href={foodspringSearchUrl(itemName)} target="_blank" rel="noreferrer">
-        🔍 식봄에서 "{itemName}" 검색
-      </a>
 
       {!supabase && <p className="hint">Supabase가 설정되지 않았습니다.</p>}
       {loading && <p className="hint">불러오는 중...</p>}
