@@ -127,6 +127,8 @@ export default function InvoiceScreen() {
   const [date, setDate] = useState('')
   const [statementBalance, setStatementBalance] = useState('')
   const [invoiceTotal, setInvoiceTotal] = useState('')
+  const [currentBalance, setCurrentBalance] = useState('')
+  const [previousBatchBalance, setPreviousBatchBalance] = useState(null)
   const [items, setItems] = useState([])
   const [saving, setSaving] = useState(false)
   const [saveMessage, setSaveMessage] = useState('')
@@ -162,6 +164,32 @@ export default function InvoiceScreen() {
       })
   }, [store, historyKey])
 
+  // 거래처+입고일이 정해지면, 그 거래처가 이 날짜보다 전에 마지막으로 저장한 명세표의
+  // 현잔액을 불러온다. "이번 명세표의 전잔액"이 그 값과 이어지는지 대조하기 위함이다.
+  useEffect(() => {
+    if (!store || !supabase || !vendorId || vendorId === 'new' || !date) {
+      setPreviousBatchBalance(null)
+      return
+    }
+    let query = supabase
+      .from('invoice_batches')
+      .select('current_balance, invoice_date')
+      .eq('store_code', store.code)
+      .eq('vendor_id', vendorId)
+      .not('current_balance', 'is', null)
+      .lt('invoice_date', date)
+      .order('invoice_date', { ascending: false })
+      .limit(1)
+    if (editMode && batchId) query = query.neq('id', batchId)
+    query.then(({ data, error: err }) => {
+      if (!err && data?.length) {
+        setPreviousBatchBalance({ balance: Number(data[0].current_balance), date: data[0].invoice_date })
+      } else {
+        setPreviousBatchBalance(null)
+      }
+    })
+  }, [store, vendorId, date, editMode, batchId])
+
   // 수정 모드: 기존 명세표와 품목을 불러와 입력 폼에 채워 넣는다.
   useEffect(() => {
     if (!editMode || !store) return
@@ -173,7 +201,9 @@ export default function InvoiceScreen() {
     setError('')
     supabase
       .from('invoice_batches')
-      .select('id, vendor_id, invoice_date, statement_balance, total_amount, invoices(item_name, quantity, unit_price, unit, amount)')
+      .select(
+        'id, vendor_id, invoice_date, statement_balance, current_balance, total_amount, invoices(item_name, quantity, unit_price, unit, amount)',
+      )
       .eq('id', batchId)
       .single()
       .then(({ data, error: err }) => {
@@ -186,6 +216,7 @@ export default function InvoiceScreen() {
         setDate(data.invoice_date ?? '')
         setStatementBalance(data.statement_balance != null ? String(data.statement_balance) : '')
         setInvoiceTotal(data.total_amount != null ? String(data.total_amount) : '')
+        setCurrentBalance(data.current_balance != null ? String(data.current_balance) : '')
         setItems(
           (data.invoices ?? []).map((item) => ({
             name: item.item_name ?? '',
@@ -215,6 +246,7 @@ export default function InvoiceScreen() {
       setDate('')
       setStatementBalance('')
       setInvoiceTotal('')
+      setCurrentBalance('')
       setItems([])
       setDuplicateWarning(null)
       setAnalyzed(false)
@@ -260,6 +292,7 @@ export default function InvoiceScreen() {
       setDate(data.date ?? '')
       setStatementBalance(data.statementBalance != null ? String(data.statementBalance) : '')
       setInvoiceTotal(data.totalAmount != null ? String(data.totalAmount) : '')
+      setCurrentBalance(data.currentBalance != null ? String(data.currentBalance) : '')
       setItems(
         (data.items ?? []).map((item) => ({
           name: item.name ?? '',
@@ -342,6 +375,7 @@ export default function InvoiceScreen() {
           invoice_date: date || null,
           total_amount: editTotalAmount,
           statement_balance: statementBalance === '' ? null : Number(statementBalance),
+          current_balance: currentBalance === '' ? null : Number(currentBalance),
         })
         .eq('id', batchId)
 
@@ -477,6 +511,7 @@ export default function InvoiceScreen() {
         invoice_date: date || null,
         total_amount: totalAmount,
         statement_balance: statementBalance === '' ? null : Number(statementBalance),
+        current_balance: currentBalance === '' ? null : Number(currentBalance),
       })
       .select('id')
       .single()
@@ -598,6 +633,7 @@ export default function InvoiceScreen() {
     setDate('')
     setStatementBalance('')
     setInvoiceTotal('')
+    setCurrentBalance('')
     setItems([])
     if (didCreateVendor) setVendorsVersion((v) => v + 1)
   }
@@ -625,6 +661,24 @@ export default function InvoiceScreen() {
       ? { itemsSum, invoiceTotal: Number(invoiceTotal) }
       : null
   const hasAmountMismatch = itemMismatches.length > 0 || totalMismatch != null
+
+  // 명세표 안에서: 현잔액 = 전잔액 + 당일입고액이 맞는지 (1원 오차는 허용)
+  const computedCurrentBalance =
+    statementBalance !== '' && invoiceTotal !== '' ? Number(statementBalance) + Number(invoiceTotal) : null
+  const currentBalanceMismatch =
+    currentBalance !== '' &&
+    computedCurrentBalance != null &&
+    Math.abs(Number(currentBalance) - computedCurrentBalance) > AMOUNT_TOLERANCE
+      ? { computed: computedCurrentBalance, entered: Number(currentBalance) }
+      : null
+
+  // 명세표 사이: 이번 전잔액이 이 거래처의 직전 명세표 현잔액과 이어지는지 (직전 현잔액이 없으면 생략)
+  const previousBalanceMismatch =
+    previousBatchBalance != null &&
+    statementBalance !== '' &&
+    Math.abs(Number(statementBalance) - previousBatchBalance.balance) > AMOUNT_TOLERANCE
+      ? { previousDate: previousBatchBalance.date, previous: previousBatchBalance.balance, entered: Number(statementBalance) }
+      : null
 
   // 이미 있는 물품명과 90% 이상 비슷하지만 완전히 같지는 않은 항목을 찾는다. 새 물품으로
   // 바로 저장하지 않고 먼저 확인받아서, 오타로 같은 품목이 여러 개로 쪼개지는 걸 막는다.
@@ -824,7 +878,7 @@ export default function InvoiceScreen() {
         <input id="date" className="input" type="date" value={date} onChange={(e) => setDate(e.target.value)} />
       </div>
       <div className="field">
-        <label htmlFor="statementBalance">명세표 전잔액</label>
+        <label htmlFor="statementBalance">명세표 전잔액(전일잔고, 전잔고, 전잔금, 미수금)</label>
         <input
           id="statementBalance"
           className="input"
@@ -833,10 +887,9 @@ export default function InvoiceScreen() {
           onChange={(e) => setStatementBalance(e.target.value)}
           placeholder="예: 3054500"
         />
-        <p className="hint">명세표에 적힌 잔액을 그대로 입력하세요. 당일 입고액을 더한 실제 잔액은 앱이 자동으로 계산해요.</p>
       </div>
       <div className="field">
-        <label htmlFor="invoiceTotal">당일 입고액</label>
+        <label htmlFor="invoiceTotal">당일 입고액(당일합계, 출고금액, 출고액, 합계)</label>
         <input
           id="invoiceTotal"
           className="input"
@@ -846,6 +899,42 @@ export default function InvoiceScreen() {
           placeholder="예: 300000"
         />
       </div>
+      <div className="field">
+        <label htmlFor="currentBalance">명세표 현잔액(현잔고, 총잔금, 잔금, 총잔액, 총미수금)</label>
+        <input
+          id="currentBalance"
+          className="input"
+          inputMode="decimal"
+          value={currentBalance}
+          onChange={(e) => setCurrentBalance(e.target.value)}
+          placeholder="예: 3354500"
+        />
+        {currentBalance === '' && (
+          <p className="hint">명세표에 현잔액이 적혀 있다면 입력해보세요. 전잔액과 대조해서 확인해드려요.</p>
+        )}
+      </div>
+
+      {currentBalanceMismatch && (
+        <div className="price-alert-box price-alert-box-danger">
+          <p className="price-alert-title">⚠️ 현잔액이 맞지 않아요</p>
+          <p className="hint">
+            전잔액 + 당일입고액 = {Math.round(currentBalanceMismatch.computed).toLocaleString()}원인데, 입력하신
+            현잔액은 {Math.round(currentBalanceMismatch.entered).toLocaleString()}원이에요.
+          </p>
+        </div>
+      )}
+
+      {previousBalanceMismatch && (
+        <div className="price-alert-box price-alert-box-danger">
+          <p className="price-alert-title">⚠️ 직전 명세표와 이어지지 않아요</p>
+          <p className="hint">
+            {previousBalanceMismatch.previousDate} 명세표의 현잔액은{' '}
+            {Math.round(previousBalanceMismatch.previous).toLocaleString()}원인데, 이번 전잔액은{' '}
+            {Math.round(previousBalanceMismatch.entered).toLocaleString()}원이에요. 그 사이 결제하신 게 있다면
+            "결제 입력"에 넣어주세요.
+          </p>
+        </div>
+      )}
 
       {hasAmountMismatch && (
         <div className="price-alert-box price-alert-box-danger">

@@ -74,10 +74,16 @@ create table if not exists invoice_batches (
   created_at timestamptz not null default now()
 );
 
--- statement_balance: 명세표에 인쇄된 현잔액/현잔고/총잔금(이번 거래까지 포함해 거래처에
--- 갚아야 할 총액). 있는 대로 그대로 저장해서, 미지급금은 결제 기록 대신 이 값(가장 최근
--- 명세표 기준)을 우선 보여준다. 사진에 없으면 null.
+-- statement_balance: 명세표에 인쇄된 전잔액/전일잔고/전잔고/전잔금/미수금(이번 거래=당일
+-- 입고분을 반영하기 전, 그 이전까지 쌓여있던 이월 잔액). 있는 대로 그대로 저장해서, 미지급금은
+-- 결제 기록 대신 이 값(가장 최근 명세표 기준) + 당일 입고액을 우선 보여준다. 사진에 없으면 null.
 alter table invoice_batches add column if not exists statement_balance numeric;
+
+-- current_balance: 명세표에 인쇄된 현잔액/현잔고/총잔금/잔금/총잔액/총미수금(이번 거래=당일
+-- 입고분까지 다 반영한 최종 누적 잔액). statement_balance + total_amount와 같은 값인 경우가
+-- 많지만, 명세표에 따로 찍혀 나오면 그 값을 그대로 저장해서 계산이 맞는지 대조하는 데 쓴다.
+-- 사진/명세표에 없으면 null.
+alter table invoice_batches add column if not exists current_balance numeric;
 
 create index if not exists invoice_batches_store_vendor_idx on invoice_batches (store_code, vendor_id);
 

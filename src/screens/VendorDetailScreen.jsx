@@ -74,7 +74,7 @@ export default function VendorDetailScreen() {
       supabase
         .from('invoice_batches')
         .select(
-          'id, invoice_date, total_amount, statement_balance, photo_path, created_at, invoices(id, item_name, quantity, unit_price, unit, amount)',
+          'id, invoice_date, total_amount, statement_balance, current_balance, photo_path, created_at, invoices(id, item_name, quantity, unit_price, unit, amount)',
         )
         .eq('store_code', store.code)
         .eq('vendor_id', vendorId)
@@ -117,16 +117,22 @@ export default function VendorDetailScreen() {
 
   if (!store) return null
 
-  // 명세표에 적힌 "잔액"은 그날 입고분을 더하기 전의 전잔액(이월 잔액)이다. 그래서 그 시점의
-  // 실제(그날 입고 반영 후) 잔액을 구하려면 항상 그 명세표의 당일 입고액을 더해야 한다.
-  const endingBalanceOf = (batch) => Number(batch.statement_balance) + Number(batch.total_amount)
+  // 명세표에 적힌 "전잔액"은 그날 입고분을 더하기 전 값이라, 그 시점의 실제(그날 입고 반영 후)
+  // 잔액을 구하려면 당일 입고액을 더해야 한다. 다만 "현잔액"이 명세표에 직접 적혀 있으면(=이미
+  // 입고 반영 후 값) 계산할 필요 없이 그 값을 그대로 쓴다.
+  const hasBalanceInfo = (batch) => batch.statement_balance != null || batch.current_balance != null
+  const endingBalanceOf = (batch) =>
+    batch.current_balance != null ? Number(batch.current_balance) : Number(batch.statement_balance) + Number(batch.total_amount)
+  // 현잔액만 적혀 있고 전잔액이 없는 명세표는, 현잔액에서 당일 입고액을 거꾸로 빼서 전잔액을 구한다.
+  const impliedPriorBalance = (batch) =>
+    batch.statement_balance != null ? Number(batch.statement_balance) : Number(batch.current_balance) - Number(batch.total_amount)
 
   // 미지급금(실시간) = "믿을 수 있는 기준 잔액(앵커)" + 그 이후 입고액 − 그 이후 결제액.
-  // 앵커는 총잔액이 적힌 명세표 중 가장 최근 것을 우선 쓰고, 그런 명세표가 아직 없으면
+  // 앵커는 전잔액이나 현잔액이 적힌 명세표 중 가장 최근 것을 우선 쓰고, 그런 명세표가 아직 없으면
   // 가장 최근 기초 잔액을 대신 쓴다(둘 다 없으면 0원부터 시작). batches는 이미 최신순 정렬이라
   // 앵커보다 인덱스가 앞선(=더 최근인) 명세표들이 "앵커 이후 입고"가 된다.
   // (위 미지급금은 기간 필터와 무관하게 항상 지금 이 순간 기준이다)
-  const latestBatchWithBalanceIndex = batches.findIndex((b) => b.statement_balance != null)
+  const latestBatchWithBalanceIndex = batches.findIndex(hasBalanceInfo)
   const latestBatchWithBalance = latestBatchWithBalanceIndex >= 0 ? batches[latestBatchWithBalanceIndex] : undefined
   const latestOpeningBalance = [...openingBalances].sort((a, b) => (a.as_of_date < b.as_of_date ? 1 : -1))[0]
 
@@ -149,18 +155,18 @@ export default function VendorDetailScreen() {
 
   // 가장 최근 두 명세표 잔액을 대조해서, 그 사이 기록된 입고·결제만으로 설명이 안 되면
   // (=기록이 빠졌을 수 있으면) 알려준다.
-  const statementBatches = batches.filter((b) => b.statement_balance != null)
+  const balanceBatches = batches.filter(hasBalanceInfo)
   let balanceMismatch = null
-  if (statementBatches.length >= 2) {
-    const newest = statementBatches[0]
-    const previous = statementBatches[1]
+  if (balanceBatches.length >= 2) {
+    const newest = balanceBatches[0]
+    const previous = balanceBatches[1]
     const newestIndex = batches.indexOf(newest)
     const previousIndex = batches.indexOf(previous)
     const previousDate = rowDateStr(previous)
     const newestDate = rowDateStr(newest)
 
-    // newest.statement_balance 자체가 "newest 당일 입고를 더하기 전" 값이라, previous·newest
-    // 둘 다 제외하고 그 사이에 낀 명세표들의 입고액만 더한다(previous의 당일 입고는 endingBalanceOf로
+    // newest의 전잔액(=당일 입고를 더하기 전 값) 기준으로 비교한다. previous·newest 둘 다
+    // 제외하고 그 사이에 낀 명세표들의 입고액만 더한다(previous의 당일 입고는 endingBalanceOf로
     // 이미 반영, newest의 당일 입고는 비교 대상인 actual에 아직 반영 안 된 값이라 더하면 안 됨).
     const strictlyBetween = batches.slice(newestIndex + 1, previousIndex)
     const invoicedBetween = strictlyBetween.reduce((sum, b) => sum + Number(b.total_amount), 0)
@@ -169,7 +175,7 @@ export default function VendorDetailScreen() {
       .reduce((sum, p) => sum + Number(p.amount), 0)
 
     const expected = endingBalanceOf(previous) + invoicedBetween - paidBetween
-    const actual = Number(newest.statement_balance)
+    const actual = impliedPriorBalance(newest)
     if (Math.round(expected) !== Math.round(actual)) {
       balanceMismatch = { newestDate, expected, actual, diff: actual - expected }
     }
@@ -193,7 +199,7 @@ export default function VendorDetailScreen() {
   // 기간 종료일 이전(포함)에 잔액이 기록된 가장 최근 명세표를 찾는다(batches는 이미 최신순 정렬).
   const balanceAtPeriodEndBatch = batches.find((b) => {
     const d = rowDateStr(b)
-    return b.statement_balance != null && (!dateTo || d <= dateTo)
+    return hasBalanceInfo(b) && (!dateTo || d <= dateTo)
   })
   const balanceAtPeriodEnd = balanceAtPeriodEndBatch ? endingBalanceOf(balanceAtPeriodEndBatch) : null
   const periodEstimatedPayment =
@@ -468,6 +474,7 @@ export default function VendorDetailScreen() {
           )}
 
           <h2 className="section-title">결제 입력</h2>
+          <p className="hint">이미 명세표 잔액에 반영된 결제는 다시 입력하지 않아도 돼요.</p>
           <div className="field">
             <label htmlFor="paymentAmount">결제 금액</label>
             <input
@@ -602,10 +609,14 @@ export default function VendorDetailScreen() {
                   </div>
                 )}
 
-                {batch.statement_balance != null && (
+                {hasBalanceInfo(batch) && (
                   <div className="history-row-sub">
-                    <span>전잔액 {Math.round(Number(batch.statement_balance)).toLocaleString()}원</span>
-                    <span>입고 반영 후 {Math.round(endingBalanceOf(batch)).toLocaleString()}원</span>
+                    {batch.statement_balance != null && (
+                      <span>전잔액 {Math.round(Number(batch.statement_balance)).toLocaleString()}원</span>
+                    )}
+                    <span>
+                      {batch.current_balance != null ? '현잔액' : '입고 반영 후'} {Math.round(endingBalanceOf(batch)).toLocaleString()}원
+                    </span>
                   </div>
                 )}
                 {batch.photo_path && (
