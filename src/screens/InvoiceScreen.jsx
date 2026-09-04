@@ -864,7 +864,13 @@ export default function InvoiceScreen() {
               </li>
             )}
           </ul>
-          <p className="hint">품목의 수량·단가·금액이나 당일 입고액을 확인해서 맞춰주세요. 맞아야 저장할 수 있어요.</p>
+          <p className="hint">
+            품목의 수량·단가·금액이나 당일 입고액을 확인해서 맞춰주세요. 거래처가 자투리를 떼고 적은
+            경우처럼 실제로 맞는 차이라면, 아래 버튼으로 그대로 저장할 수 있어요.
+          </p>
+          <button type="button" className="btn-secondary" onClick={() => handleSave()} disabled={saving}>
+            {saving ? '저장 중...' : '차이 확인했어요, 그래도 저장'}
+          </button>
         </div>
       )}
 
