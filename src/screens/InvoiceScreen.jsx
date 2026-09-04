@@ -385,8 +385,8 @@ export default function InvoiceScreen() {
 
     // 같은 거래처 + 같은 날짜로 이미 저장된 전표가 있으면 같은 사진을 다시 올린 게
     // 아닌지 저장 전에 경고한다 (날짜 미입력이면 비교할 수 없어 건너뜀).
-    // 우선순위: 명세표 총잔액이 둘 다 있고 값이 같으면(가장 확실한 신호) 바로 중복으로 본다.
-    // 총잔액이 없는 경우엔 물품명이 하나라도 겹치면 중복 가능성으로 본다 — AI가 재분석 때
+    // 우선순위: 명세표 전잔액이 둘 다 있고 값이 같으면(가장 확실한 신호) 바로 중복으로 본다.
+    // 전잔액이 없는 경우엔 물품명이 하나라도 겹치면 중복 가능성으로 본다 — AI가 재분석 때
     // 품목을 살짝 다르게 읽어도(순서·표기 차이) 잡아내기 위해 완전 일치 대신 겹침으로 비교한다.
     if (!skipDuplicateCheck && date) {
       const { data: existingBatches, error: dupErr } = await supabase
@@ -703,7 +703,7 @@ export default function InvoiceScreen() {
           <p className="hint">
             {duplicateWarning.vendorName} · {duplicateWarning.date}에 이미 저장된 입고 내역이 있습니다.{' '}
             {duplicateWarning.matchReason === 'balance'
-              ? `명세표 총잔액(${Math.round(duplicateWarning.balance).toLocaleString()}원)이 같아요.`
+              ? `명세표 전잔액(${Math.round(duplicateWarning.balance).toLocaleString()}원)이 같아요.`
               : `물품(${duplicateWarning.itemNames.join(', ')})이 겹쳐요.`}{' '}
             같은 사진을 다시 올린 게 아닌지 확인해주세요.
           </p>
@@ -824,7 +824,7 @@ export default function InvoiceScreen() {
         <input id="date" className="input" type="date" value={date} onChange={(e) => setDate(e.target.value)} />
       </div>
       <div className="field">
-        <label htmlFor="statementBalance">명세표 잔액(현잔액/총잔금, 있으면)</label>
+        <label htmlFor="statementBalance">명세표 전잔액</label>
         <input
           id="statementBalance"
           className="input"
@@ -833,9 +833,10 @@ export default function InvoiceScreen() {
           onChange={(e) => setStatementBalance(e.target.value)}
           placeholder="예: 3054500"
         />
+        <p className="hint">명세표에 적힌 잔액을 그대로 입력하세요. 당일 입고액을 더한 실제 잔액은 앱이 자동으로 계산해요.</p>
       </div>
       <div className="field">
-        <label htmlFor="invoiceTotal">명세표 총액(당일합계, 있으면)</label>
+        <label htmlFor="invoiceTotal">당일 입고액</label>
         <input
           id="invoiceTotal"
           className="input"
@@ -858,12 +859,12 @@ export default function InvoiceScreen() {
             ))}
             {totalMismatch && (
               <li className="alert-up">
-                품목 합계 {Math.round(totalMismatch.itemsSum).toLocaleString()}원 ≠ 명세표 총액{' '}
+                품목 합계 {Math.round(totalMismatch.itemsSum).toLocaleString()}원 ≠ 당일 입고액{' '}
                 {Math.round(totalMismatch.invoiceTotal).toLocaleString()}원
               </li>
             )}
           </ul>
-          <p className="hint">품목의 수량·단가·금액이나 명세표 총액을 확인해서 맞춰주세요. 맞아야 저장할 수 있어요.</p>
+          <p className="hint">품목의 수량·단가·금액이나 당일 입고액을 확인해서 맞춰주세요. 맞아야 저장할 수 있어요.</p>
         </div>
       )}
 

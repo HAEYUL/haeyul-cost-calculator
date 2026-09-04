@@ -137,9 +137,11 @@ export default function MainMenuScreen() {
         }
 
         if (b.statement_balance != null) {
+          // 명세표에 적힌 잔액은 그날 입고분을 더하기 전의 전잔액이라, 당일 입고액을 더해야
+          // 그 시점의 실제 잔액이 된다.
           const existing = latestBalance.get(b.vendor_id)
           if (!existing || dateValue > existing.dateValue) {
-            latestBalance.set(b.vendor_id, { value: Number(b.statement_balance), dateValue })
+            latestBalance.set(b.vendor_id, { value: Number(b.statement_balance) + Number(b.total_amount), dateValue })
           }
         }
       }
