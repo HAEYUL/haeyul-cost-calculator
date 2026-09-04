@@ -117,6 +117,10 @@ export default function VendorDetailScreen() {
 
   if (!store) return null
 
+  // 명세표에 적힌 "잔액"은 그날 입고분을 더하기 전의 전잔액(이월 잔액)이다. 그래서 그 시점의
+  // 실제(그날 입고 반영 후) 잔액을 구하려면 항상 그 명세표의 당일 입고액을 더해야 한다.
+  const endingBalanceOf = (batch) => Number(batch.statement_balance) + Number(batch.total_amount)
+
   // 미지급금(실시간) = "믿을 수 있는 기준 잔액(앵커)" + 그 이후 입고액 − 그 이후 결제액.
   // 앵커는 총잔액이 적힌 명세표 중 가장 최근 것을 우선 쓰고, 그런 명세표가 아직 없으면
   // 가장 최근 기초 잔액을 대신 쓴다(둘 다 없으면 0원부터 시작). batches는 이미 최신순 정렬이라
@@ -128,7 +132,7 @@ export default function VendorDetailScreen() {
 
   const anchorDate = latestBatchWithBalance ? rowDateStr(latestBatchWithBalance) : (latestOpeningBalance?.as_of_date ?? null)
   const anchorBalance = latestBatchWithBalance
-    ? Number(latestBatchWithBalance.statement_balance)
+    ? endingBalanceOf(latestBatchWithBalance)
     : latestOpeningBalance
       ? Number(latestOpeningBalance.balance)
       : 0
@@ -155,13 +159,16 @@ export default function VendorDetailScreen() {
     const previousDate = rowDateStr(previous)
     const newestDate = rowDateStr(newest)
 
-    const between = batches.slice(newestIndex, previousIndex) // newest 포함, previous 미포함
-    const invoicedBetween = between.reduce((sum, b) => sum + Number(b.total_amount), 0)
+    // newest.statement_balance 자체가 "newest 당일 입고를 더하기 전" 값이라, previous·newest
+    // 둘 다 제외하고 그 사이에 낀 명세표들의 입고액만 더한다(previous의 당일 입고는 endingBalanceOf로
+    // 이미 반영, newest의 당일 입고는 비교 대상인 actual에 아직 반영 안 된 값이라 더하면 안 됨).
+    const strictlyBetween = batches.slice(newestIndex + 1, previousIndex)
+    const invoicedBetween = strictlyBetween.reduce((sum, b) => sum + Number(b.total_amount), 0)
     const paidBetween = payments
       .filter((p) => (!p.paid_date || p.paid_date > previousDate) && (!p.paid_date || p.paid_date <= newestDate))
       .reduce((sum, p) => sum + Number(p.amount), 0)
 
-    const expected = Number(previous.statement_balance) + invoicedBetween - paidBetween
+    const expected = endingBalanceOf(previous) + invoicedBetween - paidBetween
     const actual = Number(newest.statement_balance)
     if (Math.round(expected) !== Math.round(actual)) {
       balanceMismatch = { newestDate, expected, actual, diff: actual - expected }
@@ -184,10 +191,11 @@ export default function VendorDetailScreen() {
 
   // 결제액(추정) = 기초 잔액 + 기간 입고액 − 기간 종료일 시점의 미지급 잔액.
   // 기간 종료일 이전(포함)에 잔액이 기록된 가장 최근 명세표를 찾는다(batches는 이미 최신순 정렬).
-  const balanceAtPeriodEnd = batches.find((b) => {
+  const balanceAtPeriodEndBatch = batches.find((b) => {
     const d = rowDateStr(b)
     return b.statement_balance != null && (!dateTo || d <= dateTo)
-  })?.statement_balance
+  })
+  const balanceAtPeriodEnd = balanceAtPeriodEndBatch ? endingBalanceOf(balanceAtPeriodEndBatch) : null
   const periodEstimatedPayment =
     balanceAtPeriodEnd != null
       ? (effectiveOpeningBalance ? Number(effectiveOpeningBalance.balance) : 0) + periodTotalAmount - Number(balanceAtPeriodEnd)
@@ -596,7 +604,8 @@ export default function VendorDetailScreen() {
 
                 {batch.statement_balance != null && (
                   <div className="history-row-sub">
-                    <span>명세표 잔액 {Math.round(Number(batch.statement_balance)).toLocaleString()}원</span>
+                    <span>전잔액 {Math.round(Number(batch.statement_balance)).toLocaleString()}원</span>
+                    <span>입고 반영 후 {Math.round(endingBalanceOf(batch)).toLocaleString()}원</span>
                   </div>
                 )}
                 {batch.photo_path && (
