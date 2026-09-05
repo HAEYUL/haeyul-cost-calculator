@@ -3,6 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { useStore } from '../context/StoreContext'
 import { supabase } from '../lib/supabaseClient'
 import { latestInvoiceInfoByItem, computeMenuCost } from '../lib/costCalc'
+import AmountInput from '../components/AmountInput'
 
 const STATUS_LABEL = {
   unmapped: '재료 매칭 필요',
@@ -11,7 +12,7 @@ const STATUS_LABEL = {
   unit_mismatch: '단가 환산 불가 (개/기타 단위)',
 }
 
-const UNIT_LABELS = { g: 'g', kg: 'kg', ea: '개', other: '기타' }
+const UNIT_LABELS = { g: 'g', kg: 'kg', ea: '개', box: '박스', other: '기타' }
 
 export default function CostDetailScreen() {
   const { store } = useStore()
@@ -135,13 +136,12 @@ export default function CostDetailScreen() {
 
             <div className="field">
               <label htmlFor="sellingPrice">판매가</label>
-              <input
+              <AmountInput
                 id="sellingPrice"
                 className="input"
-                inputMode="decimal"
                 value={priceInput}
-                onChange={(e) => setPriceInput(e.target.value)}
-                placeholder="예: 15000"
+                onChange={setPriceInput}
+                placeholder="예: 15,000"
               />
             </div>
             <button type="button" className="btn-secondary" onClick={handleSavePrice} disabled={saving}>

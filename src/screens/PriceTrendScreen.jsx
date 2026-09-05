@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { useStore } from '../context/StoreContext'
 import { supabase } from '../lib/supabaseClient'
 
-const UNIT_LABELS = { g: 'g', kg: 'kg', ea: '개', other: '기타' }
+const UNIT_LABELS = { g: 'g', kg: 'kg', ea: '개', box: '박스', other: '기타' }
 
 // 명세표의 실제 입고일(invoice_date)이 있으면 그걸 기준으로, 없으면 저장 시각(created_at)으로
 // 정렬한다. created_at은 사진을 "언제 업로드했는지"라 늦게 업로드된 예전 명세표가 있으면

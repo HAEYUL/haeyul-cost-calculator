@@ -449,6 +449,10 @@ alter table invoices add column if not exists unit text;
 alter table invoices add column if not exists vendor_id uuid references vendors(id);
 alter table invoices add column if not exists batch_id uuid references invoice_batches(id);
 
+-- vat: 이 품목 행에 명세표가 따로 적어 보낸 부가세 금액. 공급가액(amount)과 합쳐서 이미
+-- 적혀있거나 표에 부가세 칸 자체가 없으면 null.
+alter table invoices add column if not exists vat numeric;
+
 create index if not exists invoices_store_vendor_idx on invoices (store_code, vendor);
 create index if not exists invoices_store_item_idx on invoices (store_code, item_name);
 create index if not exists invoices_batch_idx on invoices (batch_id);

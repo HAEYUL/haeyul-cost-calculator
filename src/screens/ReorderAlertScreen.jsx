@@ -4,7 +4,7 @@ import { useStore } from '../context/StoreContext'
 import { supabase } from '../lib/supabaseClient'
 import { computeReorderAlerts } from '../lib/reorderCalc'
 
-const UNIT_LABELS = { g: 'g', kg: 'kg', ea: '개', other: '기타' }
+const UNIT_LABELS = { g: 'g', kg: 'kg', ea: '개', box: '박스', other: '기타' }
 const NO_UNIT_KEY = 'none'
 
 function stockKey(itemName, unit) {

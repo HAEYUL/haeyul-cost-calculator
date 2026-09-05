@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { useStore } from '../context/StoreContext'
 import { supabase } from '../lib/supabaseClient'
 
-const UNIT_LABELS = { g: 'g', kg: 'kg', ea: '개', other: '기타' }
+const UNIT_LABELS = { g: 'g', kg: 'kg', ea: '개', box: '박스', other: '기타' }
 const NO_UNIT_KEY = 'none'
 
 function stockKey(itemName, unit) {
@@ -22,6 +22,10 @@ export default function InventoryScreen() {
   const [dataKey, setDataKey] = useState(0)
   const [searchOpen, setSearchOpen] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
+
+  const [renameTarget, setRenameTarget] = useState(null)
+  const [renameInput, setRenameInput] = useState('')
+  const [renaming, setRenaming] = useState(false)
 
   useEffect(() => {
     if (!store) navigate('/', { replace: true })
@@ -110,6 +114,53 @@ export default function InventoryScreen() {
     setDataKey((k) => k + 1)
   }
 
+  // 물품명을 이 이름(+단위)으로 저장된 모든 과거 기록(입고·사용·폐기·실사 보정, 관심 물품)에
+  // 걸쳐 한 번에 새 이름으로 바꾼다. 오타·표기 차이로 흩어진 같은 물품을 하나로 정리하기 위함.
+  const handleRename = async () => {
+    const newName = renameInput.trim()
+    if (!renameTarget || !newName || !supabase) return
+    if (newName === renameTarget.itemName) {
+      setRenameTarget(null)
+      return
+    }
+    setRenaming(true)
+    setError('')
+
+    const withUnitFilter = (query) =>
+      renameTarget.unit == null ? query.is('unit', null) : query.eq('unit', renameTarget.unit)
+
+    for (const table of ['invoices', 'stock_usage', 'waste_records', 'stock_adjustments']) {
+      const { error: err } = await withUnitFilter(
+        supabase.from(table).update({ item_name: newName }).eq('store_code', store.code).eq('item_name', renameTarget.itemName),
+      )
+      if (err) {
+        setRenaming(false)
+        setError(err.message)
+        return
+      }
+    }
+
+    // pinned_items는 (store_code, item_name)이 유일해야 해서, 옛 이름이 관심 품목이었으면
+    // 지우고 새 이름으로 다시 등록한다(이미 새 이름이 관심 품목이었으면 그대로 둔다).
+    const { data: pinnedOld } = await supabase
+      .from('pinned_items')
+      .select('id')
+      .eq('store_code', store.code)
+      .eq('item_name', renameTarget.itemName)
+      .maybeSingle()
+    if (pinnedOld) {
+      await supabase.from('pinned_items').delete().eq('id', pinnedOld.id)
+      await supabase
+        .from('pinned_items')
+        .upsert({ store_code: store.code, item_name: newName }, { onConflict: 'store_code,item_name' })
+    }
+
+    setRenaming(false)
+    setRenameTarget(null)
+    setRenameInput('')
+    setDataKey((k) => k + 1)
+  }
+
   const renderRow = (r, { pinned }) => (
     <li key={stockKey(r.itemName, r.unit)} className="history-row">
       <button
@@ -136,6 +187,17 @@ export default function InventoryScreen() {
           className="link-btn"
           onClick={(e) => {
             e.stopPropagation()
+            setRenameTarget({ itemName: r.itemName, unit: r.unit })
+            setRenameInput(r.itemName)
+          }}
+        >
+          이름 수정
+        </button>
+        <button
+          type="button"
+          className="link-btn"
+          onClick={(e) => {
+            e.stopPropagation()
             if (pinned) {
               handleUnpin(r)
             } else {
@@ -146,6 +208,40 @@ export default function InventoryScreen() {
           {pinned ? '숨기기' : '+ 관심 품목에 추가'}
         </button>
       </div>
+
+      {renameTarget && renameTarget.itemName === r.itemName && renameTarget.unit === r.unit && (
+        <div className="price-alert-box" onClick={(e) => e.stopPropagation()}>
+          <p className="price-alert-title">물품명 일괄 변경</p>
+          <div className="field">
+            <input
+              className="input"
+              value={renameInput}
+              onChange={(e) => setRenameInput(e.target.value)}
+              placeholder="새 물품명"
+              autoFocus
+            />
+          </div>
+          <p className="hint">
+            "{r.itemName}"으로 저장된 모든 입고·사용·폐기·실사 기록이 새 이름으로 한 번에 바뀌어요. 되돌릴 수 없어요.
+          </p>
+          <div className="invoice-form">
+            <button
+              type="button"
+              className="btn-secondary"
+              onClick={() => {
+                setRenameTarget(null)
+                setRenameInput('')
+              }}
+              disabled={renaming}
+            >
+              취소
+            </button>
+            <button type="button" className="btn-primary" onClick={handleRename} disabled={renaming || !renameInput.trim()}>
+              {renaming ? '변경 중...' : '변경'}
+            </button>
+          </div>
+        </div>
+      )}
     </li>
   )
 

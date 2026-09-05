@@ -2,8 +2,9 @@ import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useStore } from '../context/StoreContext'
 import { supabase } from '../lib/supabaseClient'
+import AmountInput from '../components/AmountInput'
 
-const UNIT_LABELS = { g: 'g', kg: 'kg', ea: '개', other: '기타' }
+const UNIT_LABELS = { g: 'g', kg: 'kg', ea: '개', box: '박스', other: '기타' }
 
 // 명세표에 적힌 입고일(invoice_date)을 우선 기준으로 삼고, 없는 옛 데이터만 저장 시각
 // (created_at)의 날짜로 대신한다.
@@ -360,13 +361,12 @@ export default function VendorDetailScreen() {
 
           <div className="field">
             <label htmlFor="openingBalance">기초 잔액 ({dateFrom} 이전 이월 미지급 잔액)</label>
-            <input
+            <AmountInput
               id="openingBalance"
               className="input"
-              inputMode="decimal"
               value={openingBalanceInput}
-              onChange={(e) => setOpeningBalanceInput(e.target.value)}
-              placeholder="예: 6000000"
+              onChange={setOpeningBalanceInput}
+              placeholder="예: 6,000,000"
             />
           </div>
           <button type="button" className="btn-secondary" onClick={handleSaveOpeningBalance} disabled={savingOpeningBalance}>
@@ -477,13 +477,12 @@ export default function VendorDetailScreen() {
           <p className="hint">이미 명세표 잔액에 반영된 결제는 다시 입력하지 않아도 돼요.</p>
           <div className="field">
             <label htmlFor="paymentAmount">결제 금액</label>
-            <input
+            <AmountInput
               id="paymentAmount"
               className="input"
-              inputMode="decimal"
               value={paymentAmount}
-              onChange={(e) => setPaymentAmount(e.target.value)}
-              placeholder="예: 200000"
+              onChange={setPaymentAmount}
+              placeholder="예: 200,000"
             />
           </div>
           <div className="field">

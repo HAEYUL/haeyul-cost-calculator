@@ -21,7 +21,7 @@ const MENU_ITEMS = [
   { label: '매장 비밀번호 변경', path: '/change-pin' },
 ]
 
-const UNIT_LABELS = { g: 'g', kg: 'kg', ea: '개', other: '기타' }
+const UNIT_LABELS = { g: 'g', kg: 'kg', ea: '개', box: '박스', other: '기타' }
 const MARGIN_WARNING_RATIO = 40
 
 function stockKey(itemName, unit) {

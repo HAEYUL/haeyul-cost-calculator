@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabaseClient'
 
-const UNIT_LABELS = { g: 'g', kg: 'kg', ea: '개', other: '기타' }
+const UNIT_LABELS = { g: 'g', kg: 'kg', ea: '개', box: '박스', other: '기타' }
 
 function todayStr() {
   const d = new Date()

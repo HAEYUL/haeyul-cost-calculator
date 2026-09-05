@@ -369,12 +369,12 @@ h1 {
 }
 
 .item-table {
-  min-width: 600px;
+  min-width: 700px;
 }
 
 .item-row {
   display: grid;
-  grid-template-columns: 2fr 0.8fr 1fr 1fr 1fr auto;
+  grid-template-columns: 2fr 0.8fr 1fr 1fr 1fr 1fr auto;
   gap: 6px;
   margin-bottom: 6px;
   align-items: center;

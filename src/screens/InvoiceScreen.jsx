@@ -4,13 +4,14 @@ import { useStore } from '../context/StoreContext'
 import { supabase } from '../lib/supabaseClient'
 import { compressImage } from '../lib/compressImage'
 import InvoiceHistory from '../components/InvoiceHistory'
+import AmountInput from '../components/AmountInput'
 import { latestInvoiceInfoByItem, computeMenuCost } from '../lib/costCalc'
 
-const UNIT_LABELS = { g: 'g', kg: 'kg', ea: '개', other: '기타' }
+const UNIT_LABELS = { g: 'g', kg: 'kg', ea: '개', box: '박스', other: '기타' }
 const MARGIN_WARNING_RATIO = 40
 
 function emptyItem() {
-  return { name: '', quantity: '', unitPrice: '', unit: 'kg', amount: '' }
+  return { name: '', quantity: '', unitPrice: '', unit: 'kg', amount: '', vat: '' }
 }
 
 function base64ToBlob(base64, mediaType) {
@@ -60,9 +61,18 @@ function findSimilarVendor(vendors, name) {
   return bestSimilarity >= 0.6 ? best : null
 }
 
+// "물품명/2kg"처럼 뒤에 규격(포장 단위·중량 등)이 "/"로 붙어 있으면, 그 앞부분만 핵심
+// 이름으로 본다. 같은 물품이라도 배송마다 규격이 달라 붙는 경우가 많기 때문이다.
+function itemNamePrefix(name) {
+  const idx = name.indexOf('/')
+  return (idx >= 0 ? name.slice(0, idx) : name).trim()
+}
+
 // 완전히 같은 이름은 아니지만 오타/표기 차이로 같은 물품일 가능성이 있는 기존 물품명을 찾는다.
 // 거래처(0.6)보다 훨씬 엄격한 기준(0.9)을 쓰는 이유는, 물품명은 "돼지고기 앞다리" vs
 // "돼지고기 뒷다리"처럼 비슷해 보여도 실제로는 다른 품목인 경우가 많기 때문이다.
+// 전체 문자열 유사도로 못 잡아도, 뒤에 붙은 규격만 다르고 핵심 이름(앞부분)이 완전히
+// 같으면 그것도 같은 물품일 가능성으로 잡아준다.
 function findSimilarItemName(existingNames, name) {
   const norm = name.trim()
   if (!norm) return null
@@ -79,7 +89,16 @@ function findSimilarItemName(existingNames, name) {
       best = eNorm
     }
   }
-  return bestSimilarity >= 0.9 ? best : null
+  if (bestSimilarity >= 0.9) return best
+
+  const normPrefix = itemNamePrefix(norm)
+  if (normPrefix && normPrefix !== norm) {
+    const prefixMatch = existingNames.find(
+      (existing) => existing.trim() !== norm && itemNamePrefix(existing.trim()) === normPrefix,
+    )
+    if (prefixMatch) return prefixMatch
+  }
+  return null
 }
 
 function itemAmount(item) {
@@ -87,6 +106,10 @@ function itemAmount(item) {
   const q = item.quantity === '' ? null : Number(item.quantity)
   const p = item.unitPrice === '' ? null : Number(item.unitPrice)
   return q != null && p != null ? q * p : 0
+}
+
+function itemVat(item) {
+  return item.vat === '' || item.vat == null ? 0 : Number(item.vat)
 }
 
 // 반올림 오차 등을 감안한 허용 오차(원)
@@ -202,7 +225,7 @@ export default function InvoiceScreen() {
     supabase
       .from('invoice_batches')
       .select(
-        'id, vendor_id, invoice_date, statement_balance, current_balance, total_amount, invoices(item_name, quantity, unit_price, unit, amount)',
+        'id, vendor_id, invoice_date, statement_balance, current_balance, total_amount, invoices(item_name, quantity, unit_price, unit, amount, vat)',
       )
       .eq('id', batchId)
       .single()
@@ -224,6 +247,7 @@ export default function InvoiceScreen() {
             unitPrice: item.unit_price ?? '',
             unit: item.unit ?? 'kg',
             amount: item.amount ?? '',
+            vat: item.vat ?? '',
           })),
         )
       })
@@ -300,6 +324,7 @@ export default function InvoiceScreen() {
           unitPrice: item.unitPrice ?? '',
           unit: item.unit ?? 'kg',
           amount: item.amount ?? '',
+          vat: item.vat ?? '',
         })),
       )
       setAnalyzed(true)
@@ -402,6 +427,7 @@ export default function InvoiceScreen() {
         unit_price: item.unitPrice === '' ? null : Number(item.unitPrice),
         unit: item.unit || null,
         amount: item.amount === '' ? null : Number(item.amount),
+        vat: item.vat === '' ? null : Number(item.vat),
         invoice_date: date || null,
       }))
 
@@ -532,6 +558,7 @@ export default function InvoiceScreen() {
       unit_price: item.unitPrice === '' ? null : Number(item.unitPrice),
       unit: item.unit || null,
       amount: item.amount === '' ? null : Number(item.amount),
+      vat: item.vat === '' ? null : Number(item.vat),
       invoice_date: date || null,
     }))
 
@@ -655,7 +682,7 @@ export default function InvoiceScreen() {
 
   const itemMismatches = findItemMismatches(items)
   const validItemsForSum = items.filter((item) => item.name.trim())
-  const itemsSum = validItemsForSum.reduce((sum, item) => sum + itemAmount(item), 0)
+  const itemsSum = validItemsForSum.reduce((sum, item) => sum + itemAmount(item) + itemVat(item), 0)
   const totalMismatch =
     invoiceTotal !== '' && Math.abs(itemsSum - Number(invoiceTotal)) > AMOUNT_TOLERANCE
       ? { itemsSum, invoiceTotal: Number(invoiceTotal) }
@@ -879,35 +906,32 @@ export default function InvoiceScreen() {
       </div>
       <div className="field">
         <label htmlFor="statementBalance">명세표 전잔액(전일잔고, 전잔고, 전잔금, 미수금)</label>
-        <input
+        <AmountInput
           id="statementBalance"
           className="input"
-          inputMode="decimal"
           value={statementBalance}
-          onChange={(e) => setStatementBalance(e.target.value)}
-          placeholder="예: 3054500"
+          onChange={setStatementBalance}
+          placeholder="예: 3,054,500"
         />
       </div>
       <div className="field">
         <label htmlFor="invoiceTotal">당일 입고액(당일합계, 출고금액, 출고액, 합계)</label>
-        <input
+        <AmountInput
           id="invoiceTotal"
           className="input"
-          inputMode="decimal"
           value={invoiceTotal}
-          onChange={(e) => setInvoiceTotal(e.target.value)}
-          placeholder="예: 300000"
+          onChange={setInvoiceTotal}
+          placeholder="예: 300,000"
         />
       </div>
       <div className="field">
         <label htmlFor="currentBalance">명세표 현잔액(현잔고, 총잔금, 잔금, 총잔액, 총미수금)</label>
-        <input
+        <AmountInput
           id="currentBalance"
           className="input"
-          inputMode="decimal"
           value={currentBalance}
-          onChange={(e) => setCurrentBalance(e.target.value)}
-          placeholder="예: 3354500"
+          onChange={setCurrentBalance}
+          placeholder="예: 3,354,500"
         />
         {currentBalance === '' && (
           <p className="hint">명세표에 현잔액이 적혀 있다면 입력해보세요. 전잔액과 대조해서 확인해드려요.</p>
@@ -992,6 +1016,7 @@ export default function InvoiceScreen() {
               <span>단가 기준</span>
               <span>수량</span>
               <span>단가</span>
+              <span>부가세</span>
               <span>금액</span>
               <span />
             </div>
@@ -1024,18 +1049,22 @@ export default function InvoiceScreen() {
                   onChange={(e) => updateItem(index, 'quantity', e.target.value)}
                   placeholder="수량"
                 />
-                <input
+                <AmountInput
                   className="input"
-                  inputMode="decimal"
                   value={item.unitPrice}
-                  onChange={(e) => updateItem(index, 'unitPrice', e.target.value)}
+                  onChange={(v) => updateItem(index, 'unitPrice', v)}
                   placeholder="단가"
                 />
-                <input
+                <AmountInput
                   className="input"
-                  inputMode="decimal"
+                  value={item.vat}
+                  onChange={(v) => updateItem(index, 'vat', v)}
+                  placeholder="부가세"
+                />
+                <AmountInput
+                  className="input"
                   value={item.amount}
-                  onChange={(e) => updateItem(index, 'amount', e.target.value)}
+                  onChange={(v) => updateItem(index, 'amount', v)}
                   placeholder="금액"
                 />
                 <button type="button" className="icon-btn" onClick={() => removeItem(index)} aria-label="행 삭제">
