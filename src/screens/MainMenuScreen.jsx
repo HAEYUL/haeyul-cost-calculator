@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useStore } from '../context/StoreContext'
 import { supabase } from '../lib/supabaseClient'
-import { latestInvoiceInfoByItem, computeMenuCost } from '../lib/costCalc'
+import { latestInvoiceInfoByItem, computeMenuCost, computeAllSubRecipeUnitCosts } from '../lib/costCalc'
 import { computeReorderAlerts } from '../lib/reorderCalc'
 
 const MENU_ITEMS = [
@@ -12,7 +12,7 @@ const MENU_ITEMS = [
   { label: '단가 추이 조회', path: '/price-trend' },
   { label: '레시피 입력', path: '/recipes' },
   { label: '재료 매칭', path: '/ingredient-matching' },
-  { label: '원가 확인', path: '/cost' },
+  { label: '메뉴별 원가확인', path: '/cost' },
   { label: '지출 리포트', path: '/spending-report' },
   { label: '재주문 알림', path: '/reorder-alerts' },
   { label: '소비 패턴 분석', path: '/consumption-pattern' },
@@ -93,14 +93,16 @@ export default function MainMenuScreen() {
       supabase.from('stock_usage').select('item_name, unit, used_qty').eq('store_code', store.code),
       supabase.from('waste_records').select('item_name, unit, qty').eq('store_code', store.code),
       supabase.from('stock_adjustments').select('item_name, unit, delta').eq('store_code', store.code),
-      supabase.from('recipes').select('menu_name, ingredient_name, amount_g').eq('store_code', store.code),
+      supabase.from('recipes').select('menu_name, ingredient_name, amount_g, is_sub_recipe').eq('store_code', store.code),
+      supabase.from('recipe_meta').select('menu_name, recipe_type, yield_qty').eq('store_code', store.code),
       supabase
         .from('ingredient_mapping')
         .select('recipe_ingredient_name, invoice_item_name')
         .eq('store_code', store.code),
       supabase.from('menu_prices').select('menu_name, selling_price').eq('store_code', store.code),
       supabase.from('dashboard_dismissals').select('card_key, signature').eq('store_code', store.code),
-    ]).then(([batchesRes, invoicesRes, usageRes, wasteRes, adjustmentsRes, recipesRes, mappingRes, pricesRes, dismissalsRes]) => {
+    ]).then(
+      ([batchesRes, invoicesRes, usageRes, wasteRes, adjustmentsRes, recipesRes, metaRes, mappingRes, pricesRes, dismissalsRes]) => {
       const err =
         batchesRes.error ||
         invoicesRes.error ||
@@ -108,6 +110,7 @@ export default function MainMenuScreen() {
         wasteRes.error ||
         adjustmentsRes.error ||
         recipesRes.error ||
+        metaRes.error ||
         mappingRes.error ||
         pricesRes.error ||
         dismissalsRes.error
@@ -185,17 +188,28 @@ export default function MainMenuScreen() {
       )
       const infoByItem = latestInvoiceInfoByItem(invoicesRes.data ?? [])
       const sellingByMenu = new Map((pricesRes.data ?? []).map((p) => [p.menu_name, Number(p.selling_price)]))
-      const byMenu = new Map()
+      const rowsByMenu = new Map()
       for (const r of recipesRes.data ?? []) {
-        if (!byMenu.has(r.menu_name)) byMenu.set(r.menu_name, [])
-        byMenu.get(r.menu_name).push(r)
+        if (!rowsByMenu.has(r.menu_name)) rowsByMenu.set(r.menu_name, [])
+        rowsByMenu.get(r.menu_name).push(r)
       }
-      const marginWarnings = [...byMenu.entries()]
-        .map(([menuName, recipeRows]) => {
-          const { totalCost } = computeMenuCost({ recipeRows, mappingByIngredient, infoByItem })
-          const sellingPrice = sellingByMenu.get(menuName) ?? null
+      const menuMeta = (metaRes.data ?? []).filter((m) => m.recipe_type === 'menu')
+      const subMeta = (metaRes.data ?? []).filter((m) => m.recipe_type === 'sub')
+      const subRecipeRowsByMenu = new Map(subMeta.map((m) => [m.menu_name, rowsByMenu.get(m.menu_name) ?? []]))
+      const subRecipeMetaByMenu = new Map(subMeta.map((m) => [m.menu_name, m]))
+      const subUnitCostByName = computeAllSubRecipeUnitCosts({
+        subRecipeRowsByMenu,
+        subRecipeMetaByMenu,
+        mappingByIngredient,
+        infoByItem,
+      })
+      const marginWarnings = menuMeta
+        .map((meta) => {
+          const recipeRows = rowsByMenu.get(meta.menu_name) ?? []
+          const { totalCost } = computeMenuCost({ recipeRows, mappingByIngredient, infoByItem, subUnitCostByName })
+          const sellingPrice = sellingByMenu.get(meta.menu_name) ?? null
           const ratio = sellingPrice ? (totalCost / sellingPrice) * 100 : null
-          return { menuName, ratio }
+          return { menuName: meta.menu_name, ratio }
         })
         .filter((m) => m.ratio != null && m.ratio >= MARGIN_WARNING_RATIO)
         .sort((a, b) => b.ratio - a.ratio)

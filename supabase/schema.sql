@@ -578,6 +578,54 @@ create policy "recipes are publicly deletable"
   on recipes for delete
   using (true);
 
+-- is_sub_recipe: true면 이 줄은 원재료가 아니라 매장에서 만든 부재료(recipe_meta.recipe_type
+-- ='sub')를 그대로 가져다 쓴다는 뜻이다. 이때 ingredient_name엔 그 부재료의 menu_name을,
+-- amount_g엔 그 부재료의 yield_unit 기준 사용량(예: "굴림만두" 5개 → 5)을 넣는다.
+alter table recipes add column if not exists is_sub_recipe boolean not null default false;
+
+-- recipe_meta: recipes(menu_name)마다 하나씩 있는 메타 정보. recipe_type으로 손님에게 파는
+-- "메뉴"인지 매장에서 만드는 "부재료"인지 구분한다. 부재료는 yield_qty(총 산출량)와
+-- yield_unit(개/인분/ml 등 그 단위)을 추가로 갖고, 재료비 합계를 yield_qty로 나눠 1단위당
+-- 단가를 낸다. 부재료는 원재료만 참조할 수 있고(다른 부재료 참조 불가, 순환참조 방지),
+-- 메뉴는 원재료와 부재료를 섞어 쓸 수 있다.
+create table if not exists recipe_meta (
+  store_code text not null references stores(code),
+  menu_name text not null,
+  recipe_type text not null default 'menu' check (recipe_type in ('menu', 'sub')),
+  yield_qty numeric,
+  yield_unit text,
+  created_at timestamptz not null default now(),
+  primary key (store_code, menu_name)
+);
+
+-- 이 테이블이 생기기 전부터 있던 레시피는 전부 "메뉴"였으므로 그대로 채워 넣는다.
+insert into recipe_meta (store_code, menu_name, recipe_type)
+select distinct store_code, menu_name, 'menu' from recipes
+on conflict (store_code, menu_name) do nothing;
+
+alter table recipe_meta enable row level security;
+
+drop policy if exists "recipe_meta are publicly readable" on recipe_meta;
+create policy "recipe_meta are publicly readable"
+  on recipe_meta for select
+  using (true);
+
+drop policy if exists "recipe_meta are publicly insertable" on recipe_meta;
+create policy "recipe_meta are publicly insertable"
+  on recipe_meta for insert
+  with check (true);
+
+drop policy if exists "recipe_meta are publicly updatable" on recipe_meta;
+create policy "recipe_meta are publicly updatable"
+  on recipe_meta for update
+  using (true)
+  with check (true);
+
+drop policy if exists "recipe_meta are publicly deletable" on recipe_meta;
+create policy "recipe_meta are publicly deletable"
+  on recipe_meta for delete
+  using (true);
+
 -- ingredient_mapping: 레시피 재료명 ↔ 입고 물품명 연결. 재료명 하나당 매칭은 1개만 유지하고
 -- (unique 제약), 재매칭 시 upsert로 덮어쓴다.
 create table if not exists ingredient_mapping (
