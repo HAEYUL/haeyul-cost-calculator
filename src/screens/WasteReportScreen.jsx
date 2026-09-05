@@ -4,7 +4,7 @@ import { useStore } from '../context/StoreContext'
 import { supabase } from '../lib/supabaseClient'
 import { latestInvoiceInfoByItem } from '../lib/costCalc'
 
-const UNIT_LABELS = { g: 'g', kg: 'kg', ea: '개', other: '기타' }
+const UNIT_LABELS = { g: 'g', kg: 'kg', ea: '개', box: '박스', other: '기타' }
 
 function pad2(n) {
   return String(n).padStart(2, '0')
