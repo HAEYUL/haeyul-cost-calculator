@@ -10,9 +10,11 @@ const STATUS_LABEL = {
   unmapped: '재료 매칭 필요',
   no_price: '입고 단가 없음',
   no_amount: '사용량 미입력',
-  unit_mismatch: '단가 환산 불가 (개/기타 단위)',
+  unit_mismatch: '매칭된 물품의 단위 정보 없음',
   sub_no_cost: '부재료 원가 계산 안 됨',
 }
+
+const UNIT_LABELS = { g: 'g', kg: 'g', ea: '개', box: '박스', other: '기타' }
 
 function emptyItem() {
   return { name: '', amountG: '', isSubRecipe: false }
@@ -385,7 +387,7 @@ export default function CostDetailScreen() {
                           inputMode="decimal"
                           value={item.amountG}
                           onChange={(e) => updateItem(index, 'amountG', e.target.value)}
-                          placeholder={item.isSubRecipe ? '사용량' : 'g'}
+                          placeholder={item.isSubRecipe ? '사용량' : (row?.unit ? UNIT_LABELS[row.unit] ?? row.unit : 'g')}
                         />
                         <span className="row-value">
                           {row?.cost != null
