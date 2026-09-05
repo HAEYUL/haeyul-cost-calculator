@@ -243,11 +243,11 @@ export default function InvoiceScreen() {
         setItems(
           (data.invoices ?? []).map((item) => ({
             name: item.item_name ?? '',
-            quantity: item.quantity ?? '',
-            unitPrice: item.unit_price ?? '',
+            quantity: item.quantity != null ? String(item.quantity) : '',
+            unitPrice: item.unit_price != null ? String(item.unit_price) : '',
             unit: item.unit ?? 'kg',
-            amount: item.amount ?? '',
-            vat: item.vat ?? '',
+            amount: item.amount != null ? String(item.amount) : '',
+            vat: item.vat != null ? String(item.vat) : '',
           })),
         )
       })
@@ -320,11 +320,11 @@ export default function InvoiceScreen() {
       setItems(
         (data.items ?? []).map((item) => ({
           name: item.name ?? '',
-          quantity: item.quantity ?? '',
-          unitPrice: item.unitPrice ?? '',
+          quantity: item.quantity != null ? String(item.quantity) : '',
+          unitPrice: item.unitPrice != null ? String(item.unitPrice) : '',
           unit: item.unit ?? 'kg',
-          amount: item.amount ?? '',
-          vat: item.vat ?? '',
+          amount: item.amount != null ? String(item.amount) : '',
+          vat: item.vat != null ? String(item.vat) : '',
         })),
       )
       setAnalyzed(true)

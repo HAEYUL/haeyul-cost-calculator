@@ -23,7 +23,7 @@ function positionAfterDigits(str, digitCount) {
 // 늘거나 줄어도 커서가 튀지 않도록, 입력한 숫자 개수를 기준으로 커서 위치를 복원한다.
 export default function AmountInput({ value, onChange, ...props }) {
   const ref = useRef(null)
-  const digits = (value ?? '').replace(/[^\d]/g, '')
+  const digits = String(value ?? '').replace(/[^\d]/g, '')
   const formatted = digits === '' ? '' : Number(digits).toLocaleString('ko-KR')
 
   const handleChange = (e) => {
