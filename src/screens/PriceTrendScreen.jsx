@@ -35,6 +35,8 @@ export default function PriceTrendScreen() {
   const [itemSearch, setItemSearch] = useState('')
   const [foodspringQuery, setFoodspringQuery] = useState('')
 
+  const [directSearch, setDirectSearch] = useState('')
+
   const [vendorFilter, setVendorFilter] = useState('all')
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo] = useState('')
@@ -118,6 +120,19 @@ export default function PriceTrendScreen() {
         ),
       ].sort((a, b) => a.localeCompare(b))
     : []
+
+  // 거래처를 고르지 않아도 물품명만으로 바로 찾을 수 있게, 전체 거래처의 물품명을 대상으로
+  // 입력한 글자로 "시작하는" 물품만 걸러서 보여준다(중간에 포함된 건 잡지 않음).
+  const allItemNames = [...new Set(invoiceIndex.map((r) => r.item_name))].sort((a, b) => a.localeCompare(b))
+  const trimmedDirectSearch = directSearch.trim().toLowerCase()
+  const directSuggestions = trimmedDirectSearch
+    ? allItemNames.filter((name) => name.toLowerCase().startsWith(trimmedDirectSearch)).slice(0, 8)
+    : []
+
+  const handleSelectDirectItem = (name) => {
+    setSelectedItem(name)
+    setDirectSearch('')
+  }
 
   const handleItemFilterVendorChange = (value) => {
     setItemFilterVendor(value)
@@ -211,6 +226,34 @@ export default function PriceTrendScreen() {
 
       {!supabase && <p className="hint">Supabase가 설정되지 않았습니다.</p>}
       {error && <p className="error-text">{error}</p>}
+
+      <div className="field">
+        <label htmlFor="directItemSearch">물품명으로 바로 찾기</label>
+        <input
+          id="directItemSearch"
+          type="text"
+          className="input"
+          value={directSearch}
+          onChange={(e) => setDirectSearch(e.target.value)}
+          placeholder="예: 대파"
+        />
+      </div>
+      {directSuggestions.length > 0 && (
+        <ul className="history-list">
+          {directSuggestions.map((name) => (
+            <li key={name} className="history-row">
+              <button type="button" className="cost-row-btn" onClick={() => handleSelectDirectItem(name)}>
+                <div className="history-row-main">
+                  <span className="history-item">{name}</span>
+                </div>
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+      {trimmedDirectSearch && directSuggestions.length === 0 && (
+        <p className="hint">"{directSearch}"(으)로 시작하는 물품이 없어요.</p>
+      )}
 
       <div className="field">
         <label htmlFor="itemFilterVendor">거래처 선택</label>
