@@ -1,6 +1,8 @@
-// 입고 내역의 단가는 매장이 입력한 "단위" 기준(g/kg/개/기타)이고, 레시피 사용량은 항상 g이므로
-// 두 값을 그대로 곱하면 안 된다. 여기서 kg→g만 자동 환산하고, 개(ea)·기타(other)처럼 무게가
-// 아닌 단위는 원가에서 제외하고 'unit_mismatch'로 표시해 사장님이 직접 확인하게 한다.
+// 입고 내역의 단가는 매장이 입력한 "단위" 기준(g/kg/개/박스/기타)이다. 레시피 재료량은 그
+// 재료가 매칭된 물품의 단위를 그대로 따른다 — g/kg이면 g로 입력해서 g당 단가로 환산하고,
+// 개/박스/기타처럼 개수 단위면 재료량 자체를 그 단위의 개수로 입력받아 단가를 그대로 곱한다
+// (환산 없음). 단위를 아예 알 수 없을 때만(매칭된 물품에 단위 기록이 없는 옛 데이터 등)
+// 'unit_mismatch'로 표시해 원가에서 제외한다.
 export function latestInvoiceInfoByItem(invoiceRows) {
   const map = new Map()
   const sorted = [...invoiceRows].sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
@@ -12,10 +14,10 @@ export function latestInvoiceInfoByItem(invoiceRows) {
   return map
 }
 
-function pricePerGram(unitPrice, unit) {
-  if (unit === 'g') return unitPrice
+function unitCostPerAmount(unitPrice, unit) {
+  if (unit == null) return null
   if (unit === 'kg') return unitPrice / 1000
-  return null
+  return unitPrice
 }
 
 // subUnitCostByName: 부재료(menu_name) → 1단위(개/인분/ml 등)당 단가. 부재료를 참조하는
@@ -73,12 +75,12 @@ export function computeMenuCost({ recipeRows, mappingByIngredient, infoByItem, s
       status = 'no_amount'
       hasMissing = true
     } else {
-      const perGram = pricePerGram(unitPrice, unit)
-      if (perGram == null) {
+      const perAmount = unitCostPerAmount(unitPrice, unit)
+      if (perAmount == null) {
         status = 'unit_mismatch'
         hasMissing = true
       } else {
-        cost = amountG * perGram
+        cost = amountG * perAmount
         totalCost += cost
       }
     }

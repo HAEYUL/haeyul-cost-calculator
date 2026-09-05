@@ -7,6 +7,8 @@ import { latestInvoiceInfoByItem, computeSubRecipeCost } from '../lib/costCalc'
 import { copyRecipe } from '../lib/copyRecipe'
 import { useIngredientMatch } from '../hooks/useIngredientMatch'
 
+const UNIT_LABELS = { g: 'g', kg: 'g', ea: '개', box: '박스', other: '기타' }
+
 function emptyIngredient() {
   return { name: '', amountG: '', originalText: '' }
 }
@@ -32,6 +34,7 @@ export default function RecipeScreen() {
   const [listLoading, setListLoading] = useState(false)
 
   const [mappingByIngredient, setMappingByIngredient] = useState(new Map())
+  const [infoByItem, setInfoByItem] = useState(new Map())
   const [invoiceItems, setInvoiceItems] = useState([])
   const [ingredientNameOptions, setIngredientNameOptions] = useState([])
 
@@ -74,6 +77,7 @@ export default function RecipeScreen() {
       }
 
       setMappingByIngredient(mappingByIngredient)
+      setInfoByItem(infoByItem)
       setInvoiceItems([...new Set((invoicesRes.data ?? []).map((r) => r.item_name))].sort((a, b) => a.localeCompare(b)))
       setIngredientNameOptions(
         [...new Set((recipesRes.data ?? []).filter((r) => !r.is_sub_recipe).map((r) => r.ingredient_name))].sort(
@@ -416,12 +420,18 @@ export default function RecipeScreen() {
           <div className="item-table item-table-narrow">
             <div className="item-row item-row-3 item-row-head">
               <span>재료명</span>
-              <span>사용량(g)</span>
+              <span>사용량</span>
               <span />
             </div>
             {items.map((item, index) => {
               const trimmedName = item.name.trim()
               const matchedInvoiceItem = trimmedName ? mappingByIngredient.get(trimmedName) : null
+              const matchedUnit = matchedInvoiceItem ? infoByItem.get(matchedInvoiceItem)?.unit : null
+              const amountPlaceholder = item.originalText
+                ? `원본: ${item.originalText}`
+                : matchedUnit
+                  ? (UNIT_LABELS[matchedUnit] ?? matchedUnit)
+                  : 'g'
               return (
                 <Fragment key={index}>
                   <div className="item-row item-row-3">
@@ -437,7 +447,7 @@ export default function RecipeScreen() {
                       inputMode="decimal"
                       value={item.amountG}
                       onChange={(e) => updateItem(index, 'amountG', e.target.value)}
-                      placeholder={item.originalText ? `원본: ${item.originalText}` : 'g'}
+                      placeholder={amountPlaceholder}
                     />
                     <button type="button" className="icon-btn" onClick={() => removeItem(index)} aria-label="행 삭제">
                       ✕
