@@ -1,10 +1,11 @@
-import { useEffect, useState } from 'react'
+import { Fragment, useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useStore } from '../context/StoreContext'
 import { supabase } from '../lib/supabaseClient'
 import { compressImage } from '../lib/compressImage'
 import { latestInvoiceInfoByItem, computeSubRecipeCost } from '../lib/costCalc'
 import { copyRecipe } from '../lib/copyRecipe'
+import { useIngredientMatch } from '../hooks/useIngredientMatch'
 
 function emptyIngredient() {
   return { name: '', amountG: '', originalText: '' }
@@ -29,6 +30,10 @@ export default function RecipeScreen() {
 
   const [subRecipes, setSubRecipes] = useState([])
   const [listLoading, setListLoading] = useState(false)
+
+  const [mappingByIngredient, setMappingByIngredient] = useState(new Map())
+  const [invoiceItems, setInvoiceItems] = useState([])
+  const [ingredientNameOptions, setIngredientNameOptions] = useState([])
 
   const [deleteTarget, setDeleteTarget] = useState(null)
   const [deleteCount, setDeleteCount] = useState(null)
@@ -67,6 +72,14 @@ export default function RecipeScreen() {
         if (!rowsByMenu.has(r.menu_name)) rowsByMenu.set(r.menu_name, [])
         rowsByMenu.get(r.menu_name).push(r)
       }
+
+      setMappingByIngredient(mappingByIngredient)
+      setInvoiceItems([...new Set((invoicesRes.data ?? []).map((r) => r.item_name))].sort((a, b) => a.localeCompare(b)))
+      setIngredientNameOptions(
+        [...new Set((recipesRes.data ?? []).filter((r) => !r.is_sub_recipe).map((r) => r.ingredient_name))].sort(
+          (a, b) => a.localeCompare(b),
+        ),
+      )
       const list = (metaRes.data ?? [])
         .map((meta) => {
           const rows = rowsByMenu.get(meta.menu_name) ?? []
@@ -90,6 +103,12 @@ export default function RecipeScreen() {
       setListLoading(false)
     })
   }, [store, historyKey])
+
+  const ingredientMatch = useIngredientMatch({
+    storeCode: store?.code,
+    invoiceItems,
+    onMatchSaved: () => setHistoryKey((k) => k + 1),
+  })
 
   if (!store) return null
 
@@ -386,6 +405,12 @@ export default function RecipeScreen() {
       {error && <p className="error-text">{error}</p>}
       {saveMessage && <p className="success-text">{saveMessage}</p>}
 
+      <datalist id="recipeIngredientNameOptions">
+        {ingredientNameOptions.map((name) => (
+          <option key={name} value={name} />
+        ))}
+      </datalist>
+
       {items.length > 0 && (
         <div className="item-table-wrap">
           <div className="item-table item-table-narrow">
@@ -394,26 +419,94 @@ export default function RecipeScreen() {
               <span>사용량(g)</span>
               <span />
             </div>
-            {items.map((item, index) => (
-              <div className="item-row item-row-3" key={index}>
-                <input
-                  className="input"
-                  value={item.name}
-                  onChange={(e) => updateItem(index, 'name', e.target.value)}
-                  placeholder="재료명"
-                />
-                <input
-                  className="input"
-                  inputMode="decimal"
-                  value={item.amountG}
-                  onChange={(e) => updateItem(index, 'amountG', e.target.value)}
-                  placeholder={item.originalText ? `원본: ${item.originalText}` : 'g'}
-                />
-                <button type="button" className="icon-btn" onClick={() => removeItem(index)} aria-label="행 삭제">
-                  ✕
-                </button>
-              </div>
-            ))}
+            {items.map((item, index) => {
+              const trimmedName = item.name.trim()
+              const matchedInvoiceItem = trimmedName ? mappingByIngredient.get(trimmedName) : null
+              return (
+                <Fragment key={index}>
+                  <div className="item-row item-row-3">
+                    <input
+                      className="input"
+                      list="recipeIngredientNameOptions"
+                      value={item.name}
+                      onChange={(e) => updateItem(index, 'name', e.target.value)}
+                      placeholder="재료명"
+                    />
+                    <input
+                      className="input"
+                      inputMode="decimal"
+                      value={item.amountG}
+                      onChange={(e) => updateItem(index, 'amountG', e.target.value)}
+                      placeholder={item.originalText ? `원본: ${item.originalText}` : 'g'}
+                    />
+                    <button type="button" className="icon-btn" onClick={() => removeItem(index)} aria-label="행 삭제">
+                      ✕
+                    </button>
+                  </div>
+                  {trimmedName && (
+                    <p className={matchedInvoiceItem ? 'hint' : 'hint cost-warning'}>
+                      {matchedInvoiceItem ? `→ ${matchedInvoiceItem}` : '⚠ 매칭 필요'}{' '}
+                      <button
+                        type="button"
+                        className="inline-link"
+                        onClick={() => ingredientMatch.openMatch(index, trimmedName)}
+                      >
+                        {matchedInvoiceItem ? '변경' : '매칭하기'}
+                      </button>
+                    </p>
+                  )}
+                  {ingredientMatch.matchingIndex === index && (
+                    <div className="match-panel">
+                      {ingredientMatch.error && <p className="error-text">{ingredientMatch.error}</p>}
+                      {ingredientMatch.suggesting && <p className="hint">추천 후보를 찾는 중...</p>}
+                      {!ingredientMatch.suggesting && ingredientMatch.suggestions.length > 0 && (
+                        <div className="match-suggestions">
+                          {ingredientMatch.suggestions.map((s) => (
+                            <button
+                              key={s}
+                              type="button"
+                              className="chip"
+                              onClick={() => ingredientMatch.confirmMatch(s)}
+                              disabled={ingredientMatch.saving}
+                            >
+                              {s}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                      {invoiceItems.length > 0 && (
+                        <div className="field">
+                          <select
+                            className="select"
+                            value={ingredientMatch.manualChoice}
+                            onChange={(e) => ingredientMatch.setManualChoice(e.target.value)}
+                          >
+                            <option value="">물품 선택...</option>
+                            {invoiceItems.map((invItem) => (
+                              <option key={invItem} value={invItem}>
+                                {invItem}
+                              </option>
+                            ))}
+                          </select>
+                          <button
+                            type="button"
+                            className="btn-secondary"
+                            onClick={() => ingredientMatch.confirmMatch(ingredientMatch.manualChoice)}
+                            disabled={!ingredientMatch.manualChoice || ingredientMatch.saving}
+                          >
+                            이 물품으로 연결
+                          </button>
+                        </div>
+                      )}
+                      {invoiceItems.length === 0 && <p className="hint">아직 등록된 입고 물품이 없습니다.</p>}
+                      <button type="button" className="link-btn" onClick={ingredientMatch.cancelMatch}>
+                        취소
+                      </button>
+                    </div>
+                  )}
+                </Fragment>
+              )
+            })}
           </div>
         </div>
       )}
