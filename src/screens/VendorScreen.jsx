@@ -419,6 +419,7 @@ export default function VendorScreen() {
                     <p className="hint">다시 한번 확인할게요. "{v.name}"의 모든 자료가 지금 삭제돼요.</p>
                   </>
                 )}
+                {error && <p className="error-text">{error}</p>}
                 <div className="invoice-form">
                   <button type="button" className="btn-secondary" onClick={closeDeleteConfirm} disabled={deleting}>
                     취소
