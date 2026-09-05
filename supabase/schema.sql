@@ -63,6 +63,12 @@ create policy "vendors are publicly insertable"
   on vendors for insert
   with check (true);
 
+-- 자료 없는(또는 확인 후) 거래처를 지울 수 있어야 한다.
+drop policy if exists "vendors are publicly deletable" on vendors;
+create policy "vendors are publicly deletable"
+  on vendors for delete
+  using (true);
+
 -- invoice_batches: 거래명세표 사진 한 장(=한 번의 저장)을 전표 하나로 묶는다. 거래처별
 -- 입고액/미지급금 계산과 날짜별 정리는 이 단위를 기준으로 한다.
 create table if not exists invoice_batches (
@@ -204,6 +210,13 @@ create policy "stock_usage is publicly deletable"
   on stock_usage for delete
   using (true);
 
+-- 재고 관리에서 물품명을 일괄 변경할 때 기존 사용량 행의 item_name을 고쳐 써야 한다.
+drop policy if exists "stock_usage is publicly updatable" on stock_usage;
+create policy "stock_usage is publicly updatable"
+  on stock_usage for update
+  using (true)
+  with check (true);
+
 -- waste_records: 상하거나 조리 실수 등으로 버린(폐기) 물량 기록. stock_usage(정상 사용)와는
 -- 별도로 관리해서, 현재고 계산(입고 − 사용 − 폐기)과 손실 금액 리포트에 모두 반영한다.
 create table if not exists waste_records (
@@ -267,6 +280,13 @@ create policy "waste_records are publicly deletable"
   on waste_records for delete
   using (true);
 
+-- 재고 관리에서 물품명을 일괄 변경할 때 기존 폐기 행의 item_name을 고쳐 써야 한다.
+drop policy if exists "waste_records are publicly updatable" on waste_records;
+create policy "waste_records are publicly updatable"
+  on waste_records for update
+  using (true)
+  with check (true);
+
 -- stock_adjustments: 실물 재고를 눈으로 세어본 결과와 계산상 재고(입고−사용−폐기)가
 -- 다를 때 그 차이(delta)를 기록해 맞춘다. counted_qty는 그때 실제로 센 수량(참고용),
 -- delta는 계산상 재고에 더하거나 뺄 보정값이다. 현재고는 이제
@@ -301,6 +321,13 @@ drop policy if exists "stock_adjustments are publicly deletable" on stock_adjust
 create policy "stock_adjustments are publicly deletable"
   on stock_adjustments for delete
   using (true);
+
+-- 재고 관리에서 물품명을 일괄 변경할 때 기존 실사 보정 행의 item_name을 고쳐 써야 한다.
+drop policy if exists "stock_adjustments are publicly updatable" on stock_adjustments;
+create policy "stock_adjustments are publicly updatable"
+  on stock_adjustments for update
+  using (true)
+  with check (true);
 
 -- dashboard_dismissals: 홈 대시보드 알림 카드를 확인(X)했을 때, 그 시점의 알림 내용을
 -- signature(문자열)로 같이 저장해 둔다. 다음에 다시 열었을 때 같은 내용이면 계속 숨기고,
@@ -475,6 +502,13 @@ create policy "invoices are publicly deletable"
   on invoices for delete
   using (true);
 
+-- 재고 관리에서 물품명을 일괄 변경할 때 기존 입고 행의 item_name을 고쳐 써야 한다.
+drop policy if exists "invoices are publicly updatable" on invoices;
+create policy "invoices are publicly updatable"
+  on invoices for update
+  using (true)
+  with check (true);
+
 -- price_changes: 단가가 바뀐 시점을 쌓아두는 알림 로그. 입고 저장 시 같은 거래처+물품명
 -- (정확히 일치하는 경우만)의 직전 단가와 다르면 한 행씩 기록된다.
 create table if not exists price_changes (
@@ -505,6 +539,13 @@ create policy "price_changes are publicly readable"
 drop policy if exists "price_changes are publicly insertable" on price_changes;
 create policy "price_changes are publicly insertable"
   on price_changes for insert
+  with check (true);
+
+-- 거래처를 삭제할 때 단가 변동 로그는 남기고 vendor_id만 비워서 연결을 끊어야 한다.
+drop policy if exists "price_changes are publicly updatable" on price_changes;
+create policy "price_changes are publicly updatable"
+  on price_changes for update
+  using (true)
   with check (true);
 
 -- recipes: 메뉴별 재료 사용량(g). 한 재료당 한 행. store_code + menu_name으로 묶어서 조회한다.
