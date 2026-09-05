@@ -343,7 +343,10 @@ export default function VendorDetailScreen() {
               type="date"
               className="input"
               value={dateFrom}
-              onChange={(e) => setDateFrom(e.target.value)}
+              onChange={(e) => {
+                setDateFrom(e.target.value)
+                e.target.blur()
+              }}
               aria-label="시작일"
             />
             <span className="date-range-sep">~</span>
@@ -351,7 +354,10 @@ export default function VendorDetailScreen() {
               type="date"
               className="input"
               value={dateTo}
-              onChange={(e) => setDateTo(e.target.value)}
+              onChange={(e) => {
+                setDateTo(e.target.value)
+                e.target.blur()
+              }}
               aria-label="종료일"
             />
           </div>
