@@ -535,6 +535,14 @@ h1 {
   min-width: 320px;
 }
 
+.item-row-cost {
+  grid-template-columns: 0.9fr 2fr 1fr 1.2fr auto;
+}
+
+.item-table-cost {
+  min-width: 480px;
+}
+
 .recipe-actions {
   display: flex;
   gap: 12px;

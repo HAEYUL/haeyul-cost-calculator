@@ -67,6 +67,14 @@ export default function MatchingScreen() {
   const [manualChoice, setManualChoice] = useState('')
   const [saving, setSaving] = useState(false)
 
+  const [showAddForm, setShowAddForm] = useState(false)
+  const [newIngredientName, setNewIngredientName] = useState('')
+
+  const [deleteTarget, setDeleteTarget] = useState(null)
+  const [deleteCount, setDeleteCount] = useState(null)
+  const [deleteConfirmStage, setDeleteConfirmStage] = useState(1)
+  const [deleting, setDeleting] = useState(false)
+
   useEffect(() => {
     if (!store) navigate('/', { replace: true })
   }, [store, navigate])
@@ -144,20 +152,58 @@ export default function MatchingScreen() {
     setDataKey((k) => k + 1)
   }
 
-  const unlink = async (ingredientName) => {
+  const openUnlinkConfirm = async (ingredientName) => {
+    setDeleteTarget(ingredientName)
+    setDeleteConfirmStage(1)
+    setDeleteCount(null)
+    setError('')
     if (!supabase) return
-    if (!window.confirm(`"${ingredientName}"의 연결을 해제할까요?`)) return
+    const { count } = await supabase
+      .from('recipes')
+      .select('id', { count: 'exact', head: true })
+      .eq('store_code', store.code)
+      .eq('is_sub_recipe', false)
+      .eq('ingredient_name', ingredientName)
+    setDeleteCount(count ?? 0)
+  }
+
+  const closeUnlinkConfirm = () => {
+    setDeleteTarget(null)
+    setDeleteCount(null)
+    setDeleteConfirmStage(1)
+  }
+
+  const handleConfirmUnlinkClick = () => {
+    if ((deleteCount ?? 0) > 0 && deleteConfirmStage === 1) {
+      setDeleteConfirmStage(2)
+      return
+    }
+    unlink()
+  }
+
+  const unlink = async () => {
+    if (!supabase || !deleteTarget) return
+    setDeleting(true)
+    setError('')
     const { error: err } = await supabase
       .from('ingredient_mapping')
       .delete()
       .eq('store_code', store.code)
-      .eq('recipe_ingredient_name', ingredientName)
+      .eq('recipe_ingredient_name', deleteTarget)
+    setDeleting(false)
     if (err) {
       setError(err.message)
       return
     }
-    if (selected === ingredientName) setSelected(null)
+    if (selected === deleteTarget) setSelected(null)
+    closeUnlinkConfirm()
     setDataKey((k) => k + 1)
+  }
+
+  const confirmNewMatch = async (invoiceItemName) => {
+    await confirmMatch(invoiceItemName)
+    setShowAddForm(false)
+    setNewIngredientName('')
   }
 
   const panelProps = {
@@ -187,6 +233,44 @@ export default function MatchingScreen() {
 
       {!loading && supabase && (
         <>
+          <div className="section-title-row">
+            <h2 className="section-title">새 재료 매칭 추가</h2>
+            <button
+              type="button"
+              className="icon-btn"
+              aria-label="새 재료 매칭 추가"
+              onClick={() => {
+                setShowAddForm((v) => !v)
+                setNewIngredientName('')
+                setSelected(null)
+              }}
+            >
+              {showAddForm ? '−' : '+'}
+            </button>
+          </div>
+          {showAddForm && (
+            <div className="field">
+              <input
+                className="input"
+                value={newIngredientName}
+                onChange={(e) => setNewIngredientName(e.target.value)}
+                placeholder="아직 레시피에 없는 재료명도 미리 매칭해둘 수 있어요"
+                autoFocus
+              />
+              <button
+                type="button"
+                className="btn-secondary"
+                onClick={() => openMatch(newIngredientName.trim())}
+                disabled={!newIngredientName.trim()}
+              >
+                매칭할 물품 찾기
+              </button>
+              {selected === newIngredientName.trim() && newIngredientName.trim() && (
+                <MatchPanel ingredientName={selected} {...panelProps} onConfirm={confirmNewMatch} />
+              )}
+            </div>
+          )}
+
           <h2 className="section-title">매칭 대기 ({unmatched.length})</h2>
           {unmatched.length === 0 && <p className="hint">모든 재료가 연결되었습니다.</p>}
           <ul className="history-list">
@@ -214,12 +298,52 @@ export default function MatchingScreen() {
                   <button type="button" className="link-btn" onClick={() => openMatch(m.recipe_ingredient_name)}>
                     변경
                   </button>
-                  <button type="button" className="link-btn link-btn-danger" onClick={() => unlink(m.recipe_ingredient_name)}>
+                  <button
+                    type="button"
+                    className="link-btn link-btn-danger"
+                    onClick={() => openUnlinkConfirm(m.recipe_ingredient_name)}
+                  >
                     연결 해제
                   </button>
                 </div>
                 {selected === m.recipe_ingredient_name && (
                   <MatchPanel ingredientName={m.recipe_ingredient_name} {...panelProps} />
+                )}
+                {deleteTarget === m.recipe_ingredient_name && (
+                  <div className="price-alert-box price-alert-box-danger">
+                    {deleteCount == null ? (
+                      <p className="hint">확인 중...</p>
+                    ) : deleteCount === 0 ? (
+                      <p className="price-alert-title">"{m.recipe_ingredient_name}" 연결을 해제할까요?</p>
+                    ) : deleteConfirmStage === 1 ? (
+                      <>
+                        <p className="price-alert-title">⚠️ 이 재료를 쓰는 레시피가 {deleteCount}곳 있어요</p>
+                        <p className="hint">지금 해제하면 그 레시피들의 원가 계산에서 이 재료가 조용히 빠져요. 정말 해제할까요?</p>
+                      </>
+                    ) : (
+                      <>
+                        <p className="price-alert-title">정말 해제할까요?</p>
+                        <p className="hint">다시 한번 확인할게요. "{m.recipe_ingredient_name}" 연결이 지금 해제돼요.</p>
+                      </>
+                    )}
+                    <div className="invoice-form">
+                      <button type="button" className="btn-secondary" onClick={closeUnlinkConfirm} disabled={deleting}>
+                        취소
+                      </button>
+                      <button
+                        type="button"
+                        className="btn-primary"
+                        onClick={handleConfirmUnlinkClick}
+                        disabled={deleting || deleteCount == null}
+                      >
+                        {deleting
+                          ? '해제 중...'
+                          : (deleteCount ?? 0) > 0 && deleteConfirmStage === 1
+                            ? '사용 중, 계속하기'
+                            : '연결 해제'}
+                      </button>
+                    </div>
+                  </div>
                 )}
               </li>
             ))}
