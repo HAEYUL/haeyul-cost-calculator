@@ -147,9 +147,11 @@ export default function VendorDetailScreen() {
   const batchesSinceAnchor = latestBatchWithBalance ? batches.slice(0, latestBatchWithBalanceIndex) : batches
   const invoicedSinceAnchor = batchesSinceAnchor.reduce((sum, b) => sum + Number(b.total_amount), 0)
 
-  // 앵커 이후 입력한 결제만 차감한다. 날짜를 안 넣은 결제는 최근에 입력한 것으로 보고 포함시킨다.
+  // 앵커 이후(앵커 명세표와 같은 날 포함) 입력한 결제만 차감한다 — 명세표의 잔액은 그 날 입고분만
+  // 반영된 값이라, 같은 날 별도로 입금한 결제는 아직 안 빠져 있기 때문. 날짜를 안 넣은 결제는
+  // 최근에 입력한 것으로 보고 포함시킨다.
   const paymentsSinceAnchor = payments
-    .filter((p) => !anchorDate || !p.paid_date || p.paid_date > anchorDate)
+    .filter((p) => !anchorDate || !p.paid_date || p.paid_date >= anchorDate)
     .reduce((sum, p) => sum + Number(p.amount), 0)
 
   const liveBalance = anchorBalance + invoicedSinceAnchor - paymentsSinceAnchor
@@ -172,7 +174,7 @@ export default function VendorDetailScreen() {
     const strictlyBetween = batches.slice(newestIndex + 1, previousIndex)
     const invoicedBetween = strictlyBetween.reduce((sum, b) => sum + Number(b.total_amount), 0)
     const paidBetween = payments
-      .filter((p) => (!p.paid_date || p.paid_date > previousDate) && (!p.paid_date || p.paid_date <= newestDate))
+      .filter((p) => (!p.paid_date || p.paid_date >= previousDate) && (!p.paid_date || p.paid_date <= newestDate))
       .reduce((sum, p) => sum + Number(p.amount), 0)
 
     const expected = endingBalanceOf(previous) + invoicedBetween - paidBetween

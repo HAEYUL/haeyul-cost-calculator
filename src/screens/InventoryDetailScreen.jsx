@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useStore } from '../context/StoreContext'
 import { supabase } from '../lib/supabaseClient'
-import { reidentifyItem } from '../lib/reidentifyItem'
+import { reidentifyItem, weightConversionFactor } from '../lib/reidentifyItem'
 
 const UNIT_LABELS = { g: 'g', kg: 'kg', ea: '개', box: '박스', other: '기타' }
 const NO_UNIT_KEY = 'none'
@@ -60,11 +60,13 @@ export default function InventoryDetailScreen() {
   const [showRename, setShowRename] = useState(false)
   const [renameInput, setRenameInput] = useState(itemName)
   const [renameUnit, setRenameUnit] = useState(unit)
+  const [renameRatio, setRenameRatio] = useState('')
   const [renaming, setRenaming] = useState(false)
   const [renameMessage, setRenameMessage] = useState('')
 
   const [showMerge, setShowMerge] = useState(false)
   const [mergeIntoKey, setMergeIntoKey] = useState('')
+  const [mergeRatio, setMergeRatio] = useState('')
   const [merging, setMerging] = useState(false)
 
   useEffect(() => {
@@ -305,6 +307,7 @@ export default function InventoryDetailScreen() {
       storeCode: store.code,
       from: { itemName, unit },
       to: { itemName: newName, unit: renameUnit },
+      customRatio: renameRatio ? Number(renameRatio) : null,
     })
     setRenaming(false)
     if (err) {
@@ -313,7 +316,7 @@ export default function InventoryDetailScreen() {
     }
     if (priceNeedsReview) {
       setRenameMessage(
-        '단위를 바꿨어요. 개/박스/기타처럼 자동으로 단가를 맞출 수 없는 단위라 과거 단가 숫자는 그대로 남아있어요 — 최근 입고 단가가 새 단위 기준으로 맞는지 확인해주세요.',
+        '단위를 바꿨어요. 자동으로(또는 입력한 환산값으로) 단가를 맞출 수 없는 단위라 과거 단가 숫자는 그대로 남아있어요 — 최근 입고 단가가 새 단위 기준으로 맞는지 확인해주세요.',
       )
     }
     navigate(`/inventory/${encodeURIComponent(newName)}/${renameUnit ?? NO_UNIT_KEY}`, { replace: true })
@@ -330,6 +333,7 @@ export default function InventoryDetailScreen() {
       storeCode: store.code,
       from: { itemName, unit },
       to: { itemName: into.itemName, unit: into.unit },
+      customRatio: mergeRatio ? Number(mergeRatio) : null,
     })
     setMerging(false)
     if (err) {
@@ -364,6 +368,7 @@ export default function InventoryDetailScreen() {
             setShowMerge(false)
             setRenameInput(itemName)
             setRenameUnit(unit)
+            setRenameRatio('')
             setRenameMessage('')
           }}
         >
@@ -376,11 +381,16 @@ export default function InventoryDetailScreen() {
             setShowMerge((v) => !v)
             setShowRename(false)
             setMergeIntoKey('')
+            setMergeRatio('')
           }}
         >
           합치기
         </button>
       </div>
+
+      {unit === 'box' && (
+        <p className="hint">📦 박스당 개수/kg 환산 전이에요 · "이름/단위 수정"에서 등록할 수 있어요</p>
+      )}
 
       {showRename && (
         <div className="price-alert-box">
@@ -403,12 +413,37 @@ export default function InventoryDetailScreen() {
               ))}
             </select>
           </div>
+          {renameUnit !== unit && weightConversionFactor(unit, renameUnit) == null && (
+            <div className="field">
+              <label htmlFor="renameRatio">
+                1{unit ? UNIT_LABELS[unit] ?? unit : '단위 없음'} = 몇 {UNIT_LABELS[renameUnit] ?? renameUnit}인가요?
+                (선택)
+              </label>
+              <input
+                id="renameRatio"
+                className="input"
+                inputMode="decimal"
+                value={renameRatio}
+                onChange={(e) => setRenameRatio(e.target.value)}
+                placeholder="예: 12 (모르면 비워두세요)"
+              />
+            </div>
+          )}
           <p className="hint">
             "{itemName}"으로 저장된 모든 입고·사용·폐기·실사 기록이 새 이름/단위로 한 번에 바뀌어요. g↔kg 단위 변경은
-            과거 단가도 자동으로 맞춰지고, 그 외 단위 변경은 단가는 그대로 두고 단위만 바뀌어요. 되돌릴 수 없어요.
+            과거 단가도 자동으로 맞춰지고, 그 외 단위 변경은 위에 환산값을 입력하면 그 값으로, 안 입력하면 단가는
+            그대로 두고 단위만 바뀌어요. 되돌릴 수 없어요.
           </p>
           <div className="invoice-form">
-            <button type="button" className="btn-secondary" onClick={() => setShowRename(false)} disabled={renaming}>
+            <button
+              type="button"
+              className="btn-secondary"
+              onClick={() => {
+                setShowRename(false)
+                setRenameRatio('')
+              }}
+              disabled={renaming}
+            >
               취소
             </button>
             <button type="button" className="btn-primary" onClick={handleRename} disabled={renaming || !renameInput.trim()}>
@@ -431,14 +466,45 @@ export default function InventoryDetailScreen() {
               ))}
             </select>
           </div>
-          {mergeIntoKey && (
-            <p className="hint">
-              "{itemName}"의 모든 입고·사용·폐기·실사 기록이 선택한 물품으로 옮겨지고, "{itemName}"은 사라져요. 정말
-              같은 물품이 맞는지 확인해주세요 — 되돌릴 수 없어요.
-            </p>
-          )}
+          {mergeIntoKey &&
+            (() => {
+              const into = otherItems.find((r) => stockKey(r.itemName, r.unit) === mergeIntoKey)
+              const needsRatio = into && into.unit !== unit && weightConversionFactor(unit, into.unit) == null
+              return (
+                <>
+                  {needsRatio && (
+                    <div className="field">
+                      <label htmlFor="mergeRatio">
+                        1{unit ? UNIT_LABELS[unit] ?? unit : '단위 없음'} = 몇{' '}
+                        {into.unit ? UNIT_LABELS[into.unit] ?? into.unit : '단위 없음'}인가요? (선택)
+                      </label>
+                      <input
+                        id="mergeRatio"
+                        className="input"
+                        inputMode="decimal"
+                        value={mergeRatio}
+                        onChange={(e) => setMergeRatio(e.target.value)}
+                        placeholder="예: 12 (모르면 비워두세요)"
+                      />
+                    </div>
+                  )}
+                  <p className="hint">
+                    "{itemName}"의 모든 입고·사용·폐기·실사 기록이 선택한 물품으로 옮겨지고, "{itemName}"은 사라져요.
+                    정말 같은 물품이 맞는지 확인해주세요 — 되돌릴 수 없어요.
+                  </p>
+                </>
+              )
+            })()}
           <div className="invoice-form">
-            <button type="button" className="btn-secondary" onClick={() => setShowMerge(false)} disabled={merging}>
+            <button
+              type="button"
+              className="btn-secondary"
+              onClick={() => {
+                setShowMerge(false)
+                setMergeRatio('')
+              }}
+              disabled={merging}
+            >
               취소
             </button>
             <button type="button" className="btn-primary" onClick={handleMerge} disabled={merging || !mergeIntoKey}>
