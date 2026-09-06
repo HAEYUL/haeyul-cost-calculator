@@ -108,10 +108,6 @@ function itemAmount(item) {
   return q != null && p != null ? q * p : 0
 }
 
-function itemVat(item) {
-  return item.vat === '' || item.vat == null ? 0 : Number(item.vat)
-}
-
 // 반올림 오차 등을 감안한 허용 오차(원)
 const AMOUNT_TOLERANCE = 1
 
@@ -702,7 +698,9 @@ export default function InvoiceScreen() {
 
   const itemMismatches = findItemMismatches(items)
   const validItemsForSum = items.filter((item) => item.name.trim())
-  const itemsSum = validItemsForSum.reduce((sum, item) => sum + itemAmount(item) + itemVat(item), 0)
+  // 금액(item.amount)은 과세 품목이면 이미 부가세가 포함된 값(공급가+부가세)이라, 여기에 부가세를
+  // 또 더하면 이중으로 계산된다. 합계는 금액만 그대로 더한다.
+  const itemsSum = validItemsForSum.reduce((sum, item) => sum + itemAmount(item), 0)
   const totalMismatch =
     invoiceTotal !== '' && Math.abs(itemsSum - Number(invoiceTotal)) > AMOUNT_TOLERANCE
       ? { itemsSum, invoiceTotal: Number(invoiceTotal) }
