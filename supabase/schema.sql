@@ -687,3 +687,40 @@ create policy "menu_prices are publicly updatable"
   on menu_prices for update
   using (true)
   with check (true);
+
+-- item_recipe_units: 입고 단위(예: 박스)와 레시피에서 쓰는 단위(예: 개, 낱개)가 다른 물품을 위한
+-- 환산 설정. "1 입고단위 = ratio recipe_unit"으로 저장하고, 레시피 원가 계산 시
+-- (입고 단가 ÷ ratio)를 recipe_unit 기준 단가로 써서 재료량을 계산한다. 물품당 1행(unique),
+-- 설정 안 한 물품은 지금처럼 입고 단위 그대로 원가 계산에 쓰인다(기본 동작 변화 없음).
+create table if not exists item_recipe_units (
+  id uuid primary key default gen_random_uuid(),
+  store_code text not null references stores(code),
+  item_name text not null,
+  recipe_unit text not null check (recipe_unit in ('g', 'kg', 'ea', 'box', 'other')),
+  ratio numeric not null check (ratio > 0),
+  updated_at timestamptz not null default now(),
+  unique (store_code, item_name)
+);
+
+alter table item_recipe_units enable row level security;
+
+drop policy if exists "item_recipe_units are publicly readable" on item_recipe_units;
+create policy "item_recipe_units are publicly readable"
+  on item_recipe_units for select
+  using (true);
+
+drop policy if exists "item_recipe_units are publicly insertable" on item_recipe_units;
+create policy "item_recipe_units are publicly insertable"
+  on item_recipe_units for insert
+  with check (true);
+
+drop policy if exists "item_recipe_units are publicly updatable" on item_recipe_units;
+create policy "item_recipe_units are publicly updatable"
+  on item_recipe_units for update
+  using (true)
+  with check (true);
+
+drop policy if exists "item_recipe_units are publicly deletable" on item_recipe_units;
+create policy "item_recipe_units are publicly deletable"
+  on item_recipe_units for delete
+  using (true);

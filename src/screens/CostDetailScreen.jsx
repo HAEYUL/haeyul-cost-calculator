@@ -42,6 +42,7 @@ export default function CostDetailScreen() {
   const [infoByItem, setInfoByItem] = useState(new Map())
   const [invoiceItems, setInvoiceItems] = useState([])
   const [subUnitCostByName, setSubUnitCostByName] = useState(new Map())
+  const [recipeUnitByItem, setRecipeUnitByItem] = useState(new Map())
 
   const [showBulkAdd, setShowBulkAdd] = useState(false)
   const [bulkSearch, setBulkSearch] = useState('')
@@ -95,8 +96,9 @@ export default function CostDetailScreen() {
       supabase.from('recipes').select('menu_name, ingredient_name, amount_g, is_sub_recipe').eq('store_code', store.code),
       supabase.from('ingredient_mapping').select('recipe_ingredient_name, invoice_item_name').eq('store_code', store.code),
       supabase.from('invoices').select('item_name, unit_price, unit, created_at').eq('store_code', store.code),
-    ]).then(([metaRes, allRowsRes, mappingRes, invoicesRes]) => {
-      const err = metaRes.error || allRowsRes.error || mappingRes.error || invoicesRes.error
+      supabase.from('item_recipe_units').select('item_name, recipe_unit, ratio').eq('store_code', store.code),
+    ]).then(([metaRes, allRowsRes, mappingRes, invoicesRes, recipeUnitsRes]) => {
+      const err = metaRes.error || allRowsRes.error || mappingRes.error || invoicesRes.error || recipeUnitsRes.error
       if (err) {
         setError(err.message)
         return
@@ -104,6 +106,9 @@ export default function CostDetailScreen() {
 
       const mapping = new Map((mappingRes.data ?? []).map((m) => [m.recipe_ingredient_name, m.invoice_item_name]))
       const info = latestInvoiceInfoByItem(invoicesRes.data ?? [])
+      const recipeUnits = new Map(
+        (recipeUnitsRes.data ?? []).map((r) => [r.item_name, { recipeUnit: r.recipe_unit, ratio: Number(r.ratio) }]),
+      )
 
       const rowsByMenu = new Map()
       for (const r of allRowsRes.data ?? []) {
@@ -118,6 +123,7 @@ export default function CostDetailScreen() {
         subRecipeMetaByMenu,
         mappingByIngredient: mapping,
         infoByItem: info,
+        recipeUnitByItem: recipeUnits,
       })
 
       setSubRecipeNames(subMeta.map((m) => m.menu_name).sort((a, b) => a.localeCompare(b)))
@@ -128,6 +134,7 @@ export default function CostDetailScreen() {
       setInfoByItem(info)
       setInvoiceItems([...new Set((invoicesRes.data ?? []).map((r) => r.item_name))].sort((a, b) => a.localeCompare(b)))
       setSubUnitCostByName(subUnitCosts)
+      setRecipeUnitByItem(recipeUnits)
     })
   }, [store, menuName, refDataKey])
 
@@ -149,6 +156,7 @@ export default function CostDetailScreen() {
     mappingByIngredient,
     infoByItem,
     subUnitCostByName,
+    recipeUnitByItem,
   })
 
   const previewPrice = priceInput === '' ? null : Number(priceInput)

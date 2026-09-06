@@ -37,6 +37,7 @@ export default function RecipeScreen() {
   const [infoByItem, setInfoByItem] = useState(new Map())
   const [invoiceItems, setInvoiceItems] = useState([])
   const [ingredientNameOptions, setIngredientNameOptions] = useState([])
+  const [recipeUnitByItem, setRecipeUnitByItem] = useState(new Map())
 
   const [deleteTarget, setDeleteTarget] = useState(null)
   const [deleteCount, setDeleteCount] = useState(null)
@@ -59,8 +60,9 @@ export default function RecipeScreen() {
       supabase.from('recipes').select('menu_name, ingredient_name, amount_g, is_sub_recipe').eq('store_code', store.code),
       supabase.from('ingredient_mapping').select('recipe_ingredient_name, invoice_item_name').eq('store_code', store.code),
       supabase.from('invoices').select('item_name, unit_price, unit, created_at').eq('store_code', store.code),
-    ]).then(([metaRes, recipesRes, mappingRes, invoicesRes]) => {
-      const err = metaRes.error || recipesRes.error || mappingRes.error || invoicesRes.error
+      supabase.from('item_recipe_units').select('item_name, recipe_unit, ratio').eq('store_code', store.code),
+    ]).then(([metaRes, recipesRes, mappingRes, invoicesRes, recipeUnitsRes]) => {
+      const err = metaRes.error || recipesRes.error || mappingRes.error || invoicesRes.error || recipeUnitsRes.error
       if (err) {
         setError(err.message)
         setListLoading(false)
@@ -70,6 +72,9 @@ export default function RecipeScreen() {
         (mappingRes.data ?? []).map((m) => [m.recipe_ingredient_name, m.invoice_item_name]),
       )
       const infoByItem = latestInvoiceInfoByItem(invoicesRes.data ?? [])
+      const recipeUnitByItem = new Map(
+        (recipeUnitsRes.data ?? []).map((r) => [r.item_name, { recipeUnit: r.recipe_unit, ratio: Number(r.ratio) }]),
+      )
       const rowsByMenu = new Map()
       for (const r of recipesRes.data ?? []) {
         if (!rowsByMenu.has(r.menu_name)) rowsByMenu.set(r.menu_name, [])
@@ -84,6 +89,7 @@ export default function RecipeScreen() {
           (a, b) => a.localeCompare(b),
         ),
       )
+      setRecipeUnitByItem(recipeUnitByItem)
       const list = (metaRes.data ?? [])
         .map((meta) => {
           const rows = rowsByMenu.get(meta.menu_name) ?? []
@@ -92,6 +98,7 @@ export default function RecipeScreen() {
             mappingByIngredient,
             infoByItem,
             yieldQty: meta.yield_qty,
+            recipeUnitByItem,
           })
           return {
             menuName: meta.menu_name,
@@ -426,7 +433,8 @@ export default function RecipeScreen() {
             {items.map((item, index) => {
               const trimmedName = item.name.trim()
               const matchedInvoiceItem = trimmedName ? mappingByIngredient.get(trimmedName) : null
-              const matchedUnit = matchedInvoiceItem ? infoByItem.get(matchedInvoiceItem)?.unit : null
+              const recipeConv = matchedInvoiceItem ? recipeUnitByItem.get(matchedInvoiceItem) : null
+              const matchedUnit = recipeConv ? recipeConv.recipeUnit : matchedInvoiceItem ? infoByItem.get(matchedInvoiceItem)?.unit : null
               const amountPlaceholder = item.originalText
                 ? `원본: ${item.originalText}`
                 : matchedUnit

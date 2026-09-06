@@ -20,14 +20,26 @@ function unitCostPerAmount(unitPrice, unit) {
   return unitPrice
 }
 
+// 입고 단위(예: 박스)와 레시피에서 실제로 쓰는 단위(예: 개, 낱개)가 다른 물품을 위한 환산.
+// ratio는 "1 입고단위 = ratio recipeUnit"(예: 1박스=120개 → 120)이므로, 입고 단가를 ratio로
+// 나누면 recipeUnit 1개당 단가가 된다. 이후는 그 단가를 recipeUnit 기준으로 그대로 쓴다 —
+// recipeUnit이 kg이면(재료량은 항상 g로 입력받으므로) unitCostPerAmount가 다시 1000으로 나눈다.
+function unitCostPerRecipeUnit(unitPrice, ratio, recipeUnit) {
+  if (!ratio || ratio <= 0) return null
+  return unitCostPerAmount(unitPrice / ratio, recipeUnit)
+}
+
 // subUnitCostByName: 부재료(menu_name) → 1단위(개/인분/ml 등)당 단가. 부재료를 참조하는
 // 줄(is_sub_recipe=true)의 원가를 계산할 때 쓴다. 메뉴가 아닌 부재료 자체의 원가를 계산할
 // 때는(computeSubRecipeCost) 항상 빈 맵을 넘겨서, 부재료 안에 또 다른 부재료를 넣는 순환참조를
 // 원천적으로 막는다(그런 줄은 "부재료 원가 없음"으로만 표시되고 원가에서 빠진다).
-export function computeMenuCost({ recipeRows, mappingByIngredient, infoByItem, subUnitCostByName }) {
+// recipeUnitByItem: 물품명(invoice_item_name) → { recipeUnit, ratio }. 설정된 물품만 위 환산을
+// 적용하고, 없는 물품은 지금까지처럼 입고 단위 그대로 계산한다(기본 동작 그대로).
+export function computeMenuCost({ recipeRows, mappingByIngredient, infoByItem, subUnitCostByName, recipeUnitByItem }) {
   let totalCost = 0
   let hasMissing = false
   const subMap = subUnitCostByName ?? new Map()
+  const recipeUnitMap = recipeUnitByItem ?? new Map()
 
   const breakdown = recipeRows.map((row) => {
     const amountG = row.amount_g != null ? Number(row.amount_g) : null
@@ -62,6 +74,8 @@ export function computeMenuCost({ recipeRows, mappingByIngredient, infoByItem, s
     const info = mappedItem != null ? (infoByItem.get(mappedItem) ?? null) : null
     const unitPrice = info?.unitPrice ?? null
     const unit = info?.unit ?? null
+    const recipeConv = mappedItem != null ? (recipeUnitMap.get(mappedItem) ?? null) : null
+    const effectiveUnit = recipeConv ? recipeConv.recipeUnit : unit
 
     let cost = null
     let status = 'ok'
@@ -75,7 +89,9 @@ export function computeMenuCost({ recipeRows, mappingByIngredient, infoByItem, s
       status = 'no_amount'
       hasMissing = true
     } else {
-      const perAmount = unitCostPerAmount(unitPrice, unit)
+      const perAmount = recipeConv
+        ? unitCostPerRecipeUnit(unitPrice, recipeConv.ratio, recipeConv.recipeUnit)
+        : unitCostPerAmount(unitPrice, unit)
       if (perAmount == null) {
         status = 'unit_mismatch'
         hasMissing = true
@@ -85,7 +101,7 @@ export function computeMenuCost({ recipeRows, mappingByIngredient, infoByItem, s
       }
     }
 
-    return { ingredientName: row.ingredient_name, amountG, mappedItem, unitPrice, unit, cost, status, isSubRecipe: false }
+    return { ingredientName: row.ingredient_name, amountG, mappedItem, unitPrice, unit: effectiveUnit, cost, status, isSubRecipe: false }
   })
 
   return { totalCost, hasMissing, breakdown }
@@ -93,12 +109,13 @@ export function computeMenuCost({ recipeRows, mappingByIngredient, infoByItem, s
 
 // 부재료(recipe_type='sub') 하나의 원가를 계산한다. 부재료는 원재료만 쓸 수 있으므로
 // subUnitCostByName은 항상 빈 맵으로 넘긴다. yieldQty로 총 재료비를 나눠 1단위당 단가를 낸다.
-export function computeSubRecipeCost({ recipeRows, mappingByIngredient, infoByItem, yieldQty }) {
+export function computeSubRecipeCost({ recipeRows, mappingByIngredient, infoByItem, yieldQty, recipeUnitByItem }) {
   const { totalCost, hasMissing, breakdown } = computeMenuCost({
     recipeRows,
     mappingByIngredient,
     infoByItem,
     subUnitCostByName: new Map(),
+    recipeUnitByItem,
   })
   const qty = yieldQty != null && yieldQty !== '' ? Number(yieldQty) : null
   const unitCost = qty != null && qty > 0 ? totalCost / qty : null
@@ -108,7 +125,7 @@ export function computeSubRecipeCost({ recipeRows, mappingByIngredient, infoByIt
 // 매장의 모든 부재료(recipe_type='sub')의 1단위당 단가를 한 번에 계산해서 menu_name → unitCost
 // 맵으로 돌려준다. 메뉴 원가를 계산하기 전에 먼저 이 맵을 만들어 subUnitCostByName으로 넘겨야
 // 메뉴에 연결된 부재료 줄의 원가가 계산된다.
-export function computeAllSubRecipeUnitCosts({ subRecipeRowsByMenu, subRecipeMetaByMenu, mappingByIngredient, infoByItem }) {
+export function computeAllSubRecipeUnitCosts({ subRecipeRowsByMenu, subRecipeMetaByMenu, mappingByIngredient, infoByItem, recipeUnitByItem }) {
   const unitCostByName = new Map()
   for (const [menuName, recipeRows] of subRecipeRowsByMenu) {
     const meta = subRecipeMetaByMenu.get(menuName)
@@ -117,6 +134,7 @@ export function computeAllSubRecipeUnitCosts({ subRecipeRowsByMenu, subRecipeMet
       mappingByIngredient,
       infoByItem,
       yieldQty: meta?.yield_qty ?? null,
+      recipeUnitByItem,
     })
     if (unitCost != null) unitCostByName.set(menuName, unitCost)
   }
