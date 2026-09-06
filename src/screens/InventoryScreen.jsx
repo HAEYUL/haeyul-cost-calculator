@@ -17,6 +17,7 @@ export default function InventoryScreen() {
 
   const [rows, setRows] = useState([])
   const [pinnedNames, setPinnedNames] = useState(new Set())
+  const [recipeUnitByItem, setRecipeUnitByItem] = useState(new Map())
   const [showAll, setShowAll] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
@@ -37,6 +38,11 @@ export default function InventoryScreen() {
   const [merging, setMerging] = useState(false)
   const [mergeMessage, setMergeMessage] = useState('')
 
+  const [recipeUnitTarget, setRecipeUnitTarget] = useState(null)
+  const [recipeUnitSelect, setRecipeUnitSelect] = useState('ea')
+  const [recipeUnitRatio, setRecipeUnitRatio] = useState('')
+  const [savingRecipeUnit, setSavingRecipeUnit] = useState(false)
+
   useEffect(() => {
     if (!store) navigate('/', { replace: true })
   }, [store, navigate])
@@ -51,8 +57,10 @@ export default function InventoryScreen() {
       supabase.from('waste_records').select('item_name, unit, qty').eq('store_code', store.code),
       supabase.from('stock_adjustments').select('item_name, unit, delta').eq('store_code', store.code),
       supabase.from('pinned_items').select('item_name').eq('store_code', store.code),
-    ]).then(([invoicesRes, usageRes, wasteRes, adjustmentsRes, pinsRes]) => {
-      const err = invoicesRes.error || usageRes.error || wasteRes.error || adjustmentsRes.error || pinsRes.error
+      supabase.from('item_recipe_units').select('item_name, recipe_unit, ratio').eq('store_code', store.code),
+    ]).then(([invoicesRes, usageRes, wasteRes, adjustmentsRes, pinsRes, recipeUnitsRes]) => {
+      const err =
+        invoicesRes.error || usageRes.error || wasteRes.error || adjustmentsRes.error || pinsRes.error || recipeUnitsRes.error
       if (err) {
         setError(err.message)
         setLoading(false)
@@ -86,6 +94,9 @@ export default function InventoryScreen() {
 
       setRows(list)
       setPinnedNames(new Set((pinsRes.data ?? []).map((p) => p.item_name)))
+      setRecipeUnitByItem(
+        new Map((recipeUnitsRes.data ?? []).map((r) => [r.item_name, { recipeUnit: r.recipe_unit, ratio: Number(r.ratio) }])),
+      )
       setLoading(false)
     })
   }, [store, dataKey])
@@ -210,6 +221,62 @@ export default function InventoryScreen() {
     setDataKey((k) => k + 1)
   }
 
+  const openRecipeUnit = (r) => {
+    const existing = recipeUnitByItem.get(r.itemName)
+    setRecipeUnitTarget(r)
+    setRecipeUnitSelect(existing?.recipeUnit ?? 'ea')
+    setRecipeUnitRatio(existing ? String(existing.ratio) : '')
+    setError('')
+  }
+
+  const closeRecipeUnit = () => {
+    setRecipeUnitTarget(null)
+    setRecipeUnitRatio('')
+  }
+
+  // 입고 단위(예: 박스)는 그대로 두고, 레시피에서만 다른 단위(예: 개)로 원가를 계산하고 싶을 때
+  // 쓰는 환산 설정. "1 입고단위 = ratio 레시피단위"로 저장해두면, 이 물품을 매칭한 재료의 원가는
+  // (입고 단가 ÷ ratio)로 계산된다. 물품 단위 자체는 안 바뀌고, 명세표 입력은 지금처럼 그대로다.
+  const handleSaveRecipeUnit = async () => {
+    if (!recipeUnitTarget || !supabase) return
+    const ratio = Number(recipeUnitRatio)
+    if (!recipeUnitRatio || !Number.isFinite(ratio) || ratio <= 0) {
+      setError('환산값을 0보다 크게 입력하세요.')
+      return
+    }
+    setSavingRecipeUnit(true)
+    setError('')
+    const { error: err } = await supabase.from('item_recipe_units').upsert(
+      { store_code: store.code, item_name: recipeUnitTarget.itemName, recipe_unit: recipeUnitSelect, ratio },
+      { onConflict: 'store_code,item_name' },
+    )
+    setSavingRecipeUnit(false)
+    if (err) {
+      setError(err.message)
+      return
+    }
+    closeRecipeUnit()
+    setDataKey((k) => k + 1)
+  }
+
+  const handleDeleteRecipeUnit = async () => {
+    if (!recipeUnitTarget || !supabase) return
+    setSavingRecipeUnit(true)
+    setError('')
+    const { error: err } = await supabase
+      .from('item_recipe_units')
+      .delete()
+      .eq('store_code', store.code)
+      .eq('item_name', recipeUnitTarget.itemName)
+    setSavingRecipeUnit(false)
+    if (err) {
+      setError(err.message)
+      return
+    }
+    closeRecipeUnit()
+    setDataKey((k) => k + 1)
+  }
+
   const renderRow = (r, { pinned }) => (
     <li key={stockKey(r.itemName, r.unit)} className="history-row">
       <button
@@ -229,8 +296,15 @@ export default function InventoryScreen() {
           <span>사용 {r.used.toLocaleString()}</span>
           {r.wasted > 0 && <span>폐기 {r.wasted.toLocaleString()}</span>}
         </div>
-        {r.unit === 'box' && (
-          <p className="hint">📦 박스당 개수/kg 환산 전이에요 · "이름 수정"에서 등록할 수 있어요</p>
+        {r.unit === 'box' && !recipeUnitByItem.has(r.itemName) && (
+          <p className="hint">📦 박스당 개수/kg 환산 전이에요 · "이름 수정" 또는 "레시피 단위 설정"에서 등록할 수 있어요</p>
+        )}
+        {recipeUnitByItem.has(r.itemName) && (
+          <p className="hint">
+            🍱 레시피 단위: {UNIT_LABELS[recipeUnitByItem.get(r.itemName).recipeUnit] ?? recipeUnitByItem.get(r.itemName).recipeUnit}
+            {' '}(1{r.unit ? UNIT_LABELS[r.unit] ?? r.unit : '단위 없음'} = {recipeUnitByItem.get(r.itemName).ratio}
+            {UNIT_LABELS[recipeUnitByItem.get(r.itemName).recipeUnit] ?? recipeUnitByItem.get(r.itemName).recipeUnit})
+          </p>
         )}
       </button>
       <div className="inventory-row-actions">
@@ -257,6 +331,16 @@ export default function InventoryScreen() {
           }}
         >
           합치기
+        </button>
+        <button
+          type="button"
+          className="link-btn"
+          onClick={(e) => {
+            e.stopPropagation()
+            openRecipeUnit(r)
+          }}
+        >
+          레시피 단위 설정
         </button>
         <button
           type="button"
@@ -387,6 +471,52 @@ export default function InventoryScreen() {
             </button>
             <button type="button" className="btn-primary" onClick={handleMerge} disabled={merging || !mergeIntoKey}>
               {merging ? '합치는 중...' : '합치기'}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {recipeUnitTarget && recipeUnitTarget.itemName === r.itemName && recipeUnitTarget.unit === r.unit && (
+        <div className="price-alert-box" onClick={(e) => e.stopPropagation()}>
+          <p className="price-alert-title">레시피 단위 설정</p>
+          <p className="hint">
+            입고는 지금처럼 "{r.unit ? UNIT_LABELS[r.unit] ?? r.unit : '단위 없음'}"으로 그대로 하고, 레시피에서만 다른
+            단위로 원가를 계산해요. 물품의 입고 단위 자체는 안 바뀝니다.
+          </p>
+          <div className="field">
+            <select className="select select-block" value={recipeUnitSelect} onChange={(e) => setRecipeUnitSelect(e.target.value)}>
+              {Object.entries(UNIT_LABELS).map(([value, label]) => (
+                <option key={value} value={value}>
+                  {label}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="field">
+            <label htmlFor="recipeUnitRatio">
+              1{r.unit ? UNIT_LABELS[r.unit] ?? r.unit : '단위 없음'} = 몇 {UNIT_LABELS[recipeUnitSelect] ?? recipeUnitSelect}
+              인가요?
+            </label>
+            <input
+              id="recipeUnitRatio"
+              className="input"
+              inputMode="decimal"
+              value={recipeUnitRatio}
+              onChange={(e) => setRecipeUnitRatio(e.target.value)}
+              placeholder="예: 120"
+            />
+          </div>
+          <div className="invoice-form">
+            <button type="button" className="btn-secondary" onClick={closeRecipeUnit} disabled={savingRecipeUnit}>
+              취소
+            </button>
+            {recipeUnitByItem.has(r.itemName) && (
+              <button type="button" className="btn-secondary" onClick={handleDeleteRecipeUnit} disabled={savingRecipeUnit}>
+                설정 삭제
+              </button>
+            )}
+            <button type="button" className="btn-primary" onClick={handleSaveRecipeUnit} disabled={savingRecipeUnit}>
+              {savingRecipeUnit ? '저장 중...' : '저장'}
             </button>
           </div>
         </div>
