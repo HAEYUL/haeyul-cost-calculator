@@ -578,6 +578,12 @@ create policy "recipes are publicly deletable"
   on recipes for delete
   using (true);
 
+drop policy if exists "recipes are publicly updatable" on recipes;
+create policy "recipes are publicly updatable"
+  on recipes for update
+  using (true)
+  with check (true);
+
 -- is_sub_recipe: true면 이 줄은 원재료가 아니라 매장에서 만든 부재료(recipe_meta.recipe_type
 -- ='sub')를 그대로 가져다 쓴다는 뜻이다. 이때 ingredient_name엔 그 부재료의 menu_name을,
 -- amount_g엔 그 부재료의 yield_unit 기준 사용량(예: "굴림만두" 5개 → 5)을 넣는다.
