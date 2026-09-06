@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useStore } from '../context/StoreContext'
 import { supabase } from '../lib/supabaseClient'
+import { reidentifyItem } from '../lib/reidentifyItem'
 
 const UNIT_LABELS = { g: 'g', kg: 'kg', ea: '개', box: '박스', other: '기타' }
 const NO_UNIT_KEY = 'none'
@@ -25,7 +26,14 @@ export default function InventoryScreen() {
 
   const [renameTarget, setRenameTarget] = useState(null)
   const [renameInput, setRenameInput] = useState('')
+  const [renameUnit, setRenameUnit] = useState('')
   const [renaming, setRenaming] = useState(false)
+  const [renameMessage, setRenameMessage] = useState('')
+
+  const [mergeTarget, setMergeTarget] = useState(null)
+  const [mergeIntoKey, setMergeIntoKey] = useState('')
+  const [merging, setMerging] = useState(false)
+  const [mergeMessage, setMergeMessage] = useState('')
 
   useEffect(() => {
     if (!store) navigate('/', { replace: true })
@@ -114,50 +122,84 @@ export default function InventoryScreen() {
     setDataKey((k) => k + 1)
   }
 
-  // 물품명을 이 이름(+단위)으로 저장된 모든 과거 기록(입고·사용·폐기·실사 보정, 관심 물품)에
-  // 걸쳐 한 번에 새 이름으로 바꾼다. 오타·표기 차이로 흩어진 같은 물품을 하나로 정리하기 위함.
+  // 물품명(+단위)으로 저장된 모든 과거 기록(입고·사용·폐기·실사 보정, 관심 품목, 재료 매칭)에
+  // 걸쳐 한 번에 새 이름/단위로 바꾼다. 오타·표기 차이로 흩어진 같은 물품을 하나로 정리하거나,
+  // 잘못 고른 단위를 바로잡기 위함이다.
   const handleRename = async () => {
     const newName = renameInput.trim()
     if (!renameTarget || !newName || !supabase) return
-    if (newName === renameTarget.itemName) {
+    if (newName === renameTarget.itemName && renameUnit === renameTarget.unit) {
       setRenameTarget(null)
       return
     }
     setRenaming(true)
     setError('')
+    setRenameMessage('')
 
-    const withUnitFilter = (query) =>
-      renameTarget.unit == null ? query.is('unit', null) : query.eq('unit', renameTarget.unit)
-
-    for (const table of ['invoices', 'stock_usage', 'waste_records', 'stock_adjustments']) {
-      const { error: err } = await withUnitFilter(
-        supabase.from(table).update({ item_name: newName }).eq('store_code', store.code).eq('item_name', renameTarget.itemName),
-      )
-      if (err) {
-        setRenaming(false)
-        setError(err.message)
-        return
-      }
-    }
-
-    // pinned_items는 (store_code, item_name)이 유일해야 해서, 옛 이름이 관심 품목이었으면
-    // 지우고 새 이름으로 다시 등록한다(이미 새 이름이 관심 품목이었으면 그대로 둔다).
-    const { data: pinnedOld } = await supabase
-      .from('pinned_items')
-      .select('id')
-      .eq('store_code', store.code)
-      .eq('item_name', renameTarget.itemName)
-      .maybeSingle()
-    if (pinnedOld) {
-      await supabase.from('pinned_items').delete().eq('id', pinnedOld.id)
-      await supabase
-        .from('pinned_items')
-        .upsert({ store_code: store.code, item_name: newName }, { onConflict: 'store_code,item_name' })
-    }
+    const { error: err, priceNeedsReview } = await reidentifyItem({
+      supabase,
+      storeCode: store.code,
+      from: renameTarget,
+      to: { itemName: newName, unit: renameUnit },
+    })
 
     setRenaming(false)
+    if (err) {
+      setError(err.message)
+      return
+    }
+    if (priceNeedsReview) {
+      setRenameMessage(
+        '단위를 바꿨어요. 개/박스/기타처럼 자동으로 단가를 맞출 수 없는 단위라 과거 단가 숫자는 그대로 남아있어요 — 최근 입고 단가가 새 단위 기준으로 맞는지 확인해주세요.',
+      )
+    }
     setRenameTarget(null)
     setRenameInput('')
+    setRenameUnit('')
+    setDataKey((k) => k + 1)
+  }
+
+  const openMergeTarget = (r) => {
+    setMergeTarget(r)
+    setMergeIntoKey('')
+    setMergeMessage('')
+    setError('')
+  }
+
+  const closeMergeTarget = () => {
+    setMergeTarget(null)
+    setMergeIntoKey('')
+  }
+
+  // 다른 이름/단위로 잘못 인식된 같은 물품을 하나로 합친다. 되돌릴 수 없는 작업이라 대상을
+  // 고른 뒤 한 번 더 확인받는다.
+  const handleMerge = async () => {
+    if (!mergeTarget || !mergeIntoKey || !supabase) return
+    const into = rows.find((r) => stockKey(r.itemName, r.unit) === mergeIntoKey)
+    if (!into) return
+
+    setMerging(true)
+    setError('')
+    setMergeMessage('')
+
+    const { error: err, priceNeedsReview } = await reidentifyItem({
+      supabase,
+      storeCode: store.code,
+      from: { itemName: mergeTarget.itemName, unit: mergeTarget.unit },
+      to: { itemName: into.itemName, unit: into.unit },
+    })
+
+    setMerging(false)
+    if (err) {
+      setError(err.message)
+      return
+    }
+    if (priceNeedsReview) {
+      setMergeMessage(
+        '합쳤어요. 단위가 달라서 과거 단가 숫자는 자동으로 못 맞췄어요 — 최근 입고 단가가 맞는지 확인해주세요.',
+      )
+    }
+    closeMergeTarget()
     setDataKey((k) => k + 1)
   }
 
@@ -189,9 +231,21 @@ export default function InventoryScreen() {
             e.stopPropagation()
             setRenameTarget({ itemName: r.itemName, unit: r.unit })
             setRenameInput(r.itemName)
+            setRenameUnit(r.unit)
+            setRenameMessage('')
           }}
         >
           이름 수정
+        </button>
+        <button
+          type="button"
+          className="link-btn"
+          onClick={(e) => {
+            e.stopPropagation()
+            openMergeTarget(r)
+          }}
+        >
+          합치기
         </button>
         <button
           type="button"
@@ -211,7 +265,7 @@ export default function InventoryScreen() {
 
       {renameTarget && renameTarget.itemName === r.itemName && renameTarget.unit === r.unit && (
         <div className="price-alert-box" onClick={(e) => e.stopPropagation()}>
-          <p className="price-alert-title">물품명 일괄 변경</p>
+          <p className="price-alert-title">물품명/단위 일괄 변경</p>
           <div className="field">
             <input
               className="input"
@@ -221,8 +275,18 @@ export default function InventoryScreen() {
               autoFocus
             />
           </div>
+          <div className="field">
+            <select className="select select-block" value={renameUnit ?? ''} onChange={(e) => setRenameUnit(e.target.value || null)}>
+              {Object.entries(UNIT_LABELS).map(([value, label]) => (
+                <option key={value} value={value}>
+                  {label}
+                </option>
+              ))}
+            </select>
+          </div>
           <p className="hint">
-            "{r.itemName}"으로 저장된 모든 입고·사용·폐기·실사 기록이 새 이름으로 한 번에 바뀌어요. 되돌릴 수 없어요.
+            "{r.itemName}"으로 저장된 모든 입고·사용·폐기·실사 기록이 새 이름/단위로 한 번에 바뀌어요. g↔kg 단위 변경은
+            과거 단가도 자동으로 맞춰지고, 그 외 단위 변경은 단가는 그대로 두고 단위만 바뀌어요. 되돌릴 수 없어요.
           </p>
           <div className="invoice-form">
             <button
@@ -231,6 +295,7 @@ export default function InventoryScreen() {
               onClick={() => {
                 setRenameTarget(null)
                 setRenameInput('')
+                setRenameUnit('')
               }}
               disabled={renaming}
             >
@@ -238,6 +303,38 @@ export default function InventoryScreen() {
             </button>
             <button type="button" className="btn-primary" onClick={handleRename} disabled={renaming || !renameInput.trim()}>
               {renaming ? '변경 중...' : '변경'}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {mergeTarget && mergeTarget.itemName === r.itemName && mergeTarget.unit === r.unit && (
+        <div className="price-alert-box price-alert-box-danger" onClick={(e) => e.stopPropagation()}>
+          <p className="price-alert-title">"{r.itemName}"을(를) 어느 물품과 합칠까요?</p>
+          <div className="field">
+            <select className="select select-block" value={mergeIntoKey} onChange={(e) => setMergeIntoKey(e.target.value)}>
+              <option value="">합칠 물품을 선택하세요</option>
+              {rows
+                .filter((other) => stockKey(other.itemName, other.unit) !== stockKey(r.itemName, r.unit))
+                .map((other) => (
+                  <option key={stockKey(other.itemName, other.unit)} value={stockKey(other.itemName, other.unit)}>
+                    {other.itemName} ({other.unit ? UNIT_LABELS[other.unit] ?? other.unit : '단위 없음'})
+                  </option>
+                ))}
+            </select>
+          </div>
+          {mergeIntoKey && (
+            <p className="hint">
+              "{r.itemName}"의 모든 입고·사용·폐기·실사 기록이 선택한 물품으로 옮겨지고, "{r.itemName}"은 사라져요.
+              정말 같은 물품이 맞는지 확인해주세요 — 되돌릴 수 없어요.
+            </p>
+          )}
+          <div className="invoice-form">
+            <button type="button" className="btn-secondary" onClick={closeMergeTarget} disabled={merging}>
+              취소
+            </button>
+            <button type="button" className="btn-primary" onClick={handleMerge} disabled={merging || !mergeIntoKey}>
+              {merging ? '합치는 중...' : '합치기'}
             </button>
           </div>
         </div>
@@ -258,6 +355,8 @@ export default function InventoryScreen() {
       {!supabase && <p className="hint">Supabase가 설정되지 않았습니다.</p>}
       {loading && <p className="hint">불러오는 중...</p>}
       {error && <p className="error-text">{error}</p>}
+      {renameMessage && <p className="hint">{renameMessage}</p>}
+      {mergeMessage && <p className="hint">{mergeMessage}</p>}
       {!loading && !error && rows.length === 0 && <p className="hint">입고 내역이 있어야 재고를 계산할 수 있어요.</p>}
 
       {!loading && rows.length > 0 && (
