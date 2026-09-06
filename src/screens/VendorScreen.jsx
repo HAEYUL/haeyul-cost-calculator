@@ -155,7 +155,7 @@ export default function VendorScreen() {
         const batchesSinceAnchor = anchorBatch ? batches.slice(0, anchorIndex) : batches
         const invoicedSinceAnchor = batchesSinceAnchor.reduce((sum, b) => sum + Number(b.total_amount), 0)
         const paymentsSinceAnchor = payments
-          .filter((p) => !anchorDate || !p.paid_date || p.paid_date > anchorDate)
+          .filter((p) => !anchorDate || !p.paid_date || p.paid_date >= anchorDate)
           .reduce((sum, p) => sum + Number(p.amount), 0)
 
         if (anchorBatch || latestOpening) {

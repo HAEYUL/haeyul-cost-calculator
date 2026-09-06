@@ -152,6 +152,7 @@ export default function InvoiceScreen() {
   const [statementBalance, setStatementBalance] = useState('')
   const [invoiceTotal, setInvoiceTotal] = useState('')
   const [currentBalance, setCurrentBalance] = useState('')
+  const [paidInFull, setPaidInFull] = useState(false)
   const [previousBatchBalance, setPreviousBatchBalance] = useState(null)
   const [items, setItems] = useState([])
   const [saving, setSaving] = useState(false)
@@ -570,6 +571,23 @@ export default function InvoiceScreen() {
       return
     }
 
+    // "즉시 결제 완료"를 체크하면, 전잔액/현잔액이 안 찍히는 거래처(그날그날 바로 결제)를 위해
+    // 결제 기록을 따로 안 남겨도 되게 이 명세표 합계금액만큼 결제를 자동으로 같이 남긴다.
+    let paymentNote = ''
+    if (paidInFull) {
+      const { error: paymentErr } = await supabase.from('vendor_payments').insert({
+        store_code: store.code,
+        vendor_id: resolvedVendorId,
+        amount: totalAmount,
+        paid_date: date || null,
+        memo: '즉시 결제(자동)',
+      })
+      if (paymentErr) {
+        console.error(paymentErr)
+        paymentNote = ' (결제 기록은 저장하지 못했어요 — 거래처 화면에서 직접 입력해주세요)'
+      }
+    }
+
     if (changes.length > 0) {
       const changeRows = changes.map((c) => ({
         store_code: store.code,
@@ -648,7 +666,7 @@ export default function InvoiceScreen() {
     }
 
     setSaving(false)
-    setSaveMessage('저장했습니다.')
+    setSaveMessage('저장했습니다.' + paymentNote)
     setPriceChanges(changes)
     setMarginAlerts(marginWarnings)
     setHistoryKey((k) => k + 1)
@@ -662,6 +680,7 @@ export default function InvoiceScreen() {
     setStatementBalance('')
     setInvoiceTotal('')
     setCurrentBalance('')
+    setPaidInFull(false)
     setItems([])
     if (didCreateVendor) setVendorsVersion((v) => v + 1)
   }
@@ -955,6 +974,15 @@ export default function InvoiceScreen() {
           <p className="hint">명세표에 현잔액이 적혀 있다면 입력해보세요. 전잔액과 대조해서 확인해드려요.</p>
         )}
       </div>
+
+      {!editMode && (
+        <div className="field">
+          <label className="toggle-row">
+            <input type="checkbox" checked={paidInFull} onChange={(e) => setPaidInFull(e.target.checked)} />
+            <span>이 거래 바로 결제 완료 (합계금액만큼 결제 기록도 자동으로 남겨요)</span>
+          </label>
+        </div>
+      )}
 
       {currentBalanceMismatch && (
         <div className="price-alert-box price-alert-box-danger">
