@@ -730,3 +730,39 @@ drop policy if exists "item_recipe_units are publicly deletable" on item_recipe_
 create policy "item_recipe_units are publicly deletable"
   on item_recipe_units for delete
   using (true);
+
+-- feedback_notes: 매장에서 생각날 때마다 남기는 불편사항/건의사항 메모. 이 앱이 자동으로
+-- 처리하는 게 아니라, 사장님이 나중에 Claude에게 "불편사항 목록 봐줘"라고 하면 그때 사람이
+-- (Claude가 대화로) 검토해서 고치는 용도 — 그래서 상태는 해결 여부(resolved)만 간단히 둔다.
+create table if not exists feedback_notes (
+  id uuid primary key default gen_random_uuid(),
+  store_code text not null references stores(code),
+  content text not null,
+  resolved boolean not null default false,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists feedback_notes_store_idx on feedback_notes (store_code, created_at desc);
+
+alter table feedback_notes enable row level security;
+
+drop policy if exists "feedback_notes are publicly readable" on feedback_notes;
+create policy "feedback_notes are publicly readable"
+  on feedback_notes for select
+  using (true);
+
+drop policy if exists "feedback_notes are publicly insertable" on feedback_notes;
+create policy "feedback_notes are publicly insertable"
+  on feedback_notes for insert
+  with check (true);
+
+drop policy if exists "feedback_notes are publicly updatable" on feedback_notes;
+create policy "feedback_notes are publicly updatable"
+  on feedback_notes for update
+  using (true)
+  with check (true);
+
+drop policy if exists "feedback_notes are publicly deletable" on feedback_notes;
+create policy "feedback_notes are publicly deletable"
+  on feedback_notes for delete
+  using (true);

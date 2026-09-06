@@ -18,6 +18,7 @@ const MENU_ITEMS = [
   { label: '소비 패턴 분석', path: '/consumption-pattern' },
   { label: '폐기/손실 리포트', path: '/waste-report' },
   { label: '알림 설정', path: '/notification-settings' },
+  { label: '불편사항/건의사항', path: '/feedback' },
   { label: '매장 비밀번호 변경', path: '/change-pin' },
 ]
 
