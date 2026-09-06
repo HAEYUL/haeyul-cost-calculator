@@ -143,6 +143,7 @@ export default function InvoiceScreen() {
   const [vendorsVersion, setVendorsVersion] = useState(0)
   const [itemNameRecords, setItemNameRecords] = useState([])
   const [dismissedSimilarItems, setDismissedSimilarItems] = useState(new Set())
+  const [dismissedUnitMismatches, setDismissedUnitMismatches] = useState(new Set())
   const [focusedNameIndex, setFocusedNameIndex] = useState(null)
   const [vendorId, setVendorId] = useState('')
   const [newVendorName, setNewVendorName] = useState('')
@@ -180,7 +181,7 @@ export default function InvoiceScreen() {
     if (!store || !supabase) return
     supabase
       .from('invoices')
-      .select('item_name, vendor_id')
+      .select('item_name, vendor_id, unit, created_at')
       .eq('store_code', store.code)
       .then(({ data, error: err }) => {
         if (!err) setItemNameRecords(data ?? [])
@@ -721,6 +722,23 @@ export default function InvoiceScreen() {
     })
     .filter(Boolean)
 
+  // 같은 거래처가 이 물품명을 예전엔 다른 단가 기준(단위)으로 입고했는지 확인한다. 다르면
+  // 나중에 같은 물품이 단위만 다르게 두 개로 갈라지니, 저장 전에 맞출지 물어본다.
+  const unitMismatchMatches = items
+    .map((item, index) => {
+      const typed = item.name.trim()
+      if (!typed || !item.unit || !vendorId || vendorId === 'new') return null
+      const pastRecords = itemNameRecords
+        .filter((r) => r.vendor_id === vendorId && r.item_name === typed && r.unit)
+        .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+      const last = pastRecords[0]
+      if (!last || last.unit === item.unit) return null
+      const key = `${typed}|${last.unit}|${item.unit}`
+      if (dismissedUnitMismatches.has(key)) return null
+      return { index, typed, lastUnit: last.unit, currentUnit: item.unit, key }
+    })
+    .filter(Boolean)
+
   return (
     <div className="screen screen-wide">
       <div className="screen-header">
@@ -1008,6 +1026,29 @@ export default function InvoiceScreen() {
         </div>
       ))}
 
+      {unitMismatchMatches.map((m) => (
+        <div key={m.key} className="price-alert-box">
+          <p className="price-alert-title">단위가 지난번과 달라요</p>
+          <p className="hint">
+            "{m.typed}"을(를) 이 거래처에서 지난번엔 {UNIT_LABELS[m.lastUnit] ?? m.lastUnit} 기준으로 입고했는데, 이번엔{' '}
+            {UNIT_LABELS[m.currentUnit] ?? m.currentUnit}로 입력하셨어요. 이대로 저장하면 같은 물품이 단위별로 두 개로
+            나뉠 수 있어요.
+          </p>
+          <div className="invoice-form">
+            <button
+              type="button"
+              className="btn-secondary"
+              onClick={() => setDismissedUnitMismatches((prev) => new Set(prev).add(m.key))}
+            >
+              그래도 {UNIT_LABELS[m.currentUnit] ?? m.currentUnit}로 저장
+            </button>
+            <button type="button" className="btn-primary" onClick={() => updateItem(m.index, 'unit', m.lastUnit)}>
+              지난번과 같은 {UNIT_LABELS[m.lastUnit] ?? m.lastUnit}로 맞추기
+            </button>
+          </div>
+        </div>
+      ))}
+
       {items.length > 0 && (
         <div className="item-table-wrap">
           <div className="item-table">
@@ -1102,7 +1143,7 @@ export default function InvoiceScreen() {
             type="button"
             className="btn-primary"
             onClick={() => handleSave()}
-            disabled={saving || hasAmountMismatch || similarItemMatches.length > 0}
+            disabled={saving || hasAmountMismatch || similarItemMatches.length > 0 || unitMismatchMatches.length > 0}
           >
             {saving
               ? '저장 중...'
@@ -1110,9 +1151,11 @@ export default function InvoiceScreen() {
                 ? '금액을 맞춰주세요'
                 : similarItemMatches.length > 0
                   ? '물품명을 확인해주세요'
-                  : editMode
-                    ? '수정 저장'
-                    : '저장'}
+                  : unitMismatchMatches.length > 0
+                    ? '단위를 확인해주세요'
+                    : editMode
+                      ? '수정 저장'
+                      : '저장'}
           </button>
         )}
         {editMode && (
