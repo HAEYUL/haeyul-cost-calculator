@@ -2,10 +2,15 @@ import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useStore } from '../context/StoreContext'
 import { supabase } from '../lib/supabaseClient'
+import { reidentifyItem } from '../lib/reidentifyItem'
 
 const UNIT_LABELS = { g: 'g', kg: 'kg', ea: '개', box: '박스', other: '기타' }
 const NO_UNIT_KEY = 'none'
 const WASTE_REASONS = ['상함/부패', '유통기한 경과', '조리 실수', '기타']
+
+function stockKey(name, u) {
+  return `${name}||${u ?? ''}`
+}
 
 export default function InventoryDetailScreen() {
   const { store } = useStore()
@@ -49,6 +54,18 @@ export default function InventoryDetailScreen() {
 
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo] = useState('')
+
+  const [otherItems, setOtherItems] = useState([])
+
+  const [showRename, setShowRename] = useState(false)
+  const [renameInput, setRenameInput] = useState(itemName)
+  const [renameUnit, setRenameUnit] = useState(unit)
+  const [renaming, setRenaming] = useState(false)
+  const [renameMessage, setRenameMessage] = useState('')
+
+  const [showMerge, setShowMerge] = useState(false)
+  const [mergeIntoKey, setMergeIntoKey] = useState('')
+  const [merging, setMerging] = useState(false)
 
   useEffect(() => {
     if (!store) navigate('/', { replace: true })
@@ -106,6 +123,23 @@ export default function InventoryDetailScreen() {
         setLoading(false)
       },
     )
+  }, [store, itemName, unit, dataKey])
+
+  useEffect(() => {
+    if (!store || !supabase) return
+    supabase
+      .from('invoices')
+      .select('item_name, unit')
+      .eq('store_code', store.code)
+      .then(({ data, error: err }) => {
+        if (err) return
+        const seen = new Map()
+        for (const r of data ?? []) {
+          const key = stockKey(r.item_name, r.unit)
+          if (key !== stockKey(itemName, unit)) seen.set(key, { itemName: r.item_name, unit: r.unit })
+        }
+        setOtherItems([...seen.values()].sort((a, b) => a.itemName.localeCompare(b.itemName)))
+      })
   }, [store, itemName, unit, dataKey])
 
   if (!store) return null
@@ -254,6 +288,57 @@ export default function InventoryDetailScreen() {
     setDataKey((k) => k + 1)
   }
 
+  // 이름/단위를 바꾸면 이 URL(itemName+unit)이 더 이상 존재하지 않는 물품을 가리키게 되므로,
+  // 바뀐 뒤에는 새 이름/단위 페이지로 이동한다.
+  const handleRename = async () => {
+    const newName = renameInput.trim()
+    if (!newName || !supabase) return
+    if (newName === itemName && renameUnit === unit) {
+      setShowRename(false)
+      return
+    }
+    setRenaming(true)
+    setError('')
+    setRenameMessage('')
+    const { error: err, priceNeedsReview } = await reidentifyItem({
+      supabase,
+      storeCode: store.code,
+      from: { itemName, unit },
+      to: { itemName: newName, unit: renameUnit },
+    })
+    setRenaming(false)
+    if (err) {
+      setError(err.message)
+      return
+    }
+    if (priceNeedsReview) {
+      setRenameMessage(
+        '단위를 바꿨어요. 개/박스/기타처럼 자동으로 단가를 맞출 수 없는 단위라 과거 단가 숫자는 그대로 남아있어요 — 최근 입고 단가가 새 단위 기준으로 맞는지 확인해주세요.',
+      )
+    }
+    navigate(`/inventory/${encodeURIComponent(newName)}/${renameUnit ?? NO_UNIT_KEY}`, { replace: true })
+  }
+
+  const handleMerge = async () => {
+    if (!mergeIntoKey || !supabase) return
+    const into = otherItems.find((r) => stockKey(r.itemName, r.unit) === mergeIntoKey)
+    if (!into) return
+    setMerging(true)
+    setError('')
+    const { error: err } = await reidentifyItem({
+      supabase,
+      storeCode: store.code,
+      from: { itemName, unit },
+      to: { itemName: into.itemName, unit: into.unit },
+    })
+    setMerging(false)
+    if (err) {
+      setError(err.message)
+      return
+    }
+    navigate(`/inventory/${encodeURIComponent(into.itemName)}/${into.unit ?? NO_UNIT_KEY}`, { replace: true })
+  }
+
   const inRange = (dateStr) => (!dateFrom || !dateStr || dateStr >= dateFrom) && (!dateTo || !dateStr || dateStr <= dateTo)
   const visibleUsageRows = usageRows.filter((r) => inRange(r.used_date))
   const visibleWasteRows = wasteRows.filter((r) => inRange(r.waste_date))
@@ -270,9 +355,103 @@ export default function InventoryDetailScreen() {
         <p className="subtitle">{store.name} · {unitLabel ? `${unitLabel} 단위 재고` : '재고'}</p>
       </div>
 
+      <div className="inventory-row-actions">
+        <button
+          type="button"
+          className="link-btn"
+          onClick={() => {
+            setShowRename((v) => !v)
+            setShowMerge(false)
+            setRenameInput(itemName)
+            setRenameUnit(unit)
+            setRenameMessage('')
+          }}
+        >
+          이름/단위 수정
+        </button>
+        <button
+          type="button"
+          className="link-btn"
+          onClick={() => {
+            setShowMerge((v) => !v)
+            setShowRename(false)
+            setMergeIntoKey('')
+          }}
+        >
+          합치기
+        </button>
+      </div>
+
+      {showRename && (
+        <div className="price-alert-box">
+          <p className="price-alert-title">물품명/단위 일괄 변경</p>
+          <div className="field">
+            <input
+              className="input"
+              value={renameInput}
+              onChange={(e) => setRenameInput(e.target.value)}
+              placeholder="새 물품명"
+              autoFocus
+            />
+          </div>
+          <div className="field">
+            <select className="select select-block" value={renameUnit ?? ''} onChange={(e) => setRenameUnit(e.target.value || null)}>
+              {Object.entries(UNIT_LABELS).map(([value, label]) => (
+                <option key={value} value={value}>
+                  {label}
+                </option>
+              ))}
+            </select>
+          </div>
+          <p className="hint">
+            "{itemName}"으로 저장된 모든 입고·사용·폐기·실사 기록이 새 이름/단위로 한 번에 바뀌어요. g↔kg 단위 변경은
+            과거 단가도 자동으로 맞춰지고, 그 외 단위 변경은 단가는 그대로 두고 단위만 바뀌어요. 되돌릴 수 없어요.
+          </p>
+          <div className="invoice-form">
+            <button type="button" className="btn-secondary" onClick={() => setShowRename(false)} disabled={renaming}>
+              취소
+            </button>
+            <button type="button" className="btn-primary" onClick={handleRename} disabled={renaming || !renameInput.trim()}>
+              {renaming ? '변경 중...' : '변경'}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {showMerge && (
+        <div className="price-alert-box price-alert-box-danger">
+          <p className="price-alert-title">"{itemName}"을(를) 어느 물품과 합칠까요?</p>
+          <div className="field">
+            <select className="select select-block" value={mergeIntoKey} onChange={(e) => setMergeIntoKey(e.target.value)}>
+              <option value="">합칠 물품을 선택하세요</option>
+              {otherItems.map((r) => (
+                <option key={stockKey(r.itemName, r.unit)} value={stockKey(r.itemName, r.unit)}>
+                  {r.itemName} ({r.unit ? UNIT_LABELS[r.unit] ?? r.unit : '단위 없음'})
+                </option>
+              ))}
+            </select>
+          </div>
+          {mergeIntoKey && (
+            <p className="hint">
+              "{itemName}"의 모든 입고·사용·폐기·실사 기록이 선택한 물품으로 옮겨지고, "{itemName}"은 사라져요. 정말
+              같은 물품이 맞는지 확인해주세요 — 되돌릴 수 없어요.
+            </p>
+          )}
+          <div className="invoice-form">
+            <button type="button" className="btn-secondary" onClick={() => setShowMerge(false)} disabled={merging}>
+              취소
+            </button>
+            <button type="button" className="btn-primary" onClick={handleMerge} disabled={merging || !mergeIntoKey}>
+              {merging ? '합치는 중...' : '합치기'}
+            </button>
+          </div>
+        </div>
+      )}
+
       {!supabase && <p className="hint">Supabase가 설정되지 않았습니다.</p>}
       {loading && <p className="hint">불러오는 중...</p>}
       {error && <p className="error-text">{error}</p>}
+      {renameMessage && <p className="hint">{renameMessage}</p>}
 
       {!loading && supabase && (
         <>
