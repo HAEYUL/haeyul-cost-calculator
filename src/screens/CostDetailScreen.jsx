@@ -16,10 +16,6 @@ const STATUS_LABEL = {
 
 const UNIT_LABELS = { g: 'g', kg: 'g', ea: '개', box: '박스', other: '기타' }
 
-function emptyItem() {
-  return { name: '', amountG: '', isSubRecipe: false }
-}
-
 export default function CostDetailScreen() {
   const { store } = useStore()
   const navigate = useNavigate()
@@ -126,9 +122,7 @@ export default function CostDetailScreen() {
 
       setSubRecipeNames(subMeta.map((m) => m.menu_name).sort((a, b) => a.localeCompare(b)))
       setRawIngredientNameOptions(
-        [...new Set((allRowsRes.data ?? []).filter((r) => !r.is_sub_recipe).map((r) => r.ingredient_name))].sort(
-          (a, b) => a.localeCompare(b),
-        ),
+        [...new Set((mappingRes.data ?? []).map((m) => m.recipe_ingredient_name))].sort((a, b) => a.localeCompare(b)),
       )
       setMappingByIngredient(mapping)
       setInfoByItem(info)
@@ -168,7 +162,6 @@ export default function CostDetailScreen() {
   const toggleItemType = (index, isSubRecipe) => {
     setItems((prev) => prev.map((item, i) => (i === index ? { ...item, isSubRecipe, name: '' } : item)))
   }
-  const addItem = () => setItems((prev) => [...prev, emptyItem()])
   const removeItem = (index) => setItems((prev) => prev.filter((_, i) => i !== index))
 
   const existingRawNames = new Set(items.filter((i) => !i.isSubRecipe).map((i) => i.name.trim()))
@@ -208,7 +201,8 @@ export default function CostDetailScreen() {
     closeBulkAdd()
   }
   const handleAddBlankItem = () => {
-    addItem()
+    const trimmed = bulkSearch.trim()
+    setItems((prev) => [...prev, { name: trimmed, amountG: '', isSubRecipe: false }])
     closeBulkAdd()
   }
 
