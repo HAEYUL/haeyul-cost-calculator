@@ -63,7 +63,6 @@ export default function MainMenuScreen() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [totalBalance, setTotalBalance] = useState(0)
-  const [staleVendorCount, setStaleVendorCount] = useState(0)
   const [monthTotal, setMonthTotal] = useState(0)
   const [negativeStockItems, setNegativeStockItems] = useState([])
   const [negativeStockCount, setNegativeStockCount] = useState(0)
@@ -84,8 +83,10 @@ export default function MainMenuScreen() {
     Promise.all([
       supabase
         .from('invoice_batches')
-        .select('vendor_id, total_amount, invoice_date, statement_balance, created_at')
+        .select('vendor_id, total_amount, invoice_date, statement_balance, current_balance, created_at')
         .eq('store_code', store.code),
+      supabase.from('vendor_payments').select('vendor_id, amount, paid_date').eq('store_code', store.code),
+      supabase.from('vendor_opening_balances').select('vendor_id, as_of_date, balance').eq('store_code', store.code),
       supabase
         .from('invoices')
         .select('item_name, unit, quantity, unit_price, invoice_date, created_at')
@@ -102,9 +103,24 @@ export default function MainMenuScreen() {
       supabase.from('menu_prices').select('menu_name, selling_price').eq('store_code', store.code),
       supabase.from('dashboard_dismissals').select('card_key, signature').eq('store_code', store.code),
     ]).then(
-      ([batchesRes, invoicesRes, usageRes, wasteRes, adjustmentsRes, recipesRes, metaRes, mappingRes, pricesRes, dismissalsRes]) => {
+      ([
+        batchesRes,
+        paymentsRes,
+        openingRes,
+        invoicesRes,
+        usageRes,
+        wasteRes,
+        adjustmentsRes,
+        recipesRes,
+        metaRes,
+        mappingRes,
+        pricesRes,
+        dismissalsRes,
+      ]) => {
       const err =
         batchesRes.error ||
+        paymentsRes.error ||
+        openingRes.error ||
         invoicesRes.error ||
         usageRes.error ||
         wasteRes.error ||
@@ -120,41 +136,72 @@ export default function MainMenuScreen() {
         return
       }
 
-      // 미지급금(전체 거래처 합계)과 이번 달 입고 총액
+      // 미지급금(전체 거래처 합계, 실시간)과 이번 달 입고 총액. 거래처 목록·상세 화면과 같은
+      // 방식으로 계산해야 화면마다 숫자가 어긋나지 않는다: 전잔액/현잔액이 적힌 가장 최근
+      // 명세표(또는 기초 잔액)를 앵커로 삼아, 그 이후 입고액을 더하고 그 이후 결제를 뺀다.
       const { start: monthStart, end: monthEnd } = monthBounds()
-      const latestBalance = new Map()
-      const latestAnyDateValue = new Map()
       let monthSum = 0
 
+      const batchesByVendor = new Map()
       for (const b of batchesRes.data ?? []) {
-        const dateStr = rowDateStr(b)
-        const dateValue = new Date(b.invoice_date ?? b.created_at).getTime()
+        if (!batchesByVendor.has(b.vendor_id)) batchesByVendor.set(b.vendor_id, [])
+        batchesByVendor.get(b.vendor_id).push(b)
 
+        const dateStr = rowDateStr(b)
         if (dateStr >= monthStart && dateStr < monthEnd) {
           monthSum += Number(b.total_amount)
         }
-
-        const existingAnyDate = latestAnyDateValue.get(b.vendor_id)
-        if (!existingAnyDate || dateValue > existingAnyDate) {
-          latestAnyDateValue.set(b.vendor_id, dateValue)
-        }
-
-        if (b.statement_balance != null) {
-          // 명세표에 적힌 잔액은 그날 입고분을 더하기 전의 전잔액이라, 당일 입고액을 더해야
-          // 그 시점의 실제 잔액이 된다.
-          const existing = latestBalance.get(b.vendor_id)
-          if (!existing || dateValue > existing.dateValue) {
-            latestBalance.set(b.vendor_id, { value: Number(b.statement_balance) + Number(b.total_amount), dateValue })
-          }
-        }
+      }
+      for (const list of batchesByVendor.values()) {
+        list.sort((a, b) => {
+          const ad = rowDateStr(a)
+          const bd = rowDateStr(b)
+          if (ad !== bd) return ad < bd ? 1 : -1
+          return new Date(b.created_at) - new Date(a.created_at)
+        })
       }
 
+      const paymentsByVendor = new Map()
+      for (const p of paymentsRes.data ?? []) {
+        if (!paymentsByVendor.has(p.vendor_id)) paymentsByVendor.set(p.vendor_id, [])
+        paymentsByVendor.get(p.vendor_id).push(p)
+      }
+      const openingByVendor = new Map()
+      for (const o of openingRes.data ?? []) {
+        if (!openingByVendor.has(o.vendor_id)) openingByVendor.set(o.vendor_id, [])
+        openingByVendor.get(o.vendor_id).push(o)
+      }
+
+      const hasBalanceInfo = (batch) => batch.statement_balance != null || batch.current_balance != null
+      const endingBalanceOf = (batch) =>
+        batch.current_balance != null
+          ? Number(batch.current_balance)
+          : Number(batch.statement_balance) + Number(batch.total_amount)
+
       let balanceSum = 0
-      let staleCount = 0
-      for (const [vendorId, info] of latestBalance) {
-        balanceSum += info.value
-        const anyDateValue = latestAnyDateValue.get(vendorId)
-        if (anyDateValue != null && anyDateValue > info.dateValue) staleCount += 1
+      for (const [vendorId, batches] of batchesByVendor) {
+        const payments = paymentsByVendor.get(vendorId) ?? []
+        const openings = openingByVendor.get(vendorId) ?? []
+
+        const anchorIndex = batches.findIndex(hasBalanceInfo)
+        const anchorBatch = anchorIndex >= 0 ? batches[anchorIndex] : undefined
+        const latestOpening = [...openings].sort((a, b) => (a.as_of_date < b.as_of_date ? 1 : -1))[0]
+        if (!anchorBatch && !latestOpening) continue
+
+        const anchorDate = anchorBatch ? rowDateStr(anchorBatch) : (latestOpening?.as_of_date ?? null)
+        const anchorBalance = anchorBatch
+          ? endingBalanceOf(anchorBatch)
+          : latestOpening
+            ? Number(latestOpening.balance)
+            : 0
+
+        const batchesSinceAnchor = anchorBatch ? batches.slice(0, anchorIndex) : batches
+        const invoicedSinceAnchor = batchesSinceAnchor.reduce((sum, b) => sum + Number(b.total_amount), 0)
+        const paymentsSinceAnchor = payments
+          .filter((p) => !anchorDate || !p.paid_date || p.paid_date > anchorDate)
+          .reduce((sum, p) => sum + Number(p.amount), 0)
+
+        balanceSum += anchorBalance + invoicedSinceAnchor - paymentsSinceAnchor
       }
 
       // 재고 부족(마이너스) 품목
@@ -217,7 +264,6 @@ export default function MainMenuScreen() {
       const reorderAlertsResult = computeReorderAlerts(invoicesRes.data ?? [])
 
       setTotalBalance(balanceSum)
-      setStaleVendorCount(staleCount)
       setMonthTotal(monthSum)
       setNegativeStockItems(negativeStock.slice(0, 5))
       setNegativeStockCount(negativeStock.length)
@@ -226,7 +272,7 @@ export default function MainMenuScreen() {
       setReorderAlerts(reorderAlertsResult)
 
       setSignatures({
-        balance: makeSignature([`${Math.round(balanceSum)}`, `${staleCount}`, `${Math.round(monthSum)}`]),
+        balance: makeSignature([`${Math.round(balanceSum)}`, `${Math.round(monthSum)}`]),
         negativeStock: makeSignature(negativeStock.map((r) => `${stockKey(r.itemName, r.unit)}:${r.current}`)),
         marginWarning: makeSignature(marginWarnings.map((m) => `${m.menuName}:${m.ratio.toFixed(1)}`)),
         reorder: makeSignature(reorderAlertsResult.map((a) => `${stockKey(a.itemName, a.unit)}:${a.status}`)),
@@ -292,9 +338,6 @@ export default function MainMenuScreen() {
                 <span>이번 달 입고 총액</span>
                 <strong>{Math.round(monthTotal).toLocaleString()}원</strong>
               </div>
-              {staleVendorCount > 0 && (
-                <p className="hint alert-up">⚠️ 거래처 {staleVendorCount}곳은 잔액이 최신이 아닐 수 있어요</p>
-              )}
             </div>
           )}
 
