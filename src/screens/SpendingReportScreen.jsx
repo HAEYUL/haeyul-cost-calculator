@@ -4,6 +4,7 @@ import { useStore } from '../context/StoreContext'
 import { supabase } from '../lib/supabaseClient'
 import { rowDateStr } from '../lib/rowDateStr'
 import { monthRange, DATE_RANGE_PRESETS as PRESETS } from '../lib/dateRange'
+import { useRememberedDateRange } from '../hooks/useRememberedDateRange'
 
 export default function SpendingReportScreen() {
   const { store } = useStore()
@@ -14,10 +15,10 @@ export default function SpendingReportScreen() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
-  const defaultRange = monthRange(0)
-  const [dateFrom, setDateFrom] = useState(defaultRange.start)
-  const [dateTo, setDateTo] = useState(defaultRange.end)
-  const [activePreset, setActivePreset] = useState('thisMonth')
+  const { dateFrom, dateTo, activePreset, setDateFrom, setDateTo, applyPreset } = useRememberedDateRange(
+    'spending-report',
+    { ...monthRange(0), activePreset: 'thisMonth' },
+  )
 
   useEffect(() => {
     if (!store) navigate('/', { replace: true })
@@ -47,13 +48,6 @@ export default function SpendingReportScreen() {
   }, [store])
 
   if (!store) return null
-
-  const applyPreset = (preset) => {
-    const { start, end } = preset.range()
-    setDateFrom(start)
-    setDateTo(end)
-    setActivePreset(preset.key)
-  }
 
   const filteredBatches = batches.filter((b) => {
     const d = rowDateStr(b)
@@ -110,10 +104,7 @@ export default function SpendingReportScreen() {
               type="date"
               className="input"
               value={dateFrom}
-              onChange={(e) => {
-                setDateFrom(e.target.value)
-                setActivePreset(null)
-              }}
+              onChange={(e) => setDateFrom(e.target.value)}
               aria-label="시작일"
             />
             <span className="date-range-sep">~</span>
@@ -121,10 +112,7 @@ export default function SpendingReportScreen() {
               type="date"
               className="input"
               value={dateTo}
-              onChange={(e) => {
-                setDateTo(e.target.value)
-                setActivePreset(null)
-              }}
+              onChange={(e) => setDateTo(e.target.value)}
               aria-label="종료일"
             />
           </div>

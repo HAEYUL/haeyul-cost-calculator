@@ -6,6 +6,7 @@ import { latestInvoiceInfoByItem } from '../lib/costCalc'
 import { UNIT_LABELS } from '../lib/units'
 import { stockKey } from '../lib/stockKey'
 import { monthRange, DATE_RANGE_PRESETS as PRESETS } from '../lib/dateRange'
+import { useRememberedDateRange } from '../hooks/useRememberedDateRange'
 
 const HIGH_WASTE_RATIO = 15 // 이 비율(%) 이상 폐기되면 눈에 띄게 표시
 
@@ -20,10 +21,10 @@ export default function UsageReportScreen() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
-  const defaultRange = monthRange(0)
-  const [dateFrom, setDateFrom] = useState(defaultRange.start)
-  const [dateTo, setDateTo] = useState(defaultRange.end)
-  const [activePreset, setActivePreset] = useState('thisMonth')
+  const { dateFrom, dateTo, activePreset, setDateFrom, setDateTo, applyPreset } = useRememberedDateRange(
+    'usage-report',
+    { ...monthRange(0), activePreset: 'thisMonth' },
+  )
   const [sortBy, setSortBy] = useState('used') // 'used' | 'wasteRatio'
 
   useEffect(() => {
@@ -54,13 +55,6 @@ export default function UsageReportScreen() {
   }, [store])
 
   if (!store) return null
-
-  const applyPreset = (preset) => {
-    const { start, end } = preset.range()
-    setDateFrom(start)
-    setDateTo(end)
-    setActivePreset(preset.key)
-  }
 
   const inRange = (dateStr, createdAt) => {
     const d = dateStr ?? createdAt.slice(0, 10)
@@ -135,10 +129,7 @@ export default function UsageReportScreen() {
               type="date"
               className="input"
               value={dateFrom}
-              onChange={(e) => {
-                setDateFrom(e.target.value)
-                setActivePreset(null)
-              }}
+              onChange={(e) => setDateFrom(e.target.value)}
               aria-label="시작일"
             />
             <span className="date-range-sep">~</span>
@@ -146,10 +137,7 @@ export default function UsageReportScreen() {
               type="date"
               className="input"
               value={dateTo}
-              onChange={(e) => {
-                setDateTo(e.target.value)
-                setActivePreset(null)
-              }}
+              onChange={(e) => setDateTo(e.target.value)}
               aria-label="종료일"
             />
           </div>
