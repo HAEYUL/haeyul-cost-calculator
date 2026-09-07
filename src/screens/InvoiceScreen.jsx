@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useState } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { useStore } from '../context/StoreContext'
 import { supabase } from '../lib/supabaseClient'
 import { compressImage } from '../lib/compressImage'
@@ -126,8 +126,10 @@ function findItemMismatches(items) {
 export default function InvoiceScreen() {
   const { store } = useStore()
   const navigate = useNavigate()
+  const location = useLocation()
   const { batchId } = useParams()
   const editMode = Boolean(batchId)
+  const returnDateRange = location.state?.returnDateRange ?? null
 
   const [loadingEdit, setLoadingEdit] = useState(editMode)
   const [previewUrl, setPreviewUrl] = useState(null)
@@ -437,7 +439,7 @@ export default function InvoiceScreen() {
       }
 
       if (didCreateVendor) setVendorsVersion((v) => v + 1)
-      navigate(`/vendors/${resolvedVendorId}`)
+      navigate(`/vendors/${resolvedVendorId}`, returnDateRange ? { state: { dateRange: returnDateRange } } : undefined)
       return
     }
 
