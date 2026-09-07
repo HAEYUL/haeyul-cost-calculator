@@ -108,6 +108,22 @@ function itemAmount(item) {
   return q != null && p != null ? q * p : 0
 }
 
+function itemVat(item) {
+  return item.vat === '' ? 0 : Number(item.vat)
+}
+
+// vat_separate 거래처(금액=공급가액만, 부가세 별도)는 원가계산에서 다른 거래처와 같은 기준(부가세
+// 포함 실구매단가)으로 비교할 수 있도록 단가를 환산해 별도 컬럼에 저장한다. 부가세 별도가 아니면
+// null(=원가계산에서 unit_price를 그대로 씀).
+function vatIncludedUnitPrice(item, vatSeparate) {
+  if (!vatSeparate) return null
+  const unitPrice = item.unitPrice === '' ? null : Number(item.unitPrice)
+  const amount = item.amount === '' ? null : Number(item.amount)
+  const vat = item.vat === '' ? null : Number(item.vat)
+  if (unitPrice == null || amount == null || vat == null || amount <= 0) return null
+  return unitPrice * ((amount + vat) / amount)
+}
+
 // 반올림 오차 등을 감안한 허용 오차(원)
 const AMOUNT_TOLERANCE = 1
 
@@ -168,7 +184,7 @@ export default function InvoiceScreen() {
     if (!store || !supabase) return
     supabase
       .from('vendors')
-      .select('id, name')
+      .select('id, name, vat_separate')
       .eq('store_code', store.code)
       .order('name')
       .then(({ data, error: err }) => {
@@ -386,12 +402,20 @@ export default function InvoiceScreen() {
       resolvedVendorName = vendors.find((v) => v.id === vendorId)?.name ?? ''
     }
 
+    // 새로 만든 거래처는 항상 부가세 별도가 아닌 기본값(false)으로 시작한다.
+    const resolvedVendorVatSeparate = didCreateVendor
+      ? false
+      : (vendors.find((v) => v.id === resolvedVendorId)?.vat_separate ?? false)
+
     const validItems = items.filter((item) => item.name.trim())
 
     // 수정 모드: 새 명세표를 만드는 대신 기존 전표(batch)와 그 품목들을 덮어쓴다.
     // 중복 검사·단가 변동 알림은 새로 입고된 게 아니라 오입력을 고치는 것이므로 건너뛴다.
     if (editMode) {
-      const editTotalAmount = validItems.reduce((sum, item) => sum + itemAmount(item), 0)
+      const editTotalAmount = validItems.reduce(
+        (sum, item) => sum + itemAmount(item) + (resolvedVendorVatSeparate ? itemVat(item) : 0),
+        0,
+      )
 
       const { error: updateErr } = await supabase
         .from('invoice_batches')
@@ -428,6 +452,7 @@ export default function InvoiceScreen() {
         unit: item.unit || null,
         amount: item.amount === '' ? null : Number(item.amount),
         vat: item.vat === '' ? null : Number(item.vat),
+        vat_included_unit_price: vatIncludedUnitPrice(item, resolvedVendorVatSeparate),
         invoice_date: date || null,
       }))
 
@@ -527,7 +552,10 @@ export default function InvoiceScreen() {
       }
     }
 
-    const totalAmount = validItems.reduce((sum, item) => sum + itemAmount(item), 0)
+    const totalAmount = validItems.reduce(
+      (sum, item) => sum + itemAmount(item) + (resolvedVendorVatSeparate ? itemVat(item) : 0),
+      0,
+    )
 
     const { data: batch, error: batchErr } = await supabase
       .from('invoice_batches')
@@ -559,6 +587,7 @@ export default function InvoiceScreen() {
       unit: item.unit || null,
       amount: item.amount === '' ? null : Number(item.amount),
       vat: item.vat === '' ? null : Number(item.vat),
+      vat_included_unit_price: vatIncludedUnitPrice(item, resolvedVendorVatSeparate),
       invoice_date: date || null,
     }))
 
@@ -632,7 +661,10 @@ export default function InvoiceScreen() {
           .select('recipe_ingredient_name, invoice_item_name')
           .eq('store_code', store.code),
         supabase.from('menu_prices').select('menu_name, selling_price').eq('store_code', store.code),
-        supabase.from('invoices').select('item_name, unit_price, unit, created_at').eq('store_code', store.code),
+        supabase
+          .from('invoices')
+          .select('item_name, unit_price, vat_included_unit_price, unit, created_at')
+          .eq('store_code', store.code),
       ])
 
       if (!recipesRes.error && !mappingRes.error && !pricesRes.error && !allInvoicesRes.error) {
@@ -698,11 +730,16 @@ export default function InvoiceScreen() {
     return names.filter((n) => n !== norm && n.includes(norm)).slice(0, 8)
   }
 
+  // 대부분 거래처는 금액(item.amount)에 이미 부가세가 포함된 값(공급가+부가세)이라 여기에 부가세를
+  // 또 더하면 이중으로 계산된다. "부가세 별도" 거래처만 금액이 공급가액만이라 부가세를 더해야 한다.
+  const currentVendorVatSeparate = vendors.find((v) => v.id === vendorId)?.vat_separate ?? false
+
   const itemMismatches = findItemMismatches(items)
   const validItemsForSum = items.filter((item) => item.name.trim())
-  // 금액(item.amount)은 과세 품목이면 이미 부가세가 포함된 값(공급가+부가세)이라, 여기에 부가세를
-  // 또 더하면 이중으로 계산된다. 합계는 금액만 그대로 더한다.
-  const itemsSum = validItemsForSum.reduce((sum, item) => sum + itemAmount(item), 0)
+  const itemsSum = validItemsForSum.reduce(
+    (sum, item) => sum + itemAmount(item) + (currentVendorVatSeparate ? itemVat(item) : 0),
+    0,
+  )
   const totalMismatch =
     invoiceTotal !== '' && Math.abs(itemsSum - Number(invoiceTotal)) > AMOUNT_TOLERANCE
       ? { itemsSum, invoiceTotal: Number(invoiceTotal) }
@@ -923,6 +960,12 @@ export default function InvoiceScreen() {
           ))}
           <option value="new">+ 새 거래처 추가</option>
         </select>
+        {currentVendorVatSeparate && (
+          <p className="hint">
+            이 거래처는 부가세 별도 거래처예요. 각 품목의 "금액"은 부가세를 뺀 공급가액만 입력하면 돼요
+            (부가세는 부가세 칸에 따로).
+          </p>
+        )}
       </div>
 
       {vendorId === 'new' && (
