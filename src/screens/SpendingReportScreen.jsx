@@ -2,42 +2,8 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useStore } from '../context/StoreContext'
 import { supabase } from '../lib/supabaseClient'
-
-function pad2(n) {
-  return String(n).padStart(2, '0')
-}
-
-// 명세표에 적힌 입고일(invoice_date)을 우선 기준으로 삼고, 없는 옛 데이터만 저장 시각
-// (created_at)의 날짜로 대신한다.
-function rowDateStr(row) {
-  if (row.invoice_date) return row.invoice_date
-  const d = new Date(row.created_at)
-  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`
-}
-
-// offset=0이면 이번 달, -1이면 지난 달의 [시작일, 마지막일]
-function monthRange(offset = 0) {
-  const now = new Date()
-  const first = new Date(now.getFullYear(), now.getMonth() + offset, 1)
-  const y = first.getFullYear()
-  const m = first.getMonth()
-  const start = `${y}-${pad2(m + 1)}-01`
-  const lastDay = new Date(y, m + 1, 0).getDate()
-  const end = `${y}-${pad2(m + 1)}-${pad2(lastDay)}`
-  return { start, end }
-}
-
-function yearRange() {
-  const y = new Date().getFullYear()
-  return { start: `${y}-01-01`, end: `${y}-12-31` }
-}
-
-const PRESETS = [
-  { key: 'thisMonth', label: '이번 달', range: () => monthRange(0) },
-  { key: 'lastMonth', label: '지난 달', range: () => monthRange(-1) },
-  { key: 'thisYear', label: '올해', range: () => yearRange() },
-  { key: 'all', label: '전체 기간', range: () => ({ start: '', end: '' }) },
-]
+import { rowDateStr } from '../lib/rowDateStr'
+import { monthRange, DATE_RANGE_PRESETS as PRESETS } from '../lib/dateRange'
 
 export default function SpendingReportScreen() {
   const { store } = useStore()

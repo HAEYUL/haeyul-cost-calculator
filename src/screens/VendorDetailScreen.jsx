@@ -3,30 +3,9 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { useStore } from '../context/StoreContext'
 import { supabase } from '../lib/supabaseClient'
 import AmountInput from '../components/AmountInput'
-
-const UNIT_LABELS = { g: 'g', kg: 'kg', ea: '개', box: '박스', other: '기타' }
-
-// 명세표에 적힌 입고일(invoice_date)을 우선 기준으로 삼고, 없는 옛 데이터만 저장 시각
-// (created_at)의 날짜로 대신한다.
-function rowDateStr(row) {
-  if (row.invoice_date) return row.invoice_date
-  const d = new Date(row.created_at)
-  const y = d.getFullYear()
-  const m = String(d.getMonth() + 1).padStart(2, '0')
-  const day = String(d.getDate()).padStart(2, '0')
-  return `${y}-${m}-${day}`
-}
-
-// 이번 달의 시작일~마지막 날짜 (기간 필터 기본값)
-function monthRange() {
-  const now = new Date()
-  const y = now.getFullYear()
-  const m = now.getMonth()
-  const start = `${y}-${String(m + 1).padStart(2, '0')}-01`
-  const lastDay = new Date(y, m + 1, 0).getDate()
-  const end = `${y}-${String(m + 1).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`
-  return { start, end }
-}
+import { UNIT_LABELS } from '../lib/units'
+import { rowDateStr } from '../lib/rowDateStr'
+import { monthRange } from '../lib/dateRange'
 
 export default function VendorDetailScreen() {
   const { store } = useStore()

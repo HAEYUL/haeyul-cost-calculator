@@ -6,8 +6,8 @@ import { compressImage } from '../lib/compressImage'
 import InvoiceHistory from '../components/InvoiceHistory'
 import AmountInput from '../components/AmountInput'
 import { latestInvoiceInfoByItem, computeMenuCost } from '../lib/costCalc'
+import { UNIT_LABELS } from '../lib/units'
 
-const UNIT_LABELS = { g: 'g', kg: 'kg', ea: '개', box: '박스', other: '기타' }
 const MARGIN_WARNING_RATIO = 40
 
 function emptyItem() {

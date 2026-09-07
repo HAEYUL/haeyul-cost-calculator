@@ -5,6 +5,7 @@ import { supabase } from '../lib/supabaseClient'
 import { latestInvoiceInfoByItem, computeMenuCost, computeAllSubRecipeUnitCosts } from '../lib/costCalc'
 import AmountInput from '../components/AmountInput'
 import { useIngredientMatch } from '../hooks/useIngredientMatch'
+import { RECIPE_UNIT_LABELS as UNIT_LABELS } from '../lib/units'
 
 const STATUS_LABEL = {
   unmapped: '재료 매칭 필요',
@@ -13,8 +14,6 @@ const STATUS_LABEL = {
   unit_mismatch: '매칭된 물품의 단위 정보 없음',
   sub_no_cost: '부재료 원가 계산 안 됨',
 }
-
-const UNIT_LABELS = { g: 'g', kg: 'g', ea: '개', box: '박스', other: '기타' }
 
 export default function CostDetailScreen() {
   const { store } = useStore()
