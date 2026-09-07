@@ -19,6 +19,7 @@ export default function VendorDetailScreen() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [dataKey, setDataKey] = useState(0)
+  const [savingVatSeparate, setSavingVatSeparate] = useState(false)
 
   // 명세표 수정 화면에 갔다가 돌아온 경우에만(location.state로 전달됨) 고른 기간을 유지하고,
   // 그 외의 재진입(메인 메뉴 등을 거쳐 다시 들어온 경우, 다른 거래처로 이동한 경우)에는
@@ -59,7 +60,7 @@ export default function VendorDetailScreen() {
     setLoading(true)
     setError('')
     Promise.all([
-      supabase.from('vendors').select('id, name').eq('id', vendorId).single(),
+      supabase.from('vendors').select('id, name, vat_separate').eq('id', vendorId).single(),
       supabase
         .from('invoice_batches')
         .select(
@@ -260,6 +261,23 @@ export default function VendorDetailScreen() {
     setDataKey((k) => k + 1)
   }
 
+  // "부가세 별도" 거래처는 명세표의 "금액"이 공급가액만이고 부가세를 더해야 진짜 합계가 되는
+  // 곳(예: 디안반찬광)을 위한 설정. 켜두면 명세표 합계 검증·미지급금·원가계산이 모두 그 방식에
+  // 맞춰진다.
+  const handleToggleVatSeparate = async (e) => {
+    const next = e.target.checked
+    if (!supabase || !vendor) return
+    setSavingVatSeparate(true)
+    setError('')
+    const { error: err } = await supabase.from('vendors').update({ vat_separate: next }).eq('id', vendorId)
+    setSavingVatSeparate(false)
+    if (err) {
+      setError(err.message)
+      return
+    }
+    setVendor((v) => ({ ...v, vat_separate: next }))
+  }
+
   const handleDeleteOpeningBalance = async () => {
     if (!deleteOpeningBalanceTarget || !supabase) return
     setDeletingOpeningBalance(true)
@@ -326,8 +344,15 @@ export default function VendorDetailScreen() {
       {loading && <p className="hint">불러오는 중...</p>}
       {error && <p className="error-text">{error}</p>}
 
-      {!loading && supabase && (
+      {!loading && supabase && vendor && (
         <>
+          <div className="field">
+            <label className="toggle-row">
+              <input type="checkbox" checked={!!vendor.vat_separate} onChange={handleToggleVatSeparate} disabled={savingVatSeparate} />
+              <span>부가세 별도 거래처 (명세표의 "금액"이 공급가액만이고, 부가세를 더해야 진짜 합계가 돼요)</span>
+            </label>
+          </div>
+
           <div className="date-range">
             <input
               type="date"

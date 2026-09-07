@@ -41,7 +41,10 @@ export default function CostScreen() {
       supabase.from('recipe_meta').select('menu_name, recipe_type, yield_qty').eq('store_code', store.code),
       supabase.from('recipes').select('menu_name, ingredient_name, amount_g, is_sub_recipe').eq('store_code', store.code),
       supabase.from('ingredient_mapping').select('recipe_ingredient_name, invoice_item_name').eq('store_code', store.code),
-      supabase.from('invoices').select('item_name, unit_price, unit, created_at').eq('store_code', store.code),
+      supabase
+        .from('invoices')
+        .select('item_name, unit_price, vat_included_unit_price, unit, created_at')
+        .eq('store_code', store.code),
       supabase.from('menu_prices').select('menu_name, selling_price').eq('store_code', store.code),
     ]).then(([metaRes, recipesRes, mappingRes, invoicesRes, pricesRes]) => {
       const err = metaRes.error || recipesRes.error || mappingRes.error || invoicesRes.error || pricesRes.error

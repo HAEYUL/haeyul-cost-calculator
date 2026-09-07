@@ -19,6 +19,26 @@ describe('latestInvoiceInfoByItem', () => {
     const map = latestInvoiceInfoByItem([{ item_name: '대파', unit_price: null, unit: 'kg', created_at: '2026-09-01T00:00:00Z' }])
     expect(map.has('대파')).toBe(false)
   })
+
+  it('vat_included_unit_price가 있으면(부가세 별도 거래처) unit_price 대신 그 값을 쓴다', () => {
+    const map = latestInvoiceInfoByItem([
+      {
+        item_name: '디안멸치육수',
+        unit_price: 172727.3,
+        vat_included_unit_price: 190000.03,
+        unit: 'box',
+        created_at: '2026-08-03T00:00:00Z',
+      },
+    ])
+    expect(map.get('디안멸치육수')).toEqual({ unitPrice: 190000.03, unit: 'box' })
+  })
+
+  it('vat_included_unit_price가 없으면(일반 거래처) unit_price를 그대로 쓴다', () => {
+    const map = latestInvoiceInfoByItem([
+      { item_name: '대파', unit_price: 3000, vat_included_unit_price: null, unit: 'kg', created_at: '2026-09-01T00:00:00Z' },
+    ])
+    expect(map.get('대파')).toEqual({ unitPrice: 3000, unit: 'kg' })
+  })
 })
 
 describe('computeMenuCost - g/kg 단위', () => {

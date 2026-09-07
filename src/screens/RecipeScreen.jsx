@@ -58,7 +58,10 @@ export default function RecipeScreen() {
       supabase.from('recipe_meta').select('menu_name, yield_qty, yield_unit').eq('store_code', store.code).eq('recipe_type', 'sub'),
       supabase.from('recipes').select('menu_name, ingredient_name, amount_g, is_sub_recipe').eq('store_code', store.code),
       supabase.from('ingredient_mapping').select('recipe_ingredient_name, invoice_item_name').eq('store_code', store.code),
-      supabase.from('invoices').select('item_name, unit_price, unit, created_at').eq('store_code', store.code),
+      supabase
+        .from('invoices')
+        .select('item_name, unit_price, vat_included_unit_price, unit, created_at')
+        .eq('store_code', store.code),
       supabase.from('item_recipe_units').select('item_name, recipe_unit, ratio').eq('store_code', store.code),
     ]).then(([metaRes, recipesRes, mappingRes, invoicesRes, recipeUnitsRes]) => {
       const err = metaRes.error || recipesRes.error || mappingRes.error || invoicesRes.error || recipeUnitsRes.error

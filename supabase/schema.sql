@@ -69,6 +69,18 @@ create policy "vendors are publicly deletable"
   on vendors for delete
   using (true);
 
+-- vat_separate: 대부분 거래처는 명세표의 "금액"에 부가세가 이미 포함돼 있지만(수량×단가=부가세
+-- 포함 총액), 드물게 "금액"이 공급가액만이고 부가세를 별도로 더해야 진짜 합계가 되는 거래처가
+-- 있다. 그런 거래처만 이 값을 true로 켜두면 명세표 합계 검증과 원가계산이 그 방식에 맞춰진다.
+alter table vendors add column if not exists vat_separate boolean not null default false;
+
+-- 거래처 상세 화면에서 위 vat_separate 설정을 바로 켜고 끌 수 있어야 한다.
+drop policy if exists "vendors are publicly updatable" on vendors;
+create policy "vendors are publicly updatable"
+  on vendors for update
+  using (true)
+  with check (true);
+
 -- invoice_batches: 거래명세표 사진 한 장(=한 번의 저장)을 전표 하나로 묶는다. 거래처별
 -- 입고액/미지급금 계산과 날짜별 정리는 이 단위를 기준으로 한다.
 create table if not exists invoice_batches (
@@ -479,6 +491,13 @@ alter table invoices add column if not exists batch_id uuid references invoice_b
 -- vat: 이 품목 행에 명세표가 따로 적어 보낸 부가세 금액. 공급가액(amount)과 합쳐서 이미
 -- 적혀있거나 표에 부가세 칸 자체가 없으면 null.
 alter table invoices add column if not exists vat numeric;
+
+-- vat_included_unit_price: vendors.vat_separate 거래처(금액=공급가액만, 부가세 별도)는 unit_price가
+-- 부가세 빠진 값이라, 다른 거래처와 같은 기준(부가세 포함 실구매단가)으로 원가계산을 하려면 환산한
+-- 값이 필요하다. unit_price/amount는 명세표 원본 그대로(수정 화면에서 다시 열어도 원본과 일치해야
+-- 하므로) 건드리지 않고, 원가계산에서만 이 값을 unit_price보다 우선해서 쓴다. vat_separate가
+-- 아닌 거래처는 항상 null(=unit_price를 그대로 씀, 기존 동작 그대로).
+alter table invoices add column if not exists vat_included_unit_price numeric;
 
 create index if not exists invoices_store_vendor_idx on invoices (store_code, vendor);
 create index if not exists invoices_store_item_idx on invoices (store_code, item_name);

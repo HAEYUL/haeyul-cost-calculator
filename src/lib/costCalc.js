@@ -8,7 +8,11 @@ export function latestInvoiceInfoByItem(invoiceRows) {
   const sorted = [...invoiceRows].sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
   for (const row of sorted) {
     if (!map.has(row.item_name) && row.unit_price != null) {
-      map.set(row.item_name, { unitPrice: Number(row.unit_price), unit: row.unit ?? null })
+      // vat_included_unit_price: "부가세 별도" 거래처(금액=공급가액만)의 물품은 unit_price에
+      // 부가세가 안 들어있어서, 다른 거래처와 같은 기준(부가세 포함 실구매단가)으로 비교하려면
+      // 이 값을 우선 써야 한다. 없으면(=부가세 별도가 아닌 일반 거래처) unit_price를 그대로 쓴다.
+      const unitPrice = row.vat_included_unit_price != null ? Number(row.vat_included_unit_price) : Number(row.unit_price)
+      map.set(row.item_name, { unitPrice, unit: row.unit ?? null })
     }
   }
   return map

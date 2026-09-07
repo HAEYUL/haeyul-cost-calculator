@@ -35,7 +35,10 @@ export default function WasteReportScreen() {
         .from('waste_records')
         .select('item_name, unit, qty, waste_date, reason, created_at')
         .eq('store_code', store.code),
-      supabase.from('invoices').select('item_name, unit_price, unit, created_at').eq('store_code', store.code),
+      supabase
+        .from('invoices')
+        .select('item_name, unit_price, vat_included_unit_price, unit, created_at')
+        .eq('store_code', store.code),
     ]).then(([wasteRes, invoicesRes]) => {
       const err = wasteRes.error || invoicesRes.error
       if (err) {

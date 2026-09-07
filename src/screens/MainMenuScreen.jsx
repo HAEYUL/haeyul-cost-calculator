@@ -79,7 +79,7 @@ export default function MainMenuScreen() {
       supabase.from('vendor_opening_balances').select('vendor_id, as_of_date, balance').eq('store_code', store.code),
       supabase
         .from('invoices')
-        .select('item_name, unit, quantity, unit_price, invoice_date, created_at')
+        .select('item_name, unit, quantity, unit_price, vat_included_unit_price, invoice_date, created_at')
         .eq('store_code', store.code),
       supabase.from('stock_usage').select('item_name, unit, used_qty').eq('store_code', store.code),
       supabase.from('waste_records').select('item_name, unit, qty').eq('store_code', store.code),
