@@ -1,16 +1,16 @@
 import { useEffect, useState } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { useStore } from '../context/StoreContext'
 import { supabase } from '../lib/supabaseClient'
 import AmountInput from '../components/AmountInput'
 import { UNIT_LABELS } from '../lib/units'
 import { rowDateStr } from '../lib/rowDateStr'
 import { monthRange } from '../lib/dateRange'
-import { useRememberedDateRange } from '../hooks/useRememberedDateRange'
 
 export default function VendorDetailScreen() {
   const { store } = useStore()
   const navigate = useNavigate()
+  const location = useLocation()
   const { vendorId } = useParams()
 
   const [vendor, setVendor] = useState(null)
@@ -20,7 +20,17 @@ export default function VendorDetailScreen() {
   const [error, setError] = useState('')
   const [dataKey, setDataKey] = useState(0)
 
-  const { dateFrom, dateTo, setDateFrom, setDateTo } = useRememberedDateRange(`vendor-detail:${vendorId}`, monthRange())
+  // 명세표 수정 화면에 갔다가 돌아온 경우에만(location.state로 전달됨) 고른 기간을 유지하고,
+  // 그 외의 재진입(메인 메뉴 등을 거쳐 다시 들어온 경우, 다른 거래처로 이동한 경우)에는
+  // 항상 이번 달로 되돌아간다.
+  const [dateFrom, setDateFrom] = useState(() => location.state?.dateRange?.dateFrom ?? monthRange().start)
+  const [dateTo, setDateTo] = useState(() => location.state?.dateRange?.dateTo ?? monthRange().end)
+
+  useEffect(() => {
+    setDateFrom(location.state?.dateRange?.dateFrom ?? monthRange().start)
+    setDateTo(location.state?.dateRange?.dateTo ?? monthRange().end)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [vendorId])
 
   const [paymentAmount, setPaymentAmount] = useState('')
   const [paymentDate, setPaymentDate] = useState('')
@@ -559,7 +569,9 @@ export default function VendorDetailScreen() {
                     <button
                       type="button"
                       className="link-btn"
-                      onClick={() => navigate(`/invoices/edit/${batch.id}`)}
+                      onClick={() =>
+                        navigate(`/invoices/edit/${batch.id}`, { state: { returnDateRange: { dateFrom, dateTo } } })
+                      }
                     >
                       수정
                     </button>
