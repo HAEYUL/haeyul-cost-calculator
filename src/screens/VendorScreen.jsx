@@ -148,9 +148,11 @@ export default function VendorScreen() {
           .filter((p) => !anchorDate || !p.paid_date || p.paid_date >= anchorDate)
           .reduce((sum, p) => sum + Number(p.amount), 0)
 
-        if (anchorBatch || latestOpening) {
-          liveBalance.set(vendorId, anchorBalance + invoicedSinceAnchor - paymentsSinceAnchor)
-        }
+        // 전잔액/현잔액이 찍힌 명세표나 기초 잔액이 하나도 없어도(anchorBatch, latestOpening 둘 다
+        // 없어도) 0원부터 시작해서 "입고 합계 − 결제 합계"로 계산할 수 있다 — 거래처 상세 화면과
+        // 같은 계산 방식이다. batchesByVendor에 있는 거래처는 이미 입고 기록이 최소 1건은 있으니
+        // 항상 계산해서 보여준다.
+        liveBalance.set(vendorId, anchorBalance + invoicedSinceAnchor - paymentsSinceAnchor)
       }
 
       // 결제액(추정) = 당월 입고금액 − (당월 최근 잔액 − 전월까지의 마지막 잔액).
