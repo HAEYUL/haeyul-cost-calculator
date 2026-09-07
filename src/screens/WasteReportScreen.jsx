@@ -3,40 +3,9 @@ import { useNavigate } from 'react-router-dom'
 import { useStore } from '../context/StoreContext'
 import { supabase } from '../lib/supabaseClient'
 import { latestInvoiceInfoByItem } from '../lib/costCalc'
-
-const UNIT_LABELS = { g: 'g', kg: 'kg', ea: '개', box: '박스', other: '기타' }
-
-function pad2(n) {
-  return String(n).padStart(2, '0')
-}
-
-function stockKey(itemName, unit) {
-  return `${itemName}||${unit ?? ''}`
-}
-
-// offset=0이면 이번 달, -1이면 지난 달의 [시작일, 마지막일]
-function monthRange(offset = 0) {
-  const now = new Date()
-  const first = new Date(now.getFullYear(), now.getMonth() + offset, 1)
-  const y = first.getFullYear()
-  const m = first.getMonth()
-  const start = `${y}-${pad2(m + 1)}-01`
-  const lastDay = new Date(y, m + 1, 0).getDate()
-  const end = `${y}-${pad2(m + 1)}-${pad2(lastDay)}`
-  return { start, end }
-}
-
-function yearRange() {
-  const y = new Date().getFullYear()
-  return { start: `${y}-01-01`, end: `${y}-12-31` }
-}
-
-const PRESETS = [
-  { key: 'thisMonth', label: '이번 달', range: () => monthRange(0) },
-  { key: 'lastMonth', label: '지난 달', range: () => monthRange(-1) },
-  { key: 'thisYear', label: '올해', range: () => yearRange() },
-  { key: 'all', label: '전체 기간', range: () => ({ start: '', end: '' }) },
-]
+import { UNIT_LABELS } from '../lib/units'
+import { stockKey } from '../lib/stockKey'
+import { monthRange, DATE_RANGE_PRESETS as PRESETS } from '../lib/dateRange'
 
 export default function WasteReportScreen() {
   const { store } = useStore()

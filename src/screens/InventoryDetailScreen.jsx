@@ -3,14 +3,11 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { useStore } from '../context/StoreContext'
 import { supabase } from '../lib/supabaseClient'
 import { reidentifyItem, weightConversionFactor } from '../lib/reidentifyItem'
+import { UNIT_LABELS } from '../lib/units'
+import { stockKey } from '../lib/stockKey'
 
-const UNIT_LABELS = { g: 'g', kg: 'kg', ea: '개', box: '박스', other: '기타' }
 const NO_UNIT_KEY = 'none'
 const WASTE_REASONS = ['상함/부패', '유통기한 경과', '조리 실수', '기타']
-
-function stockKey(name, u) {
-  return `${name}||${u ?? ''}`
-}
 
 export default function InventoryDetailScreen() {
   const { store } = useStore()

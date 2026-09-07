@@ -4,6 +4,9 @@ import { useStore } from '../context/StoreContext'
 import { supabase } from '../lib/supabaseClient'
 import { latestInvoiceInfoByItem, computeMenuCost, computeAllSubRecipeUnitCosts } from '../lib/costCalc'
 import { computeReorderAlerts } from '../lib/reorderCalc'
+import { UNIT_LABELS } from '../lib/units'
+import { stockKey } from '../lib/stockKey'
+import { rowDateStr } from '../lib/rowDateStr'
 
 const MENU_ITEMS = [
   { label: '입고 입력', path: '/invoices' },
@@ -16,6 +19,7 @@ const MENU_ITEMS = [
   { label: '지출 리포트', path: '/spending-report' },
   { label: '재주문 알림', path: '/reorder-alerts' },
   { label: '소비 패턴 분석', path: '/consumption-pattern' },
+  { label: '품목별 사용 리포트', path: '/usage-report' },
   { label: '폐기/손실 리포트', path: '/waste-report' },
   { label: '알림 설정', path: '/notification-settings' },
   { label: '불편사항/건의사항', path: '/feedback' },
@@ -23,28 +27,12 @@ const MENU_ITEMS = [
   { label: '매장 비밀번호 변경', path: '/change-pin' },
 ]
 
-const UNIT_LABELS = { g: 'g', kg: 'kg', ea: '개', box: '박스', other: '기타' }
 const MARGIN_WARNING_RATIO = 40
-
-function stockKey(itemName, unit) {
-  return `${itemName}||${unit ?? ''}`
-}
 
 // 알림 카드를 확인(X)했을 때 그 시점의 내용을 문자열로 남겨서, 다음에 열었을 때 내용이
 // 같으면 계속 숨기고 달라지면 다시 보여주는 데 쓴다.
 function makeSignature(parts) {
   return [...parts].sort().join('|')
-}
-
-// 명세표에 적힌 입고일(invoice_date)을 우선 기준으로 삼고, 없는 옛 데이터만 저장 시각
-// (created_at)의 날짜로 대신한다.
-function rowDateStr(row) {
-  if (row.invoice_date) return row.invoice_date
-  const d = new Date(row.created_at)
-  const y = d.getFullYear()
-  const m = String(d.getMonth() + 1).padStart(2, '0')
-  const day = String(d.getDate()).padStart(2, '0')
-  return `${y}-${m}-${day}`
 }
 
 // 이번 달의 [시작일, 다음 달 시작일) 범위

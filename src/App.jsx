@@ -10,6 +10,7 @@ import SpendingReportScreen from './screens/SpendingReportScreen'
 import ReorderAlertScreen from './screens/ReorderAlertScreen'
 import ConsumptionPatternScreen from './screens/ConsumptionPatternScreen'
 import WasteReportScreen from './screens/WasteReportScreen'
+import UsageReportScreen from './screens/UsageReportScreen'
 import NotificationSettingsScreen from './screens/NotificationSettingsScreen'
 import FeedbackScreen from './screens/FeedbackScreen'
 import AskScreen from './screens/AskScreen'
@@ -39,6 +40,7 @@ export default function App() {
           <Route path="/reorder-alerts" element={<ReorderAlertScreen />} />
           <Route path="/consumption-pattern" element={<ConsumptionPatternScreen />} />
           <Route path="/waste-report" element={<WasteReportScreen />} />
+          <Route path="/usage-report" element={<UsageReportScreen />} />
           <Route path="/notification-settings" element={<NotificationSettingsScreen />} />
           <Route path="/feedback" element={<FeedbackScreen />} />
           <Route path="/ask" element={<AskScreen />} />

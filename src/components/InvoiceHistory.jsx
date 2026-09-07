@@ -1,21 +1,10 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabaseClient'
-
-const UNIT_LABELS = { g: 'g', kg: 'kg', ea: '개', box: '박스', other: '기타' }
+import { UNIT_LABELS } from '../lib/units'
+import { rowDateStr } from '../lib/rowDateStr'
 
 function todayStr() {
   const d = new Date()
-  const y = d.getFullYear()
-  const m = String(d.getMonth() + 1).padStart(2, '0')
-  const day = String(d.getDate()).padStart(2, '0')
-  return `${y}-${m}-${day}`
-}
-
-// 명세표에 적힌 입고일(invoice_date)을 우선 기준으로 삼고, 없는 옛 데이터만 저장 시각
-// (created_at)의 날짜로 대신한다. 정렬·기간 필터 모두 이 기준을 따른다.
-function rowDateStr(row) {
-  if (row.invoice_date) return row.invoice_date
-  const d = new Date(row.created_at)
   const y = d.getFullYear()
   const m = String(d.getMonth() + 1).padStart(2, '0')
   const day = String(d.getDate()).padStart(2, '0')

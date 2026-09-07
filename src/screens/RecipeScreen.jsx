@@ -6,8 +6,7 @@ import { compressImage } from '../lib/compressImage'
 import { latestInvoiceInfoByItem, computeSubRecipeCost } from '../lib/costCalc'
 import { copyRecipe } from '../lib/copyRecipe'
 import { useIngredientMatch } from '../hooks/useIngredientMatch'
-
-const UNIT_LABELS = { g: 'g', kg: 'g', ea: '개', box: '박스', other: '기타' }
+import { RECIPE_UNIT_LABELS as UNIT_LABELS } from '../lib/units'
 
 function emptyIngredient() {
   return { name: '', amountG: '', originalText: '' }

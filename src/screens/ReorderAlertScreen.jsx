@@ -3,13 +3,10 @@ import { useNavigate } from 'react-router-dom'
 import { useStore } from '../context/StoreContext'
 import { supabase } from '../lib/supabaseClient'
 import { computeReorderAlerts } from '../lib/reorderCalc'
+import { UNIT_LABELS } from '../lib/units'
+import { stockKey } from '../lib/stockKey'
 
-const UNIT_LABELS = { g: 'g', kg: 'kg', ea: '개', box: '박스', other: '기타' }
 const NO_UNIT_KEY = 'none'
-
-function stockKey(itemName, unit) {
-  return `${itemName}||${unit ?? ''}`
-}
 
 export default function ReorderAlertScreen() {
   const { store } = useStore()
