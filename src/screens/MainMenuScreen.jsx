@@ -176,7 +176,6 @@ export default function MainMenuScreen() {
         const anchorIndex = batches.findIndex(hasBalanceInfo)
         const anchorBatch = anchorIndex >= 0 ? batches[anchorIndex] : undefined
         const latestOpening = [...openings].sort((a, b) => (a.as_of_date < b.as_of_date ? 1 : -1))[0]
-        if (!anchorBatch && !latestOpening) continue
 
         const anchorDate = anchorBatch ? rowDateStr(anchorBatch) : (latestOpening?.as_of_date ?? null)
         const anchorBalance = anchorBatch
