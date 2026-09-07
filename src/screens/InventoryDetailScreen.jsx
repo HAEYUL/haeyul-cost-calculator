@@ -5,6 +5,7 @@ import { supabase } from '../lib/supabaseClient'
 import { reidentifyItem, weightConversionFactor } from '../lib/reidentifyItem'
 import { UNIT_LABELS } from '../lib/units'
 import { stockKey } from '../lib/stockKey'
+import { useRememberedDateRange } from '../hooks/useRememberedDateRange'
 
 const NO_UNIT_KEY = 'none'
 const WASTE_REASONS = ['상함/부패', '유통기한 경과', '조리 실수', '기타']
@@ -49,8 +50,10 @@ export default function InventoryDetailScreen() {
   const [deleteAdjustmentTarget, setDeleteAdjustmentTarget] = useState(null)
   const [deletingAdjustment, setDeletingAdjustment] = useState(false)
 
-  const [dateFrom, setDateFrom] = useState('')
-  const [dateTo, setDateTo] = useState('')
+  const { dateFrom, dateTo, setDateFrom, setDateTo } = useRememberedDateRange(
+    `inventory-detail:${itemName}|${unit ?? ''}`,
+    { start: '', end: '' },
+  )
 
   const [otherItems, setOtherItems] = useState([])
 

@@ -6,6 +6,7 @@ import AmountInput from '../components/AmountInput'
 import { UNIT_LABELS } from '../lib/units'
 import { rowDateStr } from '../lib/rowDateStr'
 import { monthRange } from '../lib/dateRange'
+import { useRememberedDateRange } from '../hooks/useRememberedDateRange'
 
 export default function VendorDetailScreen() {
   const { store } = useStore()
@@ -19,9 +20,7 @@ export default function VendorDetailScreen() {
   const [error, setError] = useState('')
   const [dataKey, setDataKey] = useState(0)
 
-  const defaultRange = monthRange()
-  const [dateFrom, setDateFrom] = useState(defaultRange.start)
-  const [dateTo, setDateTo] = useState(defaultRange.end)
+  const { dateFrom, dateTo, setDateFrom, setDateTo } = useRememberedDateRange(`vendor-detail:${vendorId}`, monthRange())
 
   const [paymentAmount, setPaymentAmount] = useState('')
   const [paymentDate, setPaymentDate] = useState('')
