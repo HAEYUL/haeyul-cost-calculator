@@ -555,6 +555,9 @@ h1 {
 
 .inventory-row-actions {
   margin-top: 4px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
 }
 
 .inventory-row-actions .link-btn {
