@@ -126,6 +126,10 @@ export default function SettlementScreen() {
   const [deleteTarget, setDeleteTarget] = useState(null)
   const [deleting, setDeleting] = useState(false)
   const [deleteError, setDeleteError] = useState('')
+  const [editingKey, setEditingKey] = useState(null)
+  const [editValues, setEditValues] = useState({})
+  const [savingEdit, setSavingEdit] = useState(false)
+  const [editError, setEditError] = useState('')
 
   // ---- 파일/사진 업로드 분석 ----
   const [pendingImage, setPendingImage] = useState(null)
@@ -210,6 +214,43 @@ export default function SettlementScreen() {
       return
     }
     setDeleteTarget(null)
+    fetchSettlements()
+  }
+
+  const startEdit = (row) => {
+    setDeleteTarget(null)
+    setEditError('')
+    setEditingKey(monthKeyOf(row))
+    setEditValues(Object.fromEntries(FIELDS.map(([key]) => [key, String(row[key] ?? '')])))
+  }
+
+  const cancelEdit = () => {
+    setEditingKey(null)
+    setEditError('')
+  }
+
+  const updateEditValue = (key, value) => {
+    setEditValues((prev) => ({ ...prev, [key]: value }))
+  }
+
+  const handleSaveEdit = async () => {
+    if (!supabase || !editingKey) return
+    const [yearStr, monthStr] = editingKey.split('-')
+    setSavingEdit(true)
+    setEditError('')
+    const payload = Object.fromEntries(FIELDS.map(([key]) => [key, Number(editValues[key]) || 0]))
+    const { error: err } = await supabase
+      .from('store_settlements')
+      .update(payload)
+      .eq('store_code', store.code)
+      .eq('year', Number(yearStr))
+      .eq('month', Number(monthStr))
+    setSavingEdit(false)
+    if (err) {
+      setEditError(err.message)
+      return
+    }
+    setEditingKey(null)
     fetchSettlements()
   }
 
@@ -660,22 +701,61 @@ export default function SettlementScreen() {
 
           {deleteError && <p className="error-text">{deleteError}</p>}
 
-          {filteredRows.map((row) => (
+          {filteredRows.map((row) => {
+            const isEditing = editingKey === monthKeyOf(row)
+            return (
             <div className="cost-summary" key={monthKeyOf(row)}>
               <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}>
                 <h2 className="settlement-month-title">
                   {row.year}년 {row.month}월
                 </h2>
-                <button
-                  type="button"
-                  className="icon-btn"
-                  aria-label={`${row.year}년 ${row.month}월 결산 삭제`}
-                  onClick={() => setDeleteTarget(row)}
-                >
-                  ✕
-                </button>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                  {!isEditing && (
+                    <button type="button" className="link-btn" style={{ marginTop: 0 }} onClick={() => startEdit(row)}>
+                      수정
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    className="icon-btn"
+                    aria-label={`${row.year}년 ${row.month}월 결산 삭제`}
+                    onClick={() => {
+                      setEditingKey(null)
+                      setDeleteTarget(row)
+                    }}
+                  >
+                    ✕
+                  </button>
+                </div>
               </div>
-              <SettlementRows row={row} />
+
+              {isEditing ? (
+                <>
+                  {FIELDS.map(([key, label]) => (
+                    <div className="cost-summary-row" key={key}>
+                      <span>{label}</span>
+                      <input
+                        className="input"
+                        style={{ maxWidth: 160, textAlign: 'right' }}
+                        inputMode="numeric"
+                        value={editValues[key] ?? ''}
+                        onChange={(e) => updateEditValue(key, e.target.value.replace(/[^0-9-]/g, ''))}
+                      />
+                    </div>
+                  ))}
+                  {editError && <p className="error-text">{editError}</p>}
+                  <div className="invoice-form">
+                    <button type="button" className="btn-secondary" onClick={cancelEdit} disabled={savingEdit}>
+                      취소
+                    </button>
+                    <button type="button" className="btn-primary" onClick={handleSaveEdit} disabled={savingEdit}>
+                      {savingEdit ? '저장 중...' : '저장'}
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <SettlementRows row={row} />
+              )}
 
               {deleteTarget && monthKeyOf(deleteTarget) === monthKeyOf(row) && (
                 <div className="price-alert-box price-alert-box-danger" style={{ marginTop: 12 }}>
@@ -694,7 +774,8 @@ export default function SettlementScreen() {
                 </div>
               )}
             </div>
-          ))}
+            )
+          })}
 
           {totals && (
             <div className="cost-summary settlement-total">
