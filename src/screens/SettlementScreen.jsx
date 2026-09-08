@@ -699,6 +699,13 @@ export default function SettlementScreen() {
 
           {filteredRows.length === 0 && <p className="hint">이 기간에 저장된 결산이 없습니다.</p>}
 
+          {totals && (
+            <div className="cost-summary settlement-total">
+              <h2 className="settlement-month-title">선택 기간 합계 ({filteredRows.length}개월)</h2>
+              <SettlementRows row={totals} />
+            </div>
+          )}
+
           {deleteError && <p className="error-text">{deleteError}</p>}
 
           {filteredRows.map((row) => {
@@ -777,12 +784,6 @@ export default function SettlementScreen() {
             )
           })}
 
-          {totals && (
-            <div className="cost-summary settlement-total">
-              <h2 className="settlement-month-title">선택 기간 합계 ({filteredRows.length}개월)</h2>
-              <SettlementRows row={totals} />
-            </div>
-          )}
         </>
       )}
 
