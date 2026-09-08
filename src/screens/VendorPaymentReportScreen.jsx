@@ -1,24 +1,22 @@
 import { useEffect, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { useStore } from '../context/StoreContext'
 import { supabase } from '../lib/supabaseClient'
-import { rowDateStr } from '../lib/rowDateStr'
 import { monthRange, DATE_RANGE_PRESETS as PRESETS } from '../lib/dateRange'
-import { useRememberedDateRange } from '../hooks/useRememberedDateRange'
 
-export default function SpendingReportScreen() {
+export default function VendorPaymentReportScreen() {
   const { store } = useStore()
   const navigate = useNavigate()
+  const location = useLocation()
 
-  const [batches, setBatches] = useState([])
+  const [payments, setPayments] = useState([])
   const [vendorNameById, setVendorNameById] = useState(new Map())
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
-  const { dateFrom, dateTo, activePreset, setDateFrom, setDateTo, applyPreset } = useRememberedDateRange(
-    'spending-report',
-    { ...monthRange(0), activePreset: 'thisMonth' },
-  )
+  const [dateFrom, setDateFrom] = useState(() => location.state?.dateRange?.dateFrom ?? monthRange().start)
+  const [dateTo, setDateTo] = useState(() => location.state?.dateRange?.dateTo ?? monthRange().end)
+  const [activePreset, setActivePreset] = useState(null)
 
   useEffect(() => {
     if (!store) navigate('/', { replace: true })
@@ -30,33 +28,38 @@ export default function SpendingReportScreen() {
     setError('')
     Promise.all([
       supabase.from('vendors').select('id, name').eq('store_code', store.code),
-      supabase
-        .from('invoice_batches')
-        .select('vendor_id, total_amount, invoice_date, created_at')
-        .eq('store_code', store.code),
-    ]).then(([vendorsRes, batchesRes]) => {
-      const err = vendorsRes.error || batchesRes.error
+      supabase.from('vendor_payments').select('vendor_id, amount, paid_date').eq('store_code', store.code),
+    ]).then(([vendorsRes, paymentsRes]) => {
+      const err = vendorsRes.error || paymentsRes.error
       if (err) {
         setError(err.message)
         setLoading(false)
         return
       }
       setVendorNameById(new Map((vendorsRes.data ?? []).map((v) => [v.id, v.name])))
-      setBatches(batchesRes.data ?? [])
+      setPayments(paymentsRes.data ?? [])
       setLoading(false)
     })
   }, [store])
 
   if (!store) return null
 
-  const filteredBatches = batches.filter((b) => {
-    const d = rowDateStr(b)
-    return (!dateFrom || d >= dateFrom) && (!dateTo || d <= dateTo)
-  })
+  const applyPreset = (preset) => {
+    const { start, end } = preset.range()
+    setDateFrom(start)
+    setDateTo(end)
+    setActivePreset(preset.key)
+  }
+
+  // 결제일이 없는 기록은 어느 기간 것인지 알 수 없어서 제외한다 — 거래처 상세, 거래처 관리
+  // 전체 입금액 박스와 같은 기준이다.
+  const filteredPayments = payments.filter(
+    (p) => p.paid_date && (!dateFrom || p.paid_date >= dateFrom) && (!dateTo || p.paid_date <= dateTo),
+  )
 
   const totalByVendor = new Map()
-  for (const b of filteredBatches) {
-    totalByVendor.set(b.vendor_id, (totalByVendor.get(b.vendor_id) ?? 0) + Number(b.total_amount))
+  for (const p of filteredPayments) {
+    totalByVendor.set(p.vendor_id, (totalByVendor.get(p.vendor_id) ?? 0) + Number(p.amount))
   }
 
   const grandTotal = [...totalByVendor.values()].reduce((sum, v) => sum + v, 0)
@@ -70,14 +73,16 @@ export default function SpendingReportScreen() {
     }))
     .sort((a, b) => b.amount - a.amount)
 
+  const undatedCount = payments.filter((p) => !p.paid_date).length
+
   return (
     <div className="screen screen-wide">
       <div className="screen-header">
         <button type="button" className="link-btn" onClick={() => navigate('/menu')}>
           ← 메인 메뉴
         </button>
-        <h1>거래처 물품 입고액</h1>
-        <p className="subtitle">{store.name} · 기간을 골라 거래처별 입고 금액을 비교해요</p>
+        <h1>거래처별 결제액</h1>
+        <p className="subtitle">{store.name} · 기간을 골라 거래처별 결제(입금)액을 비교해요</p>
       </div>
 
       {!supabase && <p className="hint">Supabase가 설정되지 않았습니다.</p>}
@@ -104,7 +109,10 @@ export default function SpendingReportScreen() {
               type="date"
               className="input"
               value={dateFrom}
-              onChange={(e) => setDateFrom(e.target.value)}
+              onChange={(e) => {
+                setDateFrom(e.target.value)
+                setActivePreset(null)
+              }}
               aria-label="시작일"
             />
             <span className="date-range-sep">~</span>
@@ -112,20 +120,28 @@ export default function SpendingReportScreen() {
               type="date"
               className="input"
               value={dateTo}
-              onChange={(e) => setDateTo(e.target.value)}
+              onChange={(e) => {
+                setDateTo(e.target.value)
+                setActivePreset(null)
+              }}
               aria-label="종료일"
             />
           </div>
 
           <div className="cost-summary">
             <div className="cost-summary-row">
-              <span>이 기간 총 입고액</span>
+              <span>이 기간 총 결제액</span>
               <strong>{Math.round(grandTotal).toLocaleString()}원</strong>
             </div>
           </div>
+          {undatedCount > 0 && (
+            <p className="hint">
+              결제일 없는 기록이 {undatedCount}건 있어서 이 리포트에서 빠졌어요. 거래처 상세에서 날짜를 등록해주세요.
+            </p>
+          )}
 
-          <h2 className="section-title">거래처별 입고액 ({rows.length}곳)</h2>
-          {rows.length === 0 && <p className="hint">이 기간에 입고 내역이 없습니다.</p>}
+          <h2 className="section-title">거래처별 결제액 ({rows.length}곳)</h2>
+          {rows.length === 0 && <p className="hint">이 기간에 결제 기록이 없습니다.</p>}
 
           <ul className="history-list">
             {rows.map((r) => (

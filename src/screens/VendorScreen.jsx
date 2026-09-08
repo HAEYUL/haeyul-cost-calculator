@@ -376,10 +376,20 @@ export default function VendorScreen() {
               aria-label="종료일"
             />
           </div>
-          <div className="cost-summary-row" style={{ marginTop: 8 }}>
-            <span>전체 입금액 (결제 입금 합계)</span>
-            <strong>{Math.round(totalPaymentInPeriod).toLocaleString()}원</strong>
-          </div>
+          <button
+            type="button"
+            className="cost-row-btn"
+            style={{ marginTop: 8 }}
+            onClick={() =>
+              navigate('/vendor-payment-report', { state: { dateRange: { dateFrom: paymentDateFrom, dateTo: paymentDateTo } } })
+            }
+          >
+            <div className="cost-summary-row">
+              <span>전체 입금액 (결제 입금 합계)</span>
+              <strong>{Math.round(totalPaymentInPeriod).toLocaleString()}원</strong>
+            </div>
+            <p className="hint" style={{ margin: '4px 0 0' }}>거래처별로 보기 →</p>
+          </button>
         </div>
       )}
 
