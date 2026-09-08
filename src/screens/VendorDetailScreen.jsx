@@ -37,6 +37,9 @@ export default function VendorDetailScreen() {
   const [paymentDate, setPaymentDate] = useState('')
   const [paymentMemo, setPaymentMemo] = useState('')
   const [savingPayment, setSavingPayment] = useState(false)
+  const [paymentDateEdits, setPaymentDateEdits] = useState({})
+  const [savingPaymentDateId, setSavingPaymentDateId] = useState(null)
+  const [registeringReconciliation, setRegisteringReconciliation] = useState(false)
 
   const [deleteTarget, setDeleteTarget] = useState(null)
   const [deleting, setDeleting] = useState(false)
@@ -169,9 +172,12 @@ export default function VendorDetailScreen() {
     const expected = endingBalanceOf(previous) + invoicedBetween - paidBetween
     const actual = impliedPriorBalance(newest)
     if (Math.round(expected) !== Math.round(actual)) {
-      balanceMismatch = { newestDate, expected, actual, diff: actual - expected }
+      balanceMismatch = { newestDate, previousDate, expected, actual, diff: actual - expected }
     }
   }
+  // 잔액이 예상보다 더 줄어든 경우(diff < 0)만 "기록 안 된 결제"로 볼 수 있다. 잔액이 예상보다
+  // 덜 줄었거나 늘어난 경우(diff >= 0)는 입고 누락 등 다른 이유일 수 있어 결제 등록을 제안하지 않는다.
+  const impliedPaymentAmount = balanceMismatch && balanceMismatch.diff < 0 ? -balanceMismatch.diff : null
 
   // "입고 내역" 목록과 아래 누적 입고액/결제액 요약이 함께 이 기간을 따른다.
   const filteredBatches = batches.filter((b) => {
@@ -187,22 +193,22 @@ export default function VendorDetailScreen() {
     .filter((b) => b.as_of_date <= dateFrom)
     .sort((a, b) => (a.as_of_date < b.as_of_date ? 1 : -1))[0]
 
-  // 결제액(추정) = 기초 잔액 + 기간 입고액 − 기간 종료일 시점의 미지급 잔액.
-  // 기간 종료일 이전(포함)에 잔액이 기록된 가장 최근 명세표를 찾는다(batches는 이미 최신순 정렬).
-  const balanceAtPeriodEndBatch = batches.find((b) => {
-    const d = rowDateStr(b)
-    return hasBalanceInfo(b) && (!dateTo || d <= dateTo)
-  })
-  const balanceAtPeriodEnd = balanceAtPeriodEndBatch ? endingBalanceOf(balanceAtPeriodEndBatch) : null
-  const periodEstimatedPayment =
-    balanceAtPeriodEnd != null
-      ? (effectiveOpeningBalance ? Number(effectiveOpeningBalance.balance) : 0) + periodTotalAmount - Number(balanceAtPeriodEnd)
-      : null
+  // 누적 결제액(기간) = 그 기간에 실제로 등록된 결제 기록만 더한 값(추정 아님). 결제일이 없는
+  // 기록은 어느 기간 것인지 알 수 없어서 제외한다 — 대신 아래에서 "날짜 등록해주세요" 안내를 띄운다.
+  const periodPaymentTotal = payments
+    .filter((p) => p.paid_date && (!dateFrom || p.paid_date >= dateFrom) && (!dateTo || p.paid_date <= dateTo))
+    .reduce((sum, p) => sum + Number(p.amount), 0)
+
+  const undatedPayments = payments.filter((p) => !p.paid_date)
 
   const handleAddPayment = async () => {
     const amount = Number(paymentAmount)
     if (!paymentAmount || !Number.isFinite(amount) || amount <= 0 || !supabase) {
       setError('결제 금액을 0보다 크게 입력하세요.')
+      return
+    }
+    if (!paymentDate) {
+      setError('결제일을 등록해 주세요.')
       return
     }
     setSavingPayment(true)
@@ -211,7 +217,7 @@ export default function VendorDetailScreen() {
       store_code: store.code,
       vendor_id: vendorId,
       amount,
-      paid_date: paymentDate || null,
+      paid_date: paymentDate,
       memo: paymentMemo.trim() || null,
     })
     setSavingPayment(false)
@@ -222,6 +228,41 @@ export default function VendorDetailScreen() {
     setPaymentAmount('')
     setPaymentDate('')
     setPaymentMemo('')
+    setDataKey((k) => k + 1)
+  }
+
+  // 이미 저장된, 결제일 없는 결제 기록에 날짜를 채워 넣는다.
+  const handleSetPaymentDate = async (paymentId) => {
+    const date = paymentDateEdits[paymentId]
+    if (!date || !supabase) return
+    setSavingPaymentDateId(paymentId)
+    setError('')
+    const { error: err } = await supabase.from('vendor_payments').update({ paid_date: date }).eq('id', paymentId)
+    setSavingPaymentDateId(null)
+    if (err) {
+      setError(err.message)
+      return
+    }
+    setDataKey((k) => k + 1)
+  }
+
+  // 잔액차이만큼을 직전 명세표 날짜(=지난달 말일자)로 실제 결제 기록에 등록한다.
+  const handleRegisterReconciliation = async () => {
+    if (!supabase || impliedPaymentAmount == null || !balanceMismatch) return
+    setRegisteringReconciliation(true)
+    setError('')
+    const { error: err } = await supabase.from('vendor_payments').insert({
+      store_code: store.code,
+      vendor_id: vendorId,
+      amount: impliedPaymentAmount,
+      paid_date: balanceMismatch.previousDate,
+      memo: '자동 정산 반영 (잔액 차이)',
+    })
+    setRegisteringReconciliation(false)
+    if (err) {
+      setError(err.message)
+      return
+    }
     setDataKey((k) => k + 1)
   }
 
@@ -467,31 +508,56 @@ export default function VendorDetailScreen() {
               <strong>{Math.round(periodTotalAmount).toLocaleString()}원</strong>
             </div>
             <div className="cost-summary-row">
-              <span>누적 결제액(추정, 기간)</span>
-              {periodEstimatedPayment != null ? (
-                <strong>{Math.round(periodEstimatedPayment).toLocaleString()}원</strong>
-              ) : (
-                <span className="hint">잔액 정보 없음</span>
-              )}
+              <span>누적 결제액(기간)</span>
+              <strong>{Math.round(periodPaymentTotal).toLocaleString()}원</strong>
             </div>
           </div>
           <p className="hint">
             미지급금은 가장 최근 명세표 잔액(또는 기초 잔액)에 그 이후의 입고·결제 기록을 실시간으로 반영한 값이에요.
-            누적 결제액(추정, 기간)은 이것과 별개로, 기초 잔액 + 기간 입고액에서 기간 종료일 시점 미지급 잔액을 뺀
-            참고용 추정치예요.
+            누적 결제액(기간)은 이것과 별개로, 그 기간에 실제로 등록하신 결제 기록만 더한 값이에요(추정 아님). 결제일이
+            없는 기록은 어느 기간 것인지 몰라서 이 합계에서 빠져요.
           </p>
 
-          {balanceMismatch && (
+          {impliedPaymentAmount != null ? (
             <div className="price-alert-box price-alert-box-danger">
-              <p className="price-alert-title">⚠️ 결제 기록이 맞지 않으니 확인해 주세요.</p>
-              <p className="hint">
-                {balanceMismatch.newestDate} 명세표 잔액은 {Math.round(balanceMismatch.actual).toLocaleString()}
-                원인데, 직전 명세표 잔액에 그 사이 입고·결제 기록을 반영하면{' '}
-                {Math.round(balanceMismatch.expected).toLocaleString()}원이 나와요. (
-                {balanceMismatch.diff > 0 ? '+' : ''}
-                {Math.round(balanceMismatch.diff).toLocaleString()}원 차이)
+              <p className="price-alert-title">
+                잔액차이가 있습니다. ({Math.round(impliedPaymentAmount).toLocaleString()}원) 결제로 등록할까요?
               </p>
+              <p className="hint">
+                {balanceMismatch.previousDate}일자 결제로 등록하면 {balanceMismatch.newestDate} 명세표 잔액과 맞아떨어져요.
+              </p>
+              <div className="invoice-form">
+                <button
+                  type="button"
+                  className="btn-secondary"
+                  onClick={() => setDataKey((k) => k + 1)}
+                  disabled={registeringReconciliation}
+                >
+                  다시확인
+                </button>
+                <button
+                  type="button"
+                  className="btn-primary"
+                  onClick={handleRegisterReconciliation}
+                  disabled={registeringReconciliation}
+                >
+                  {registeringReconciliation ? '등록 중...' : '등록'}
+                </button>
+              </div>
             </div>
+          ) : (
+            balanceMismatch && (
+              <div className="price-alert-box price-alert-box-danger">
+                <p className="price-alert-title">⚠️ 결제 기록이 맞지 않으니 확인해 주세요.</p>
+                <p className="hint">
+                  {balanceMismatch.newestDate} 명세표 잔액은 {Math.round(balanceMismatch.actual).toLocaleString()}
+                  원인데, 직전 명세표 잔액에 그 사이 입고·결제 기록을 반영하면{' '}
+                  {Math.round(balanceMismatch.expected).toLocaleString()}원이 나와요. (
+                  {balanceMismatch.diff > 0 ? '+' : ''}
+                  {Math.round(balanceMismatch.diff).toLocaleString()}원 차이)
+                </p>
+              </div>
+            )
           )}
 
           <h2 className="section-title">결제 입력</h2>
@@ -507,7 +573,7 @@ export default function VendorDetailScreen() {
             />
           </div>
           <div className="field">
-            <label htmlFor="paymentDate">결제일</label>
+            <label htmlFor="paymentDate">결제일 (필수)</label>
             <input
               id="paymentDate"
               className="input"
@@ -526,17 +592,47 @@ export default function VendorDetailScreen() {
               placeholder="예: 계좌이체"
             />
           </div>
-          <button type="button" className="btn-primary" onClick={handleAddPayment} disabled={savingPayment}>
+          <button
+            type="button"
+            className="btn-primary"
+            onClick={handleAddPayment}
+            disabled={savingPayment || !paymentAmount || !paymentDate}
+          >
             {savingPayment ? '저장 중...' : '결제 기록 추가'}
           </button>
 
           <h2 className="section-title">결제 내역 ({payments.length}건)</h2>
           {payments.length === 0 && <p className="hint">아직 결제 기록이 없습니다.</p>}
+          {undatedPayments.length > 0 && (
+            <p className="hint">날짜 없는 결제 기록이 {undatedPayments.length}건 있어요. 등록해 주세요.</p>
+          )}
           <ul className="history-list">
             {payments.map((p) => (
               <li key={p.id} className="history-row">
                 <div className="history-row-main">
-                  <span className="history-item">{p.paid_date ?? '날짜 미입력'}</span>
+                  {p.paid_date ? (
+                    <span className="history-item">{p.paid_date}</span>
+                  ) : (
+                    <span className="history-item" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <input
+                        type="date"
+                        className="input"
+                        style={{ width: 'auto' }}
+                        value={paymentDateEdits[p.id] ?? ''}
+                        onChange={(e) => setPaymentDateEdits((prev) => ({ ...prev, [p.id]: e.target.value }))}
+                        aria-label="결제일 등록"
+                      />
+                      <button
+                        type="button"
+                        className="link-btn"
+                        style={{ marginTop: 0 }}
+                        onClick={() => handleSetPaymentDate(p.id)}
+                        disabled={!paymentDateEdits[p.id] || savingPaymentDateId === p.id}
+                      >
+                        {savingPaymentDateId === p.id ? '저장 중...' : '등록'}
+                      </button>
+                    </span>
+                  )}
                   <div className="history-row-main-end">
                     <span>{Math.round(Number(p.amount)).toLocaleString()}원</span>
                     <button

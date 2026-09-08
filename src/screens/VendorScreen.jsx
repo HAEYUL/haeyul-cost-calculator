@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { useStore } from '../context/StoreContext'
 import { supabase } from '../lib/supabaseClient'
 import { rowDateStr } from '../lib/rowDateStr'
+import { monthRange } from '../lib/dateRange'
 
 // 이번 달의 [시작일, 다음 달 시작일) 범위. dateStr이 start 이상 end 미만이면 이번 달.
 function monthBounds() {
@@ -23,6 +24,9 @@ export default function VendorScreen() {
   const [monthlyTotalByVendor, setMonthlyTotalByVendor] = useState(new Map())
   const [estimatedPaymentByVendor, setEstimatedPaymentByVendor] = useState(new Map())
   const [liveBalanceByVendor, setLiveBalanceByVendor] = useState(new Map())
+  const [allPayments, setAllPayments] = useState([])
+  const [paymentDateFrom, setPaymentDateFrom] = useState(() => monthRange().start)
+  const [paymentDateTo, setPaymentDateTo] = useState(() => monthRange().end)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [newName, setNewName] = useState('')
@@ -168,6 +172,7 @@ export default function VendorScreen() {
       setMonthlyTotalByVendor(monthlyTotal)
       setEstimatedPaymentByVendor(estimatedPayment)
       setLiveBalanceByVendor(liveBalance)
+      setAllPayments(paymentsRes.data ?? [])
       setLoading(false)
     })
   }, [store, dataKey])
@@ -189,6 +194,12 @@ export default function VendorScreen() {
     })
 
   const totalBalance = vendorsWithBalance.reduce((sum, v) => sum + (v.balance ?? 0), 0)
+
+  // 전체 거래처 입금액(기간) = 선택한 기간에 실제로 등록된 결제 기록을 전 거래처 걸쳐 더한 값.
+  // 결제일 없는 기록은 거래처 상세 화면과 같은 기준으로 제외한다.
+  const totalPaymentInPeriod = allPayments
+    .filter((p) => p.paid_date && (!paymentDateFrom || p.paid_date >= paymentDateFrom) && (!paymentDateTo || p.paid_date <= paymentDateTo))
+    .reduce((sum, p) => sum + Number(p.amount), 0)
 
   const trimmedQuery = searchQuery.trim()
   const visibleVendors = trimmedQuery
@@ -342,6 +353,32 @@ export default function VendorScreen() {
           <div className="cost-summary-row">
             <span>전체 미지급금 (명세표 잔액 합계)</span>
             <strong className={totalBalance > 0 ? 'alert-up' : ''}>{Math.round(totalBalance).toLocaleString()}원</strong>
+          </div>
+        </div>
+      )}
+
+      {!loading && !error && vendors.length > 0 && (
+        <div className="cost-summary">
+          <div className="date-range">
+            <input
+              type="date"
+              className="input"
+              value={paymentDateFrom}
+              onChange={(e) => setPaymentDateFrom(e.target.value)}
+              aria-label="시작일"
+            />
+            <span className="date-range-sep">~</span>
+            <input
+              type="date"
+              className="input"
+              value={paymentDateTo}
+              onChange={(e) => setPaymentDateTo(e.target.value)}
+              aria-label="종료일"
+            />
+          </div>
+          <div className="cost-summary-row" style={{ marginTop: 8 }}>
+            <span>전체 입금액 (결제 입금 합계)</span>
+            <strong>{Math.round(totalPaymentInPeriod).toLocaleString()}원</strong>
           </div>
         </div>
       )}
