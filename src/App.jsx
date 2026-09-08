@@ -18,6 +18,7 @@ import ChangeStorePinScreen from './screens/ChangeStorePinScreen'
 import InventoryScreen from './screens/InventoryScreen'
 import InventoryDetailScreen from './screens/InventoryDetailScreen'
 import PriceTrendScreen from './screens/PriceTrendScreen'
+import SettlementScreen from './screens/SettlementScreen'
 import RecipeScreen from './screens/RecipeScreen'
 import RecipeDetailScreen from './screens/RecipeDetailScreen'
 import MatchingScreen from './screens/MatchingScreen'
@@ -48,6 +49,7 @@ export default function App() {
           <Route path="/inventory" element={<InventoryScreen />} />
           <Route path="/inventory/:itemName/:unit" element={<InventoryDetailScreen />} />
           <Route path="/price-trend" element={<PriceTrendScreen />} />
+          <Route path="/settlement" element={<SettlementScreen />} />
           <Route path="/recipes" element={<RecipeScreen />} />
           <Route path="/recipes/:menuName" element={<RecipeDetailScreen />} />
           <Route path="/ingredient-matching" element={<MatchingScreen />} />
