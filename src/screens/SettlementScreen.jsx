@@ -75,14 +75,20 @@ function monthKeyOf(row) {
 function SettlementRows({ row }) {
   return (
     <>
-      {FIELDS.map(([key, label]) => (
-        <div className="cost-summary-row" key={key}>
-          <span>{label}</span>
-          <strong className={(key === 'operating_profit' || key === 'pretax_profit') && row[key] < 0 ? 'alert-up' : ''}>
-            {fmt(row[key])}
-          </strong>
-        </div>
-      ))}
+      {FIELDS.map(([key, label]) => {
+        const pct = key !== 'revenue' && row.revenue ? (Number(row[key] ?? 0) / Number(row.revenue)) * 100 : null
+        return (
+          <div className="cost-summary-row" key={key}>
+            <span>
+              {label}
+              {pct != null && <span style={{ color: 'var(--text-muted)' }}> ({pct.toFixed(1)}%)</span>}
+            </span>
+            <strong className={(key === 'operating_profit' || key === 'pretax_profit') && row[key] < 0 ? 'alert-up' : ''}>
+              {fmt(row[key])}
+            </strong>
+          </div>
+        )
+      })}
     </>
   )
 }
