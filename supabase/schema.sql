@@ -34,6 +34,14 @@ create policy "stores are publicly updatable"
   using (true)
   with check (true);
 
+-- settlement_pin_hash 등: [매장운영결산] 화면 전용 비밀번호. 위 pin_hash(매장 진입용, 직원도
+-- 아는 값)와는 별개로, 사장님만 아는 4자리를 한 번 더 확인한다. 해시는 같은 방식이되
+-- pinHash.js에 매장코드 대신 "코드:settlement"를 넘겨서 store 로그인 해시와 값이 겹치지 않게
+-- 한다. 아직 설정 안 한 매장은 null이며, 화면에서 처음 열 때 새로 설정하게 안내한다.
+alter table stores add column if not exists settlement_pin_hash text;
+alter table stores add column if not exists settlement_failed_attempts integer not null default 0;
+alter table stores add column if not exists settlement_locked_until timestamptz;
+
 -- 초기 비밀번호를 4자리 "1234"로 맞춘다. 이미 비밀번호가 설정된 매장은 건드리지 않는다.
 create extension if not exists pgcrypto with schema extensions;
 
