@@ -750,6 +750,52 @@ create policy "item_recipe_units are publicly deletable"
   on item_recipe_units for delete
   using (true);
 
+-- store_settlements: 매장운영결산. 매장마다 월 하나당 한 행으로, 대표님이 정리해 둔 결산
+-- 자료(엑셀 등)를 그대로 옮겨 담는 용도다. 앱이 자동으로 계산하지 않고, 사람이 넣은 값을
+-- 저장·조회만 한다. 지출총합계 = 총식재료비+인건비+일반경비, 영업손익 = 총매출액-지출총합계가
+-- 되도록 넣는 게 원칙이지만, 소득세차감전이익은 감가상각비 등 별도 조정이 들어가 있어
+-- 그 공식과 맞지 않을 수 있다(그래도 원본 값 그대로 저장).
+create table if not exists store_settlements (
+  id uuid primary key default gen_random_uuid(),
+  store_code text not null references stores(code),
+  year integer not null,
+  month integer not null check (month between 1 and 12),
+  revenue numeric not null default 0,
+  ingredient_cost numeric not null default 0,
+  labor_cost numeric not null default 0,
+  general_cost numeric not null default 0,
+  total_expense numeric not null default 0,
+  operating_profit numeric not null default 0,
+  pretax_profit numeric not null default 0,
+  created_at timestamptz not null default now(),
+  unique (store_code, year, month)
+);
+
+create index if not exists store_settlements_store_idx on store_settlements (store_code, year, month);
+
+alter table store_settlements enable row level security;
+
+drop policy if exists "store_settlements are publicly readable" on store_settlements;
+create policy "store_settlements are publicly readable"
+  on store_settlements for select
+  using (true);
+
+drop policy if exists "store_settlements are publicly insertable" on store_settlements;
+create policy "store_settlements are publicly insertable"
+  on store_settlements for insert
+  with check (true);
+
+drop policy if exists "store_settlements are publicly updatable" on store_settlements;
+create policy "store_settlements are publicly updatable"
+  on store_settlements for update
+  using (true)
+  with check (true);
+
+drop policy if exists "store_settlements are publicly deletable" on store_settlements;
+create policy "store_settlements are publicly deletable"
+  on store_settlements for delete
+  using (true);
+
 -- feedback_notes: 매장에서 생각날 때마다 남기는 불편사항/건의사항 메모. 이 앱이 자동으로
 -- 처리하는 게 아니라, 사장님이 나중에 Claude에게 "불편사항 목록 봐줘"라고 하면 그때 사람이
 -- (Claude가 대화로) 검토해서 고치는 용도 — 그래서 상태는 해결 여부(resolved)만 간단히 둔다.

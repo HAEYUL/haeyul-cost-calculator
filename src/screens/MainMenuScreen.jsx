@@ -13,6 +13,7 @@ const MENU_ITEMS = [
   { label: '거래처 관리', path: '/vendors' },
   { label: '재고 관리', path: '/inventory' },
   { label: '단가 추이 조회', path: '/price-trend' },
+  { label: '매장운영결산', path: '/settlement' },
   { label: '레시피 입력', path: '/recipes' },
   { label: '재료 매칭', path: '/ingredient-matching' },
   { label: '메뉴별 원가확인', path: '/cost' },
