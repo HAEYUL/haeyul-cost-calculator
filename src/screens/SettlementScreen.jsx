@@ -123,6 +123,9 @@ export default function SettlementScreen() {
   const [preset, setPreset] = useState('lastMonth')
   const [fromMonth, setFromMonth] = useState(lastMonthKey())
   const [toMonth, setToMonth] = useState(lastMonthKey())
+  const [deleteTarget, setDeleteTarget] = useState(null)
+  const [deleting, setDeleting] = useState(false)
+  const [deleteError, setDeleteError] = useState('')
 
   // ---- 파일/사진 업로드 분석 ----
   const [pendingImage, setPendingImage] = useState(null)
@@ -190,6 +193,25 @@ export default function SettlementScreen() {
     if (!unlocked) return
     fetchSettlements()
   }, [unlocked, fetchSettlements])
+
+  const handleDeleteSettlement = async () => {
+    if (!supabase || !deleteTarget) return
+    setDeleting(true)
+    setDeleteError('')
+    const { error: err } = await supabase
+      .from('store_settlements')
+      .delete()
+      .eq('store_code', store.code)
+      .eq('year', deleteTarget.year)
+      .eq('month', deleteTarget.month)
+    setDeleting(false)
+    if (err) {
+      setDeleteError(err.message)
+      return
+    }
+    setDeleteTarget(null)
+    fetchSettlements()
+  }
 
   const handleSetupPin = async () => {
     setPinError('')
@@ -636,12 +658,41 @@ export default function SettlementScreen() {
 
           {filteredRows.length === 0 && <p className="hint">이 기간에 저장된 결산이 없습니다.</p>}
 
+          {deleteError && <p className="error-text">{deleteError}</p>}
+
           {filteredRows.map((row) => (
             <div className="cost-summary" key={monthKeyOf(row)}>
-              <h2 className="settlement-month-title">
-                {row.year}년 {row.month}월
-              </h2>
+              <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}>
+                <h2 className="settlement-month-title">
+                  {row.year}년 {row.month}월
+                </h2>
+                <button
+                  type="button"
+                  className="icon-btn"
+                  aria-label={`${row.year}년 ${row.month}월 결산 삭제`}
+                  onClick={() => setDeleteTarget(row)}
+                >
+                  ✕
+                </button>
+              </div>
               <SettlementRows row={row} />
+
+              {deleteTarget && monthKeyOf(deleteTarget) === monthKeyOf(row) && (
+                <div className="price-alert-box price-alert-box-danger" style={{ marginTop: 12 }}>
+                  <p className="price-alert-title">
+                    {row.year}년 {row.month}월 결산을 삭제할까요?
+                  </p>
+                  <p className="hint">되돌릴 수 없어요.</p>
+                  <div className="invoice-form">
+                    <button type="button" className="btn-secondary" onClick={() => setDeleteTarget(null)} disabled={deleting}>
+                      취소
+                    </button>
+                    <button type="button" className="btn-primary" onClick={handleDeleteSettlement} disabled={deleting}>
+                      {deleting ? '삭제 중...' : '삭제'}
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           ))}
 
