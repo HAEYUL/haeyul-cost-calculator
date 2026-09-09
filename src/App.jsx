@@ -8,6 +8,7 @@ import VendorScreen from './screens/VendorScreen'
 import VendorDetailScreen from './screens/VendorDetailScreen'
 import SpendingReportScreen from './screens/SpendingReportScreen'
 import VendorPaymentReportScreen from './screens/VendorPaymentReportScreen'
+import BackupScreen from './screens/BackupScreen'
 import ReorderAlertScreen from './screens/ReorderAlertScreen'
 import ConsumptionPatternScreen from './screens/ConsumptionPatternScreen'
 import WasteReportScreen from './screens/WasteReportScreen'
@@ -40,6 +41,7 @@ export default function App() {
           <Route path="/vendors/:vendorId" element={<VendorDetailScreen />} />
           <Route path="/spending-report" element={<SpendingReportScreen />} />
           <Route path="/vendor-payment-report" element={<VendorPaymentReportScreen />} />
+          <Route path="/backup" element={<BackupScreen />} />
           <Route path="/reorder-alerts" element={<ReorderAlertScreen />} />
           <Route path="/consumption-pattern" element={<ConsumptionPatternScreen />} />
           <Route path="/waste-report" element={<WasteReportScreen />} />
