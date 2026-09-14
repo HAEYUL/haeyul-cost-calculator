@@ -48,6 +48,7 @@ const MENU_SECTIONS = [
     items: [
       { label: '알림 설정', path: '/notification-settings' },
       { label: '데이터 백업', path: '/backup' },
+      { label: '직원 근무표', path: '/staff-schedule' },
       { label: '불편사항/건의사항', path: '/feedback' },
       { label: '사용법 물어보기', path: '/ask' },
       { label: '매장 비밀번호 변경', path: '/change-pin' },

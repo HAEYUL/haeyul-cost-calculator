@@ -829,3 +829,106 @@ h1 {
   padding: 0;
   font-size: inherit;
 }
+
+.day-grid {
+  display: flex;
+  gap: 4px;
+  padding-bottom: 4px;
+}
+
+.day-cell {
+  flex-shrink: 0;
+  width: 30px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 6px 0;
+  border: 1.5px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text);
+  cursor: pointer;
+}
+
+.day-cell-num {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.day-cell-mark {
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.day-cell-full {
+  border-color: #2f9e5b;
+  color: #2f9e5b;
+}
+
+.day-cell-half {
+  border-color: #b8860b;
+  color: #b8860b;
+}
+
+.day-cell-off {
+  border-color: var(--text-muted);
+  color: var(--text-muted);
+}
+
+.print-schedule {
+  display: none;
+}
+
+@media print {
+  @page {
+    size: A4 landscape;
+    margin: 10mm;
+  }
+
+  body * {
+    visibility: hidden;
+  }
+
+  .print-schedule,
+  .print-schedule * {
+    visibility: visible;
+  }
+
+  .print-schedule {
+    display: block;
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+  }
+}
+
+.print-title {
+  margin: 0 0 2px;
+  font-size: 18px;
+}
+
+.print-store-name {
+  margin: 0 0 10px;
+  color: #555;
+}
+
+.print-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 11px;
+}
+
+.print-table th,
+.print-table td {
+  border: 1px solid #999;
+  padding: 3px 4px;
+  text-align: center;
+}
+
+.print-table th:first-child,
+.print-table td:first-child {
+  text-align: left;
+  white-space: nowrap;
+}
