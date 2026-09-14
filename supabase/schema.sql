@@ -839,3 +839,44 @@ drop policy if exists "feedback_notes are publicly deletable" on feedback_notes;
 create policy "feedback_notes are publicly deletable"
   on feedback_notes for delete
   using (true);
+
+-- staff_schedules: 직원 근무표. 매장+직원명+연월 하나당 한 행으로, 사진으로 올린 근무표를
+-- AI가 읽어서 저장한다. days는 {"1":"O","2":"△",...} 형태의 jsonb로, 키는 그 달의 날짜(1부터
+-- 시작), 값은 O(종일근무)/△(반타임)/X(휴무) 중 하나다. 표시가 없거나 아직 확인 안 된 날은
+-- 키 자체가 없다.
+create table if not exists staff_schedules (
+  id uuid primary key default gen_random_uuid(),
+  store_code text not null references stores(code),
+  employee_name text not null,
+  year integer not null,
+  month integer not null check (month between 1 and 12),
+  days jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now(),
+  unique (store_code, employee_name, year, month)
+);
+
+create index if not exists staff_schedules_store_idx on staff_schedules (store_code, year, month);
+create index if not exists staff_schedules_employee_idx on staff_schedules (store_code, employee_name);
+
+alter table staff_schedules enable row level security;
+
+drop policy if exists "staff_schedules are publicly readable" on staff_schedules;
+create policy "staff_schedules are publicly readable"
+  on staff_schedules for select
+  using (true);
+
+drop policy if exists "staff_schedules are publicly insertable" on staff_schedules;
+create policy "staff_schedules are publicly insertable"
+  on staff_schedules for insert
+  with check (true);
+
+drop policy if exists "staff_schedules are publicly updatable" on staff_schedules;
+create policy "staff_schedules are publicly updatable"
+  on staff_schedules for update
+  using (true)
+  with check (true);
+
+drop policy if exists "staff_schedules are publicly deletable" on staff_schedules;
+create policy "staff_schedules are publicly deletable"
+  on staff_schedules for delete
+  using (true);
