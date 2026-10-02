@@ -635,6 +635,10 @@ create table if not exists recipe_meta (
   primary key (store_code, menu_name)
 );
 
+-- sort_order: 메뉴별 원가확인 목록의 표시 순서(0부터). ▲▼로 바꾸면 바로 저장된다.
+-- 새로 추가한 메뉴는 null이라 목록 맨 뒤(원가율 높은 순)에 붙는다.
+alter table recipe_meta add column if not exists sort_order integer;
+
 -- 이 테이블이 생기기 전부터 있던 레시피는 전부 "메뉴"였으므로 그대로 채워 넣는다.
 insert into recipe_meta (store_code, menu_name, recipe_type)
 select distinct store_code, menu_name, 'menu' from recipes
