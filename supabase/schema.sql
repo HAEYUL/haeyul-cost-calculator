@@ -674,6 +674,10 @@ create table if not exists ingredient_mapping (
   unique (store_code, recipe_ingredient_name)
 );
 
+-- sort_order: 재료 매칭 화면 "매칭 완료" 목록의 표시 순서(0부터). ▲▼로 바꾸면 바로 저장된다.
+-- 새로 매칭한 재료는 null이라 목록 맨 뒤(created_at 순)에 붙는다.
+alter table ingredient_mapping add column if not exists sort_order integer;
+
 alter table ingredient_mapping enable row level security;
 
 drop policy if exists "ingredient_mapping is publicly readable" on ingredient_mapping;
