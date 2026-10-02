@@ -199,7 +199,9 @@ export default function RecipeScreen() {
         .select('ingredient_name, amount_g')
         .eq('store_code', store.code)
         .eq('menu_name', name)
-        .eq('is_sub_recipe', false),
+        .eq('is_sub_recipe', false)
+        .order('sort_order', { ascending: true, nullsFirst: false })
+        .order('created_at', { ascending: true }),
     ])
     if (metaErr || rowsErr) {
       setError((metaErr ?? rowsErr).message)
@@ -347,12 +349,13 @@ export default function RecipeScreen() {
       }
     }
 
-    const rows = validItems.map((item) => ({
+    const rows = validItems.map((item, i) => ({
       store_code: store.code,
       menu_name: trimmedMenu,
       ingredient_name: item.name.trim(),
       amount_g: item.amountG === '' ? null : Number(item.amountG),
       is_sub_recipe: false,
+      sort_order: i,
     }))
 
     const { error: insertErr } = await supabase.from('recipes').insert(rows)

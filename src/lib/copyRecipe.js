@@ -25,9 +25,11 @@ export async function copyRecipe({ supabase, storeCode, fromMenuName, toMenuName
 
   const { data: rows, error: rowsErr } = await supabase
     .from('recipes')
-    .select('ingredient_name, amount_g, is_sub_recipe')
+    .select('ingredient_name, amount_g, is_sub_recipe, sort_order')
     .eq('store_code', storeCode)
     .eq('menu_name', fromMenuName)
+    .order('sort_order', { ascending: true, nullsFirst: false })
+    .order('created_at', { ascending: true })
   if (rowsErr) return { error: rowsErr }
 
   const { error: metaInsertErr } = await supabase.from('recipe_meta').insert({
@@ -41,12 +43,13 @@ export async function copyRecipe({ supabase, storeCode, fromMenuName, toMenuName
 
   if (rows && rows.length > 0) {
     const { error: insertErr } = await supabase.from('recipes').insert(
-      rows.map((r) => ({
+      rows.map((r, i) => ({
         store_code: storeCode,
         menu_name: trimmed,
         ingredient_name: r.ingredient_name,
         amount_g: r.amount_g,
         is_sub_recipe: r.is_sub_recipe,
+        sort_order: i,
       })),
     )
     if (insertErr) return { error: insertErr }
