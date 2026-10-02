@@ -28,6 +28,7 @@ export default function CostScreen() {
 
   const [deleteTarget, setDeleteTarget] = useState(null)
   const [deleting, setDeleting] = useState(false)
+  const [reordering, setReordering] = useState(false)
 
   useEffect(() => {
     if (!store) navigate('/', { replace: true })
@@ -38,7 +39,7 @@ export default function CostScreen() {
     setLoading(true)
     setError('')
     Promise.all([
-      supabase.from('recipe_meta').select('menu_name, recipe_type, yield_qty').eq('store_code', store.code),
+      supabase.from('recipe_meta').select('menu_name, recipe_type, yield_qty, sort_order').eq('store_code', store.code),
       supabase.from('recipes').select('menu_name, ingredient_name, amount_g, is_sub_recipe').eq('store_code', store.code),
       supabase.from('ingredient_mapping').select('recipe_ingredient_name, invoice_item_name').eq('store_code', store.code),
       supabase
@@ -87,10 +88,16 @@ export default function CostScreen() {
         })
         const sellingPrice = sellingByMenu.get(meta.menu_name) ?? null
         const ratio = sellingPrice ? (totalCost / sellingPrice) * 100 : null
-        return { menuName: meta.menu_name, totalCost, hasMissing, sellingPrice, ratio }
+        return { menuName: meta.menu_name, sortOrder: meta.sort_order, totalCost, hasMissing, sellingPrice, ratio }
       })
 
+      // ▲▼로 정해 둔 순서(sort_order)가 먼저, 아직 순서가 없는 메뉴는 그 뒤에 원가율 높은 순으로 붙는다.
       computed.sort((a, b) => {
+        if (a.sortOrder != null || b.sortOrder != null) {
+          if (a.sortOrder == null) return 1
+          if (b.sortOrder == null) return -1
+          return a.sortOrder - b.sortOrder
+        }
         if (a.ratio == null && b.ratio == null) return a.menuName.localeCompare(b.menuName)
         if (a.ratio == null) return 1
         if (b.ratio == null) return -1
@@ -148,6 +155,26 @@ export default function CostScreen() {
     setDataKey((k) => k + 1)
   }
 
+  // 한 칸 위(-1)/아래(+1)로 옮기고, 목록 전체 순서를 recipe_meta.sort_order로 바로 저장한다.
+  const moveMenu = async (index, delta) => {
+    const target = index + delta
+    if (!supabase || target < 0 || target >= rows.length) return
+    const next = [...rows]
+    ;[next[index], next[target]] = [next[target], next[index]]
+    setRows(next.map((r, i) => ({ ...r, sortOrder: i })))
+    setReordering(true)
+    setError('')
+    const { error: err } = await supabase.from('recipe_meta').upsert(
+      next.map((r, i) => ({ store_code: store.code, menu_name: r.menuName, recipe_type: 'menu', sort_order: i })),
+      { onConflict: 'store_code,menu_name' },
+    )
+    setReordering(false)
+    if (err) {
+      setError(err.message)
+      setDataKey((k) => k + 1)
+    }
+  }
+
   const handleDeleteMenu = async (menuName) => {
     if (!supabase) return
     setDeleting(true)
@@ -180,7 +207,7 @@ export default function CostScreen() {
           ← 메인 메뉴
         </button>
         <h1>메뉴별 원가확인</h1>
-        <p className="subtitle">{store.name} · 원가율이 높은 메뉴부터 정렬했어요</p>
+        <p className="subtitle">{store.name} · ▲▼로 메뉴 순서를 바꿀 수 있어요</p>
       </div>
 
       <div className="field">
@@ -203,7 +230,7 @@ export default function CostScreen() {
       {!loading && !error && supabase && rows.length === 0 && <p className="hint">저장된 레시피가 없습니다.</p>}
 
       <ul className="history-list">
-        {rows.map((row) => (
+        {rows.map((row, index) => (
           <li key={row.menuName} className="history-row">
             <button
               type="button"
@@ -229,6 +256,26 @@ export default function CostScreen() {
               <button type="button" className="link-btn link-btn-danger" onClick={() => setDeleteTarget(row.menuName)}>
                 삭제
               </button>
+              <span className="row-actions row-actions-end">
+                <button
+                  type="button"
+                  className="icon-btn"
+                  onClick={() => moveMenu(index, -1)}
+                  disabled={index === 0 || reordering}
+                  aria-label="위로 이동"
+                >
+                  ▲
+                </button>
+                <button
+                  type="button"
+                  className="icon-btn"
+                  onClick={() => moveMenu(index, 1)}
+                  disabled={index === rows.length - 1 || reordering}
+                  aria-label="아래로 이동"
+                >
+                  ▼
+                </button>
+              </span>
             </div>
 
             {copyTarget === row.menuName && (
