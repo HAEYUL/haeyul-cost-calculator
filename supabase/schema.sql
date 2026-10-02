@@ -616,6 +616,10 @@ create policy "recipes are publicly updatable"
 -- amount_g엔 그 부재료의 yield_unit 기준 사용량(예: "굴림만두" 5개 → 5)을 넣는다.
 alter table recipes add column if not exists is_sub_recipe boolean not null default false;
 
+-- sort_order: 한 메뉴 안에서 재료를 보여줄 순서(0부터). 메뉴별 원가 화면에서 ▲▼로 바꾼 순서가
+-- 저장된다. 이 컬럼이 생기기 전에 저장된 줄은 null이며, 그때는 created_at 순으로 보여준다.
+alter table recipes add column if not exists sort_order integer;
+
 -- recipe_meta: recipes(menu_name)마다 하나씩 있는 메타 정보. recipe_type으로 손님에게 파는
 -- "메뉴"인지 매장에서 만드는 "부재료"인지 구분한다. 부재료는 yield_qty(총 산출량)와
 -- yield_unit(개/인분/ml 등 그 단위)을 추가로 갖고, 재료비 합계를 yield_qty로 나눠 1단위당

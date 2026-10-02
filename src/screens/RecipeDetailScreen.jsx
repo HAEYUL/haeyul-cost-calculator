@@ -28,6 +28,7 @@ export default function RecipeDetailScreen() {
       .select('id, ingredient_name, amount_g')
       .eq('store_code', store.code)
       .eq('menu_name', menuName)
+      .order('sort_order', { ascending: true, nullsFirst: false })
       .order('created_at', { ascending: true })
       .then(({ data, error: err }) => {
         if (err) setError(err.message)

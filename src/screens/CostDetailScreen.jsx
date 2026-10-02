@@ -60,7 +60,9 @@ export default function CostDetailScreen() {
         .from('recipes')
         .select('ingredient_name, amount_g, is_sub_recipe')
         .eq('store_code', store.code)
-        .eq('menu_name', menuName),
+        .eq('menu_name', menuName)
+        .order('sort_order', { ascending: true, nullsFirst: false })
+        .order('created_at', { ascending: true }),
       supabase
         .from('menu_prices')
         .select('selling_price')
@@ -173,6 +175,18 @@ export default function CostDetailScreen() {
     setItems((prev) => prev.map((item, i) => (i === index ? { ...item, isSubRecipe, name: '' } : item)))
   }
   const removeItem = (index) => setItems((prev) => prev.filter((_, i) => i !== index))
+  // 재료 줄을 한 칸 위(-1)/아래(+1)로 옮긴다. 매칭 패널은 줄 번호(index)에 묶여 있어서
+  // 순서가 바뀌면 엉뚱한 줄에 붙으므로, 열려 있으면 닫는다.
+  const moveItem = (index, delta) => {
+    const target = index + delta
+    if (target < 0 || target >= items.length) return
+    if (ingredientMatch.matchingIndex != null) ingredientMatch.cancelMatch()
+    setItems((prev) => {
+      const next = [...prev]
+      ;[next[index], next[target]] = [next[target], next[index]]
+      return next
+    })
+  }
 
   const existingRawNames = new Set(items.filter((i) => !i.isSubRecipe).map((i) => i.name.trim()))
   const existingSubNames = new Set(items.filter((i) => i.isSubRecipe).map((i) => i.name.trim()))
@@ -231,12 +245,13 @@ export default function CostDetailScreen() {
     }
 
     if (validItems.length > 0) {
-      const rows = validItems.map((item) => ({
+      const rows = validItems.map((item, i) => ({
         store_code: store.code,
         menu_name: menuName,
         ingredient_name: item.name.trim(),
         amount_g: item.amountG === '' ? null : Number(item.amountG),
         is_sub_recipe: item.isSubRecipe,
+        sort_order: i,
       }))
       const { error: insErr } = await supabase.from('recipes').insert(rows)
       if (insErr) {
@@ -400,9 +415,29 @@ export default function CostDetailScreen() {
                               ? STATUS_LABEL[row.status]
                               : ''}
                         </span>
-                        <button type="button" className="icon-btn" onClick={() => removeItem(index)} aria-label="행 삭제">
-                          ✕
-                        </button>
+                        <span className="row-actions">
+                          <button
+                            type="button"
+                            className="icon-btn"
+                            onClick={() => moveItem(index, -1)}
+                            disabled={index === 0}
+                            aria-label="위로 이동"
+                          >
+                            ▲
+                          </button>
+                          <button
+                            type="button"
+                            className="icon-btn"
+                            onClick={() => moveItem(index, 1)}
+                            disabled={index === items.length - 1}
+                            aria-label="아래로 이동"
+                          >
+                            ▼
+                          </button>
+                          <button type="button" className="icon-btn" onClick={() => removeItem(index)} aria-label="행 삭제">
+                            ✕
+                          </button>
+                        </span>
                       </div>
                       {!item.isSubRecipe && trimmedName && (
                         <p className={matchedInvoiceItem ? 'hint' : 'hint cost-warning'}>
