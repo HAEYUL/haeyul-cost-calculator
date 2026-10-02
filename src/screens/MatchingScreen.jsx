@@ -84,6 +84,7 @@ export default function MatchingScreen() {
   const [purgeCount, setPurgeCount] = useState(null)
   const [purgeConfirmStage, setPurgeConfirmStage] = useState(1)
   const [purging, setPurging] = useState(false)
+  const [reordering, setReordering] = useState(false)
 
   useEffect(() => {
     if (!store) navigate('/', { replace: true })
@@ -96,7 +97,12 @@ export default function MatchingScreen() {
     Promise.all([
       supabase.from('recipes').select('ingredient_name').eq('store_code', store.code),
       supabase.from('invoices').select('item_name').eq('store_code', store.code),
-      supabase.from('ingredient_mapping').select('recipe_ingredient_name, invoice_item_name').eq('store_code', store.code),
+      supabase
+        .from('ingredient_mapping')
+        .select('recipe_ingredient_name, invoice_item_name')
+        .eq('store_code', store.code)
+        .order('sort_order', { ascending: true, nullsFirst: false })
+        .order('created_at', { ascending: true }),
     ]).then(([recipesRes, invoicesRes, mappingRes]) => {
       const err = recipesRes.error || invoicesRes.error || mappingRes.error
       if (err) {
@@ -160,6 +166,31 @@ export default function MatchingScreen() {
     setSuggestions([])
     setManualChoice('')
     setDataKey((k) => k + 1)
+  }
+
+  // "매칭 완료" 목록에서 한 칸 위(-1)/아래(+1)로 옮기고, 목록 전체 순서를 sort_order로 바로 저장한다.
+  const moveMapping = async (index, delta) => {
+    const target = index + delta
+    if (!supabase || target < 0 || target >= mappings.length) return
+    const next = [...mappings]
+    ;[next[index], next[target]] = [next[target], next[index]]
+    setMappings(next)
+    setReordering(true)
+    setError('')
+    const { error: err } = await supabase.from('ingredient_mapping').upsert(
+      next.map((m, i) => ({
+        store_code: store.code,
+        recipe_ingredient_name: m.recipe_ingredient_name,
+        invoice_item_name: m.invoice_item_name,
+        sort_order: i,
+      })),
+      { onConflict: 'store_code,recipe_ingredient_name' },
+    )
+    setReordering(false)
+    if (err) {
+      setError(err.message)
+      setDataKey((k) => k + 1)
+    }
   }
 
   const openUnlinkConfirm = async (ingredientName) => {
@@ -449,11 +480,31 @@ export default function MatchingScreen() {
           <h2 className="section-title">매칭 완료 ({mappings.length})</h2>
           {mappings.length === 0 && <p className="hint">아직 연결된 재료가 없습니다.</p>}
           <ul className="history-list">
-            {mappings.map((m) => (
+            {mappings.map((m, index) => (
               <li key={m.recipe_ingredient_name} className="history-row">
                 <div className="history-row-main">
                   <span className="history-item">
                     {m.recipe_ingredient_name} → {m.invoice_item_name}
+                  </span>
+                  <span className="row-actions">
+                    <button
+                      type="button"
+                      className="icon-btn"
+                      onClick={() => moveMapping(index, -1)}
+                      disabled={index === 0 || reordering}
+                      aria-label="위로 이동"
+                    >
+                      ▲
+                    </button>
+                    <button
+                      type="button"
+                      className="icon-btn"
+                      onClick={() => moveMapping(index, 1)}
+                      disabled={index === mappings.length - 1 || reordering}
+                      aria-label="아래로 이동"
+                    >
+                      ▼
+                    </button>
                   </span>
                 </div>
                 <div className="recipe-actions">
