@@ -72,6 +72,12 @@ function monthKeyOf(row) {
   return `${row.year}-${pad2(row.month)}`
 }
 
+function isValidYearMonth(row) {
+  const y = Number(row.year)
+  const m = Number(row.month)
+  return row.year !== '' && row.month !== '' && Number.isInteger(y) && y >= 2000 && y <= 2100 && Number.isInteger(m) && m >= 1 && m <= 12
+}
+
 function SettlementRows({ row }) {
   return (
     <>
@@ -408,6 +414,8 @@ export default function SettlementScreen() {
     }
   }
 
+  const existingKeys = useMemo(() => new Set(settlements.map(monthKeyOf)), [settlements])
+
   const handleAnalyze = async () => {
     if (!pendingImage) return
     setAnalyzing(true)
@@ -421,10 +429,9 @@ export default function SettlementScreen() {
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || '분석에 실패했습니다')
 
-      const existingKeys = new Set(settlements.map(monthKeyOf))
       const rows = (data.months ?? []).map((m) => {
-        const key = `${m.year}-${pad2(m.month)}`
-        const row = { year: String(m.year ?? ''), month: String(m.month ?? ''), isDuplicate: existingKeys.has(key), overwrite: false }
+        const row = { year: m.year ? String(m.year) : '', month: m.month ? String(m.month) : '', overwrite: false }
+        row.isDuplicate = isValidYearMonth(row) && existingKeys.has(monthKeyOf(row))
         for (const [dbKey, aiKey] of Object.entries(AI_FIELD_KEYS)) {
           row[dbKey] = m[aiKey] != null ? String(m[aiKey]) : ''
         }
@@ -440,7 +447,17 @@ export default function SettlementScreen() {
   }
 
   const updateExtracted = (index, field, value) => {
-    setExtractedMonths((prev) => prev.map((row, i) => (i === index ? { ...row, [field]: value } : row)))
+    setExtractedMonths((prev) =>
+      prev.map((row, i) => {
+        if (i !== index) return row
+        const next = { ...row, [field]: value }
+        if (field === 'year' || field === 'month') {
+          next.isDuplicate = isValidYearMonth(next) && existingKeys.has(monthKeyOf(next))
+          if (!next.isDuplicate) next.overwrite = false
+        }
+        return next
+      }),
+    )
   }
 
   const toggleOverwrite = (index) => {
@@ -451,6 +468,18 @@ export default function SettlementScreen() {
     if (!supabase) return
     setUploadError('')
     setUploadMessage('')
+
+    const invalidIndex = extractedMonths.findIndex((row) => !isValidYearMonth(row))
+    if (invalidIndex !== -1) {
+      setUploadError(`${invalidIndex + 1}번째 항목의 연도/월을 확인해주세요.`)
+      return
+    }
+
+    const keys = extractedMonths.map(monthKeyOf)
+    if (new Set(keys).size !== keys.length) {
+      setUploadError('같은 연도/월이 두 번 들어가 있어요. 연도/월을 확인해주세요.')
+      return
+    }
 
     const toSave = extractedMonths.filter((row) => !row.isDuplicate || row.overwrite)
     if (toSave.length === 0) {
@@ -617,13 +646,35 @@ export default function SettlementScreen() {
       {extractedMonths.length > 0 && (
         <>
           <h2 className="section-title">읽은 내용 확인</h2>
-          <p className="hint">숫자가 틀렸으면 바로 고치고, 확인되면 저장하세요.</p>
+          <p className="hint">연도/월이나 숫자가 틀렸으면 바로 고치고, 확인되면 저장하세요.</p>
           {extractedMonths.map((row, i) => (
             <div className="cost-summary" key={i}>
-              <h3 className="settlement-month-title">
-                {row.year}년 {row.month}월
+              <h3 className="settlement-month-title settlement-month-inputs">
+                <input
+                  className={row.year === '' ? 'input input-invalid' : 'input'}
+                  inputMode="numeric"
+                  placeholder="연도"
+                  aria-label="연도"
+                  value={row.year}
+                  onChange={(e) => updateExtracted(i, 'year', e.target.value.replace(/[^0-9]/g, '').slice(0, 4))}
+                />
+                년
+                <input
+                  className={row.month === '' ? 'input input-invalid' : 'input'}
+                  inputMode="numeric"
+                  placeholder="월"
+                  aria-label="월"
+                  value={row.month}
+                  onChange={(e) => updateExtracted(i, 'month', e.target.value.replace(/[^0-9]/g, '').slice(0, 2))}
+                />
+                월
                 {row.isDuplicate && <span className="cost-warning"> · 이미 저장된 달이에요</span>}
               </h3>
+              {(row.year === '' || row.month === '') && (
+                <p className="error-text" style={{ margin: '0 0 8px' }}>
+                  사진에서 연도/월을 찾지 못했어요. 연도/월을 입력해주세요.
+                </p>
+              )}
               {FIELDS.map(([key, label]) => (
                 <div className="cost-summary-row" key={key}>
                   <span>{label}</span>
