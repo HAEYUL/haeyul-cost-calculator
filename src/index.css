@@ -642,6 +642,22 @@ h1 {
   font-weight: 600;
 }
 
+.settlement-month-inputs {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.settlement-month-inputs .input {
+  width: 80px;
+  text-align: center;
+}
+
+.input-invalid {
+  border-color: #d32f2f;
+}
+
 .settlement-total {
   border-color: var(--accent);
   background: color-mix(in srgb, var(--accent) 10%, var(--surface));

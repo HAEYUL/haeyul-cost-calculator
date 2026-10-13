@@ -3,8 +3,11 @@ import { zodOutputFormat } from '@anthropic-ai/sdk/helpers/zod'
 import { parseWithRetry } from './_anthropicClient.js'
 
 const SettlementMonthSchema = z.object({
-  year: z.number().describe('연도 (예: 2026). 표 제목이나 머리글에 적힌 연도를 그 아래 모든 월에 적용하세요.'),
-  month: z.number().describe('월 (1~12 사이 정수)'),
+  year: z
+    .number()
+    .nullable()
+    .describe('연도 (예: 2026). 표 제목이나 머리글에 적힌 연도를 그 아래 모든 월에 적용하세요. 사진 어디에도 연도가 없으면 null.'),
+  month: z.number().nullable().describe('월 (1~12 사이 정수). 열 머리글 등에서 월을 확인할 수 없으면 null.'),
   revenue: z.number().nullable().describe('총매출액(총 매출액) — 해당 월의 매출 합계'),
   ingredientCost: z.number().nullable().describe('총식재료비(총 식재료비)'),
   laborCost: z.number().nullable().describe('인건비 (표에 "인건비/매출"처럼 비율과 함께 있어도 금액만 추출)'),
@@ -39,7 +42,8 @@ const PROMPT = `이 이미지는 한국 식당의 월별 운영결산표 사진�
 - 숫자에서 쉼표(,)와 원(₩) 기호, %는 제거하고 숫자만 반환하세요. 음수는 앞에 "-" 표시나 빨간 글씨, 괄호 등으로 나타날 수 있으니 음수로 정확히 반환하세요.
 - 데이터가 비어있거나 아직 채워지지 않은 미래 월(예: 아직 지나지 않은 달)은 결과에 포함하지 마세요.
 - 어떤 항목의 값을 표에서 읽을 수 없으면 null로 두고, 추측해서 만들어내지 마세요.
-- 연도는 표 제목에 한 번만 적혀 있어도 모든 월에 같은 연도를 적용하세요.`
+- 연도는 표 제목에 한 번만 적혀 있어도 모든 월에 같은 연도를 적용하세요.
+- 사진에 연도나 월이 전혀 보이지 않으면 짐작하지 말고 null로 두세요. 사용자가 직접 입력합니다.`
 
 export async function analyzeSettlementImage({ base64, mediaType }) {
   const response = await parseWithRetry({
