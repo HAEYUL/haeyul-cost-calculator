@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
 import { UNIT_LABELS } from '../lib/units'
 import { rowDateStr } from '../lib/rowDateStr'
+import { canRecordBatchPayment, paidBatchIds, recordBatchPayment } from '../lib/batchPayment'
 
 function todayStr() {
   const d = new Date()
@@ -16,11 +18,19 @@ function rowDateValue(row) {
 }
 
 export default function InvoiceHistory({ storeCode, refreshKey }) {
+  const navigate = useNavigate()
+  const location = useLocation()
+  // 명세표 수정 화면에 다녀오면 보던 기간·거래처 필터를 그대로 이어서 보여준다.
+  const savedFilter = location.state?.historyFilter
   const [batches, setBatches] = useState([])
   const [legacyRows, setLegacyRows] = useState([])
-  const [selectedVendor, setSelectedVendor] = useState('all')
-  const [dateFrom, setDateFrom] = useState(todayStr())
-  const [dateTo, setDateTo] = useState(todayStr())
+  const [payments, setPayments] = useState([])
+  const [payTarget, setPayTarget] = useState(null)
+  const [paying, setPaying] = useState(false)
+  const [paymentsKey, setPaymentsKey] = useState(0)
+  const [selectedVendor, setSelectedVendor] = useState(savedFilter?.selectedVendor ?? 'all')
+  const [dateFrom, setDateFrom] = useState(savedFilter?.dateFrom ?? todayStr())
+  const [dateTo, setDateTo] = useState(savedFilter?.dateTo ?? todayStr())
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
@@ -53,6 +63,50 @@ export default function InvoiceHistory({ storeCode, refreshKey }) {
     })
   }, [storeCode, refreshKey])
 
+  // 결제 기록은 [결제완료]를 누를 때마다 다시 불러와야 해서, 명세표 목록과 따로 불러온다.
+  useEffect(() => {
+    if (!supabase) return
+    supabase
+      .from('vendor_payments')
+      .select('vendor_id, amount, paid_date')
+      .eq('store_code', storeCode)
+      .then(({ data, error: err }) => {
+        if (err) {
+          setError(err.message)
+          return
+        }
+        setPayments(data ?? [])
+      })
+  }, [storeCode, refreshKey, paymentsKey])
+
+  const handlePay = async () => {
+    if (!payTarget) return
+    setPaying(true)
+    setError('')
+    const { error: err } = await recordBatchPayment({
+      storeCode,
+      vendorId: payTarget.vendors.id,
+      batch: payTarget,
+    })
+    setPaying(false)
+    if (err) {
+      setError(err.message)
+      return
+    }
+    setPayTarget(null)
+    setPaymentsKey((k) => k + 1)
+  }
+
+  // 지금 화면의 히스토리 항목에 필터를 기록해두고 수정 화면으로 간다. 수정 화면에서 저장·취소하면
+  // 한 칸 뒤로 돌아오므로, 기록해둔 필터가 그대로 살아난다(뒤로가기 버튼으로 돌아와도 마찬가지).
+  const openEdit = (batchId) => {
+    navigate(location.pathname, {
+      replace: true,
+      state: { ...location.state, historyFilter: { dateFrom, dateTo, selectedVendor } },
+    })
+    navigate(`/invoices/edit/${batchId}`, { state: { returnToHistory: true } })
+  }
+
   if (!supabase) {
     return <p className="hint">Supabase가 설정되지 않아 저장된 내역을 볼 수 없습니다.</p>
   }
@@ -60,6 +114,7 @@ export default function InvoiceHistory({ storeCode, refreshKey }) {
   const vendorNames = [
     ...new Set([...batches.map((b) => b.vendors?.name).filter(Boolean), ...legacyRows.map((r) => r.vendor)]),
   ]
+  const paidIds = paidBatchIds(batches, payments)
   const inVendor = (name) => selectedVendor === 'all' || name === selectedVendor
   const inRange = (row) => {
     const d = rowDateStr(row)
@@ -117,12 +172,43 @@ export default function InvoiceHistory({ storeCode, refreshKey }) {
             <li key={`batch-${row.id}`} className="history-row">
               <div className="history-row-main">
                 <span className="history-vendor">{row.vendors?.name ?? '거래처 미지정'}</span>
-                <span>{Math.round(Number(row.total_amount)).toLocaleString()}원</span>
+                <div className="history-row-main-end">
+                  <span>{Math.round(Number(row.total_amount)).toLocaleString()}원</span>
+                  {paidIds.has(row.id) ? (
+                    <span className="paid-badge">✓ 결제됨</span>
+                  ) : (
+                    row.vendors?.id &&
+                    canRecordBatchPayment(row) && (
+                      <button type="button" className="link-btn" onClick={() => setPayTarget(row)}>
+                        결제완료
+                      </button>
+                    )
+                  )}
+                  <button type="button" className="link-btn" onClick={() => openEdit(row.id)}>
+                    수정
+                  </button>
+                </div>
               </div>
               <div className="history-row-sub">
                 {row.invoice_date && <span>{row.invoice_date}</span>}
                 <span>품목 {row.invoices?.length ?? 0}개</span>
               </div>
+              {payTarget?.id === row.id && (
+                <div className="price-alert-box">
+                  <p className="price-alert-title">
+                    {Math.round(Number(row.total_amount)).toLocaleString()}원을 {row.invoice_date} 결제로 기록할까요?
+                  </p>
+                  <p className="hint">입고 때 "바로 결제 완료"를 체크한 것과 똑같이 결제 기록이 남아요.</p>
+                  <div className="invoice-form">
+                    <button type="button" className="btn-secondary" onClick={() => setPayTarget(null)} disabled={paying}>
+                      취소
+                    </button>
+                    <button type="button" className="btn-primary" onClick={handlePay} disabled={paying}>
+                      {paying ? '저장 중...' : '확인'}
+                    </button>
+                  </div>
+                </div>
+              )}
               {row.invoices?.length > 0 && (
                 <ul className="batch-items">
                   {row.invoices.map((item) => (

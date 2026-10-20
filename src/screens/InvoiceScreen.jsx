@@ -146,6 +146,8 @@ export default function InvoiceScreen() {
   const { batchId } = useParams()
   const editMode = Boolean(batchId)
   const returnDateRange = location.state?.returnDateRange ?? null
+  // 입고입력 화면의 '저장된 입고 내역'에서 [수정]으로 들어왔으면 저장 후 그 화면으로 되돌아간다.
+  const returnToHistory = Boolean(location.state?.returnToHistory)
 
   const [loadingEdit, setLoadingEdit] = useState(editMode)
   const [previewUrl, setPreviewUrl] = useState(null)
@@ -464,6 +466,10 @@ export default function InvoiceScreen() {
       }
 
       if (didCreateVendor) setVendorsVersion((v) => v + 1)
+      if (returnToHistory) {
+        navigate(-1)
+        return
+      }
       navigate(`/vendors/${resolvedVendorId}`, returnDateRange ? { state: { dateRange: returnDateRange } } : undefined)
       return
     }
