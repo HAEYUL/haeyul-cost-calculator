@@ -8,6 +8,7 @@ import AmountInput from '../components/AmountInput'
 import { latestInvoiceInfoByItem, computeMenuCost } from '../lib/costCalc'
 import { UNIT_LABELS } from '../lib/units'
 import { paidBatchIds } from '../lib/batchPayment'
+import { findVatAmountFixes } from '../lib/vatAmountFix'
 
 const MARGIN_WARNING_RATIO = 40
 
@@ -777,6 +778,17 @@ export default function InvoiceScreen() {
   const currentVendorVatSeparate = vendors.find((v) => v.id === vendorId)?.vat_separate ?? false
 
   const itemMismatches = findItemMismatches(items)
+  const vatAmountFixes = findVatAmountFixes(items, currentVendorVatSeparate)
+  const vatAmountFixTotal = vatAmountFixes.reduce((sum, f) => sum + f.to - f.from, 0)
+  const applyVatAmountFixes = () => {
+    const toByIndex = new Map(vatAmountFixes.map((f) => [f.index, f.to]))
+    setItems((prev) => prev.map((item, i) => (toByIndex.has(i) ? { ...item, amount: String(toByIndex.get(i)) } : item)))
+    // 저장된 명세표를 고칠 때는 당일 입고액도 예전(공급가만 더한) 합계로 들어가 있으니 같이 고친다.
+    // 명세표에서 읽은 당일 입고액이 원래 맞는 값이면(품목 합계와 다르면) 건드리지 않는다.
+    if (invoiceTotal !== '' && Math.abs(Number(invoiceTotal) - itemsSum) <= AMOUNT_TOLERANCE) {
+      setInvoiceTotal(String(Math.round((itemsSum + vatAmountFixTotal) * 100) / 100))
+    }
+  }
   const validItemsForSum = items.filter((item) => item.name.trim())
   const itemsSum = validItemsForSum.reduce(
     (sum, item) => sum + itemAmount(item) + (currentVendorVatSeparate ? itemVat(item) : 0),
@@ -1091,6 +1103,31 @@ export default function InvoiceScreen() {
             {Math.round(previousBalanceMismatch.entered).toLocaleString()}원이에요. 그 사이 결제하신 게 있다면
             "결제 입력"에 넣어주세요.
           </p>
+        </div>
+      )}
+
+      {vatAmountFixes.length > 0 && (
+        <div className="price-alert-box price-alert-box-danger">
+          <p className="price-alert-title">
+            {currentVendorVatSeparate
+              ? `⚠️ 금액에 부가세가 이미 들어간 품목이 ${vatAmountFixes.length}개 있어요`
+              : `⚠️ 공급가만 들어간 품목이 ${vatAmountFixes.length}개 있어요 (부가세 ${Math.round(vatAmountFixTotal).toLocaleString()}원 빠짐)`}
+          </p>
+          <ul className="price-alert-list">
+            {vatAmountFixes.map((f) => (
+              <li key={f.index}>
+                {f.name}: {Math.round(f.from).toLocaleString()}원 → {Math.round(f.to).toLocaleString()}원
+              </li>
+            ))}
+          </ul>
+          <p className="hint">
+            {currentVendorVatSeparate
+              ? '부가세 별도 거래처는 금액에 공급가만 넣고 부가세는 부가세 칸에 따로 둬요.'
+              : '명세표의 공급가 + 부가세 = 금액(맨 오른쪽 칸)이 품목 금액이에요. 수량 × 단가와도 맞아요.'}
+          </p>
+          <button type="button" className="btn-primary" onClick={applyVatAmountFixes}>
+            {currentVendorVatSeparate ? '공급가로 모두 고치기' : '부가세 포함 금액으로 모두 고치기'}
+          </button>
         </div>
       )}
 
