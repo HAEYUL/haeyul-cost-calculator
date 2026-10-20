@@ -3,7 +3,6 @@ import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
 import { STORES } from '../data/stores'
 import { useStore } from '../context/StoreContext'
-import { hashPin } from '../lib/pinHash'
 import { useInstallPrompt } from '../lib/useInstallPrompt'
 
 const MAX_ATTEMPTS = 5
@@ -23,10 +22,10 @@ export default function StoreSelectScreen() {
   const navigate = useNavigate()
 
   const [pendingStore, setPendingStore] = useState(null)
-  const [storeAuth, setStoreAuth] = useState(null)
+  // 서버가 알려준 잠금 해제 시각(5회 틀리면 5분 잠금)
+  const [lockedUntil, setLockedUntil] = useState(null)
   const [pinInput, setPinInput] = useState('')
   const [error, setError] = useState('')
-  const [loadingAuth, setLoadingAuth] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [now, setNow] = useState(() => Date.now())
 
@@ -55,7 +54,7 @@ export default function StoreSelectScreen() {
       })
   }, [])
 
-  const lockedUntilMs = storeAuth?.locked_until ? new Date(storeAuth.locked_until).getTime() : null
+  const lockedUntilMs = lockedUntil ? new Date(lockedUntil).getTime() : null
   const isLocked = lockedUntilMs != null && lockedUntilMs > now
 
   useEffect(() => {
@@ -64,72 +63,60 @@ export default function StoreSelectScreen() {
     return () => clearInterval(timer)
   }, [isLocked])
 
-  const openPinPrompt = async (selected) => {
+  const openPinPrompt = (selected) => {
     setPendingStore(selected)
     setPinInput('')
     setError('')
-    setStoreAuth(null)
-    if (!supabase) return
-    setLoadingAuth(true)
-    const { data, error: err } = await supabase
-      .from('stores')
-      .select('pin_hash, failed_attempts, locked_until')
-      .eq('code', selected.code)
-      .single()
-    setLoadingAuth(false)
-    if (err) {
-      setError(err.message)
-      return
-    }
-    setStoreAuth(data)
+    setLockedUntil(null)
     setNow(Date.now())
   }
 
   const closePinPrompt = () => {
     setPendingStore(null)
-    setStoreAuth(null)
+    setLockedUntil(null)
     setPinInput('')
     setError('')
   }
 
+  // PIN은 서버에서 확인한다. 맞으면 그 매장 출입증(세션)을 받아 이 창에 보관하고 들어간다.
   const handleSubmitPin = async () => {
-    if (!supabase || !pendingStore || !storeAuth || isLocked) return
+    if (!supabase || !pendingStore || isLocked) return
     if (!/^\d{4}$/.test(pinInput)) {
       setError('비밀번호 4자리를 입력하세요.')
       return
     }
-    if (!storeAuth.pin_hash) {
-      setError('비밀번호가 아직 설정되지 않았어요. Supabase SQL을 실행해주세요.')
-      return
-    }
-
     setSubmitting(true)
     setError('')
-    const hash = await hashPin(pinInput, pendingStore.code)
-
-    if (hash === storeAuth.pin_hash) {
-      await supabase.from('stores').update({ failed_attempts: 0, locked_until: null }).eq('code', pendingStore.code)
-      setSubmitting(false)
+    try {
+      const res = await fetch('/api/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ storeCode: pendingStore.code, pin: pinInput }),
+      })
+      const body = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        setPinInput('')
+        if (body.lockedUntil) {
+          setLockedUntil(body.lockedUntil)
+          setNow(Date.now())
+        }
+        setError(body.error || '로그인하지 못했어요. 잠시 후 다시 시도해주세요.')
+        return
+      }
+      const { error: sessionErr } = await supabase.auth.setSession({
+        access_token: body.session.access_token,
+        refresh_token: body.session.refresh_token,
+      })
+      if (sessionErr) {
+        setError(sessionErr.message)
+        return
+      }
       setStore(pendingStore)
       navigate('/menu')
-      return
-    }
-
-    const nextAttempts = storeAuth.failed_attempts + 1
-    const shouldLock = nextAttempts >= MAX_ATTEMPTS
-    const nextLockedUntil = shouldLock ? new Date(Date.now() + LOCK_MINUTES * 60 * 1000).toISOString() : null
-
-    await supabase
-      .from('stores')
-      .update({ failed_attempts: shouldLock ? 0 : nextAttempts, locked_until: nextLockedUntil })
-      .eq('code', pendingStore.code)
-
-    setSubmitting(false)
-    setPinInput('')
-    setStoreAuth({ ...storeAuth, failed_attempts: shouldLock ? 0 : nextAttempts, locked_until: nextLockedUntil })
-    setNow(Date.now())
-    if (!shouldLock) {
-      setError(`비밀번호가 틀렸습니다 (${nextAttempts}/${MAX_ATTEMPTS})`)
+    } catch {
+      setError('인터넷 연결을 확인하고 다시 시도해주세요.')
+    } finally {
+      setSubmitting(false)
     }
   }
 
@@ -143,10 +130,7 @@ export default function StoreSelectScreen() {
         <h1>{pendingStore.name}</h1>
         <p className="subtitle">비밀번호 4자리를 입력하세요</p>
 
-        {loadingAuth && <p className="hint">불러오는 중...</p>}
-
-        {!loadingAuth && (
-          <>
+        <>
             <div className="field">
               <input
                 className="input"
@@ -179,8 +163,7 @@ export default function StoreSelectScreen() {
             >
               {submitting ? '확인 중...' : '확인'}
             </button>
-          </>
-        )}
+        </>
       </div>
     )
   }

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useStore } from '../context/StoreContext'
+import { apiFetch } from '../lib/apiFetch'
 
 export default function AskScreen() {
   const { store } = useStore()
@@ -24,7 +25,7 @@ export default function AskScreen() {
     setError('')
     setAnswer('')
     try {
-      const res = await fetch('/api/ask-question', {
+      const res = await apiFetch('/api/ask-question', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ question: trimmed }),

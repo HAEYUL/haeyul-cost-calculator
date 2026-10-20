@@ -4,6 +4,7 @@ import { useStore } from '../context/StoreContext'
 import { supabase } from '../lib/supabaseClient'
 import { compressImage } from '../lib/compressImage'
 import { cycleMark, daysInMonth, countMarks, MARK_LABELS } from '../lib/staffSchedule'
+import { apiFetch } from '../lib/apiFetch'
 
 function pad2(n) {
   return String(n).padStart(2, '0')
@@ -111,7 +112,7 @@ export default function StaffScheduleScreen() {
     setAnalyzing(true)
     setUploadError('')
     try {
-      const res = await fetch('/api/analyze-staff-schedule', {
+      const res = await apiFetch('/api/analyze-staff-schedule', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(pendingImage),

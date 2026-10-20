@@ -7,6 +7,7 @@ import { latestInvoiceInfoByItem, computeSubRecipeCost } from '../lib/costCalc'
 import { copyRecipe } from '../lib/copyRecipe'
 import { useIngredientMatch } from '../hooks/useIngredientMatch'
 import { RECIPE_UNIT_LABELS as UNIT_LABELS } from '../lib/units'
+import { apiFetch } from '../lib/apiFetch'
 
 function emptyIngredient() {
   return { name: '', amountG: '', originalText: '' }
@@ -155,7 +156,7 @@ export default function RecipeScreen() {
     setAnalyzing(true)
     setError('')
     try {
-      const res = await fetch('/api/analyze-recipe', {
+      const res = await apiFetch('/api/analyze-recipe', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(pendingImage),
