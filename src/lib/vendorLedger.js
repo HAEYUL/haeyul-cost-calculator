@@ -51,9 +51,11 @@ export const hasBalanceInfo = (batch) => batch.statement_balance != null || batc
 export const endingBalanceOf = (batch) =>
   batch.current_balance != null ? Number(batch.current_balance) : Number(batch.statement_balance) + Number(batch.total_amount)
 
-// 그날 입고를 반영하기 전의 잔액. 전잔액이 없으면 현잔액에서 당일 입고를 거꾸로 뺀다.
+// 그날 입고를 반영하기 전의 잔액. 현잔액이 있으면 현잔액 − 당일 입고를 쓴다: "전잔액 + 당일 − 전일입금
+// = 현잔액" 양식(퀸스유통 등)은 전잔액에 전날 송금이 아직 안 빠져 있어서, 전잔액으로 장부와 대조하면
+// 송금 다음 날 명세표마다 가짜 차이가 생긴다. 현잔액이 없을 때만 전잔액을 쓴다.
 export const priorBalanceOf = (batch) =>
-  batch.statement_balance != null ? Number(batch.statement_balance) : Number(batch.current_balance) - Number(batch.total_amount)
+  batch.current_balance != null ? Number(batch.current_balance) - Number(batch.total_amount) : Number(batch.statement_balance)
 
 // 입고일 → 생성 시각 순(오래된 것 먼저)
 function compareBatches(a, b) {

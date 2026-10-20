@@ -79,6 +79,18 @@ describe('reconcile', () => {
     expect(issues).toHaveLength(0)
   })
 
+  it('전일입금이 찍힌 명세표(전잔액에 전날 송금이 안 빠짐)도 송금을 입력해 두면 차이가 없다', () => {
+    // 10/14: 전잔액 5000 + 당일 1000 = 현잔액 6000 → 10/15 송금 4000 →
+    // 10/16: 전잔액 6000 + 당일 500 − 전일입금 4000 = 현잔액 2500 → 10/17: 전잔액 2500 + 당일 300 = 2800
+    const batches = [
+      batch('a', '2026-10-14', 1000, { statement_balance: 5000, current_balance: 6000 }),
+      batch('b', '2026-10-16', 500, { statement_balance: 6000, current_balance: 2500 }),
+      batch('c', '2026-10-17', 300, { statement_balance: 2500, current_balance: 2800 }),
+    ]
+    const issues = makeLedger({ batches, payments: [payment('2026-10-15', 4000)], openings: [opening(5000)] }).reconcile()
+    expect(issues).toEqual([])
+  })
+
   it('첫 명세표부터 다르면 시작 잔액이 틀렸을 수 있다고 표시한다', () => {
     const issues = makeLedger({
       batches: [batch('a', '2026-10-01', 1000, { statement_balance: 4000 })],
