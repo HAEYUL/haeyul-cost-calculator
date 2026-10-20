@@ -379,10 +379,10 @@ create policy "dashboard_dismissals are publicly updatable"
   using (true)
   with check (true);
 
--- vendor_opening_balances: 거래처와 이 앱을 쓰기 전부터 거래해 온 경우, 특정 날짜(as_of_date)
--- 기준으로 그 이전까지의 이월 미지급 잔액을 기준일별로 여러 개 기억해 둔다. 거래처 상세의
--- 기간 결제액(추정) = 기초 잔액(선택한 시작일 이하 중 가장 최근 as_of_date) + 기간 입고액
--- − 기말 잔액으로 계산할 때 쓰인다. 같은 거래처+기준일로 다시 저장하면 값을 덮어쓴다.
+-- vendor_opening_balances: 거래처 장부(외상 원장)의 시작 잔액. as_of_date가 장부 시작일
+-- (src/lib/vendorLedger.js의 LEDGER_START)인 행이 "그 전날까지 남아 있던 미지급 잔액"이고,
+-- 미지급금 = 시작 잔액 + 그 뒤 입고 − 그 뒤 결제로 계산한다. 같은 거래처+기준일로 다시
+-- 저장하면 값을 덮어쓴다.
 create table if not exists vendor_opening_balances (
   id uuid primary key default gen_random_uuid(),
   store_code text not null references stores(code),

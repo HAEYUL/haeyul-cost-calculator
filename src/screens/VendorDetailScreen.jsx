@@ -6,6 +6,24 @@ import AmountInput from '../components/AmountInput'
 import { UNIT_LABELS } from '../lib/units'
 import { rowDateStr } from '../lib/rowDateStr'
 import { monthRange } from '../lib/dateRange'
+import { canRecordBatchPayment, paidBatchIds, recordBatchPayment } from '../lib/batchPayment'
+import {
+  LEDGER_START,
+  LEDGER_START_MONTH,
+  addDays,
+  currentMonth,
+  endingBalanceOf,
+  hasBalanceInfo,
+  makeLedger,
+  monthBounds,
+  monthLabel,
+  shiftMonth,
+  suggestOpening,
+  todayStr,
+} from '../lib/vendorLedger'
+
+const PAYMENT_MEMO_PRESETS = ['계좌이체', '카드', '현금']
+const fmt = (n) => Math.round(Number(n)).toLocaleString()
 
 export default function VendorDetailScreen() {
   const { store } = useStore()
@@ -34,25 +52,26 @@ export default function VendorDetailScreen() {
   }, [vendorId])
 
   const [paymentAmount, setPaymentAmount] = useState('')
-  const [paymentDate, setPaymentDate] = useState('')
+  const [paymentDate, setPaymentDate] = useState(() => todayStr())
   const [paymentMemo, setPaymentMemo] = useState('')
   const [savingPayment, setSavingPayment] = useState(false)
   const [paymentDateEdits, setPaymentDateEdits] = useState({})
   const [savingPaymentDateId, setSavingPaymentDateId] = useState(null)
-  const [registeringReconciliation, setRegisteringReconciliation] = useState(false)
+  const [issueDates, setIssueDates] = useState({})
+  const [registeringIssueId, setRegisteringIssueId] = useState(null)
 
   const [deleteTarget, setDeleteTarget] = useState(null)
   const [deleting, setDeleting] = useState(false)
+
+  const [payBatchTarget, setPayBatchTarget] = useState(null)
+  const [payingBatch, setPayingBatch] = useState(false)
 
   const [deletePaymentTarget, setDeletePaymentTarget] = useState(null)
   const [deletingPayment, setDeletingPayment] = useState(false)
 
   const [openingBalances, setOpeningBalances] = useState([])
-  const [openingBalanceInput, setOpeningBalanceInput] = useState('')
+  const [startBalanceInput, setStartBalanceInput] = useState('')
   const [savingOpeningBalance, setSavingOpeningBalance] = useState(false)
-
-  const [deleteOpeningBalanceTarget, setDeleteOpeningBalanceTarget] = useState(null)
-  const [deletingOpeningBalance, setDeletingOpeningBalance] = useState(false)
 
   useEffect(() => {
     if (!store) navigate('/', { replace: true })
@@ -67,7 +86,7 @@ export default function VendorDetailScreen() {
       supabase
         .from('invoice_batches')
         .select(
-          'id, invoice_date, total_amount, statement_balance, current_balance, photo_path, created_at, invoices(id, item_name, quantity, unit_price, unit, amount)',
+          'id, vendor_id, invoice_date, total_amount, statement_balance, current_balance, photo_path, created_at, invoices(id, item_name, quantity, unit_price, unit, amount)',
         )
         .eq('store_code', store.code)
         .eq('vendor_id', vendorId)
@@ -75,7 +94,7 @@ export default function VendorDetailScreen() {
         .order('created_at', { ascending: false }),
       supabase
         .from('vendor_payments')
-        .select('id, amount, paid_date, memo, created_at')
+        .select('id, vendor_id, amount, paid_date, memo, created_at')
         .eq('store_code', store.code)
         .eq('vendor_id', vendorId)
         .order('paid_date', { ascending: false, nullsFirst: false })
@@ -101,83 +120,32 @@ export default function VendorDetailScreen() {
     })
   }, [store, vendorId, dataKey])
 
-  // 시작일이 바뀌면, 그 날짜로 정확히 저장해 둔 기초 잔액이 있으면 입력칸에 불러오고
-  // 없으면 비운다(새로 입력하라는 뜻).
+  // 저장해 둔 장부 시작 잔액을 입력칸에 불러온다.
   useEffect(() => {
-    const exact = openingBalances.find((b) => b.as_of_date === dateFrom)
-    setOpeningBalanceInput(exact ? String(exact.balance) : '')
-  }, [dateFrom, openingBalances])
+    const saved = openingBalances.find((b) => b.as_of_date === LEDGER_START)
+    setStartBalanceInput(saved ? String(saved.balance) : '')
+  }, [openingBalances])
 
   if (!store) return null
 
-  // 명세표에 적힌 "전잔액"은 그날 입고분을 더하기 전 값이라, 그 시점의 실제(그날 입고 반영 후)
-  // 잔액을 구하려면 당일 입고액을 더해야 한다. 다만 "현잔액"이 명세표에 직접 적혀 있으면(=이미
-  // 입고 반영 후 값) 계산할 필요 없이 그 값을 그대로 쓴다.
-  const hasBalanceInfo = (batch) => batch.statement_balance != null || batch.current_balance != null
-  const endingBalanceOf = (batch) =>
-    batch.current_balance != null ? Number(batch.current_balance) : Number(batch.statement_balance) + Number(batch.total_amount)
-  // 현잔액만 적혀 있고 전잔액이 없는 명세표는, 현잔액에서 당일 입고액을 거꾸로 빼서 전잔액을 구한다.
-  const impliedPriorBalance = (batch) =>
-    batch.statement_balance != null ? Number(batch.statement_balance) : Number(batch.current_balance) - Number(batch.total_amount)
+  // 장부(외상 원장): 장부 시작 잔액 + 그 뒤 입고 − 그 뒤 결제. 거래처 목록·메인 메뉴와 같은 계산이다.
+  // 명세표의 전잔액·현잔액은 계산에 쓰지 않고 아래 대조(issues)에만 쓴다.
+  const ledger = makeLedger({ batches, payments, openings: openingBalances })
+  const liveBalance = ledger.current
+  const issues = ledger.reconcile()
+  const openingSuggestion = ledger.hasOpening ? null : suggestOpening({ batches, payments })
+  const periodLedger = ledger.period(dateFrom, dateTo)
+  const periodStart = !dateFrom || dateFrom < LEDGER_START ? LEDGER_START : dateFrom
+  const monthlyLedger = ledger.months(currentMonth())
 
-  // 미지급금(실시간) = "믿을 수 있는 기준 잔액(앵커)" + 그 이후 입고액 − 그 이후 결제액.
-  // 앵커는 전잔액이나 현잔액이 적힌 명세표 중 가장 최근 것을 우선 쓰고, 그런 명세표가 아직 없으면
-  // 가장 최근 기초 잔액을 대신 쓴다(둘 다 없으면 0원부터 시작). batches는 이미 최신순 정렬이라
-  // 앵커보다 인덱스가 앞선(=더 최근인) 명세표들이 "앵커 이후 입고"가 된다.
-  // (위 미지급금은 기간 필터와 무관하게 항상 지금 이 순간 기준이다)
-  const latestBatchWithBalanceIndex = batches.findIndex(hasBalanceInfo)
-  const latestBatchWithBalance = latestBatchWithBalanceIndex >= 0 ? batches[latestBatchWithBalanceIndex] : undefined
-  const latestOpeningBalance = [...openingBalances].sort((a, b) => (a.as_of_date < b.as_of_date ? 1 : -1))[0]
-
-  const anchorDate = latestBatchWithBalance ? rowDateStr(latestBatchWithBalance) : (latestOpeningBalance?.as_of_date ?? null)
-  const anchorBalance = latestBatchWithBalance
-    ? endingBalanceOf(latestBatchWithBalance)
-    : latestOpeningBalance
-      ? Number(latestOpeningBalance.balance)
-      : 0
-
-  const batchesSinceAnchor = latestBatchWithBalance ? batches.slice(0, latestBatchWithBalanceIndex) : batches
-  const invoicedSinceAnchor = batchesSinceAnchor.reduce((sum, b) => sum + Number(b.total_amount), 0)
-
-  // 앵커 이후(앵커 명세표와 같은 날 포함) 입력한 결제만 차감한다 — 명세표의 잔액은 그 날 입고분만
-  // 반영된 값이라, 같은 날 별도로 입금한 결제는 아직 안 빠져 있기 때문. 날짜를 안 넣은 결제는
-  // 최근에 입력한 것으로 보고 포함시킨다.
-  const paymentsSinceAnchor = payments
-    .filter((p) => !anchorDate || !p.paid_date || p.paid_date >= anchorDate)
-    .reduce((sum, p) => sum + Number(p.amount), 0)
-
-  const liveBalance = anchorBalance + invoicedSinceAnchor - paymentsSinceAnchor
-
-  // 가장 최근 두 명세표 잔액을 대조해서, 그 사이 기록된 입고·결제만으로 설명이 안 되면
-  // (=기록이 빠졌을 수 있으면) 알려준다.
-  const balanceBatches = batches.filter(hasBalanceInfo)
-  let balanceMismatch = null
-  if (balanceBatches.length >= 2) {
-    const newest = balanceBatches[0]
-    const previous = balanceBatches[1]
-    const newestIndex = batches.indexOf(newest)
-    const previousIndex = batches.indexOf(previous)
-    const previousDate = rowDateStr(previous)
-    const newestDate = rowDateStr(newest)
-
-    // newest의 전잔액(=당일 입고를 더하기 전 값) 기준으로 비교한다. previous·newest 둘 다
-    // 제외하고 그 사이에 낀 명세표들의 입고액만 더한다(previous의 당일 입고는 endingBalanceOf로
-    // 이미 반영, newest의 당일 입고는 비교 대상인 actual에 아직 반영 안 된 값이라 더하면 안 됨).
-    const strictlyBetween = batches.slice(newestIndex + 1, previousIndex)
-    const invoicedBetween = strictlyBetween.reduce((sum, b) => sum + Number(b.total_amount), 0)
-    const paidBetween = payments
-      .filter((p) => (!p.paid_date || p.paid_date >= previousDate) && (!p.paid_date || p.paid_date <= newestDate))
-      .reduce((sum, p) => sum + Number(p.amount), 0)
-
-    const expected = endingBalanceOf(previous) + invoicedBetween - paidBetween
-    const actual = impliedPriorBalance(newest)
-    if (Math.round(expected) !== Math.round(actual)) {
-      balanceMismatch = { newestDate, previousDate, expected, actual, diff: actual - expected }
-    }
+  // 기간 칸 위의 ◀ ▶ 로 한 달씩 넘긴다. 지금 기간이 딱 한 달이면 그 달 이름을 보여준다.
+  const navMonth = dateFrom ? dateFrom.slice(0, 7) : currentMonth()
+  const isWholeMonth = dateFrom && dateTo && dateFrom === monthBounds(navMonth).start && dateTo === monthBounds(navMonth).end
+  const goMonth = (delta) => {
+    const { start, end } = monthBounds(shiftMonth(navMonth, delta))
+    setDateFrom(start)
+    setDateTo(end)
   }
-  // 잔액이 예상보다 더 줄어든 경우(diff < 0)만 "기록 안 된 결제"로 볼 수 있다. 잔액이 예상보다
-  // 덜 줄었거나 늘어난 경우(diff >= 0)는 입고 누락 등 다른 이유일 수 있어 결제 등록을 제안하지 않는다.
-  const impliedPaymentAmount = balanceMismatch && balanceMismatch.diff < 0 ? -balanceMismatch.diff : null
 
   // "입고 내역" 목록과 아래 누적 입고액/결제액 요약이 함께 이 기간을 따른다.
   const filteredBatches = batches.filter((b) => {
@@ -185,21 +153,10 @@ export default function VendorDetailScreen() {
     return (!dateFrom || d >= dateFrom) && (!dateTo || d <= dateTo)
   })
 
-  const periodTotalAmount = filteredBatches.reduce((sum, b) => sum + Number(b.total_amount), 0)
+  // 기간과 상관없이 전체 명세표·결제로 짝을 지어야, 기간을 바꿔도 결제됨 표시가 흔들리지 않는다.
+  const paidIds = paidBatchIds(batches, payments)
 
-  // 기초 잔액: 시작일 이하 기준일 중 가장 최근에 입력해 둔 이월 잔액을 찾는다.
-  // (이 앱을 쓰기 전부터 있던 미지급 잔액을 반영하기 위함 — 안 넣었으면 0원으로 본다.)
-  const effectiveOpeningBalance = openingBalances
-    .filter((b) => b.as_of_date <= dateFrom)
-    .sort((a, b) => (a.as_of_date < b.as_of_date ? 1 : -1))[0]
-
-  // 누적 결제액(기간) = 그 기간에 실제로 등록된 결제 기록만 더한 값(추정 아님). 결제일이 없는
-  // 기록은 어느 기간 것인지 알 수 없어서 제외한다 — 대신 아래에서 "날짜 등록해주세요" 안내를 띄운다.
-  const periodPaymentTotal = payments
-    .filter((p) => p.paid_date && (!dateFrom || p.paid_date >= dateFrom) && (!dateTo || p.paid_date <= dateTo))
-    .reduce((sum, p) => sum + Number(p.amount), 0)
-
-  const undatedPayments = payments.filter((p) => !p.paid_date)
+  const undatedPayments = ledger.undatedPayments
 
   const handleAddPayment = async () => {
     const amount = Number(paymentAmount)
@@ -226,7 +183,7 @@ export default function VendorDetailScreen() {
       return
     }
     setPaymentAmount('')
-    setPaymentDate('')
+    setPaymentDate(todayStr())
     setPaymentMemo('')
     setDataKey((k) => k + 1)
   }
@@ -246,23 +203,63 @@ export default function VendorDetailScreen() {
     setDataKey((k) => k + 1)
   }
 
-  // 잔액차이만큼을 직전 명세표 날짜(=지난달 말일자)로 실제 결제 기록에 등록한다.
-  const handleRegisterReconciliation = async () => {
-    if (!supabase || impliedPaymentAmount == null || !balanceMismatch) return
-    setRegisteringReconciliation(true)
+  // 명세표 대조에서 찾은 빠진 결제를, 사장님이 확인한 결제일로 등록한다.
+  const handleRegisterIssuePayment = async (issue) => {
+    if (!supabase) return
+    const date = issueDates[issue.batchId] ?? issue.toDate
+    if (!date || date < issue.fromDate || date > issue.toDate) {
+      setError(`결제일은 ${issue.fromDate} ~ ${issue.toDate} 사이여야 ${issue.statementDate} 명세표 잔액과 맞아요.`)
+      return
+    }
+    setRegisteringIssueId(issue.batchId)
     setError('')
     const { error: err } = await supabase.from('vendor_payments').insert({
       store_code: store.code,
       vendor_id: vendorId,
-      amount: impliedPaymentAmount,
-      paid_date: balanceMismatch.previousDate,
-      memo: '자동 정산 반영 (잔액 차이)',
+      amount: -issue.amount,
+      paid_date: date,
+      memo: '명세표 잔액 대조로 등록',
     })
-    setRegisteringReconciliation(false)
+    setRegisteringIssueId(null)
     if (err) {
       setError(err.message)
       return
     }
+    setDataKey((k) => k + 1)
+  }
+
+  const saveOpeningBalance = async (balance) => {
+    setSavingOpeningBalance(true)
+    setError('')
+    const { error: err } = await supabase.from('vendor_opening_balances').upsert(
+      { store_code: store.code, vendor_id: vendorId, as_of_date: LEDGER_START, balance },
+      { onConflict: 'vendor_id,as_of_date' },
+    )
+    setSavingOpeningBalance(false)
+    if (err) {
+      setError(err.message)
+      return
+    }
+    setDataKey((k) => k + 1)
+  }
+
+  // 첫 명세표부터 장부와 다르면 시작 잔액이 틀린 것일 수 있어, 명세표에 맞게 고칠 수 있게 한다.
+  const handleFixOpening = (issue) => {
+    if (!supabase) return
+    saveOpeningBalance(ledger.opening + issue.amount)
+  }
+
+  const handlePayBatch = async () => {
+    if (!payBatchTarget || !supabase) return
+    setPayingBatch(true)
+    setError('')
+    const { error: err } = await recordBatchPayment({ storeCode: store.code, vendorId, batch: payBatchTarget })
+    setPayingBatch(false)
+    if (err) {
+      setError(err.message)
+      return
+    }
+    setPayBatchTarget(null)
     setDataKey((k) => k + 1)
   }
 
@@ -282,24 +279,13 @@ export default function VendorDetailScreen() {
     setDataKey((k) => k + 1)
   }
 
-  const handleSaveOpeningBalance = async () => {
-    const balance = Number(openingBalanceInput)
-    if (openingBalanceInput === '' || !Number.isFinite(balance) || !supabase) {
-      setError('기초 잔액을 숫자로 입력하세요.')
+  const handleSaveOpeningBalance = () => {
+    const balance = Number(startBalanceInput)
+    if (startBalanceInput === '' || !Number.isFinite(balance) || !supabase) {
+      setError('장부 시작 잔액을 숫자로 입력하세요.')
       return
     }
-    setSavingOpeningBalance(true)
-    setError('')
-    const { error: err } = await supabase.from('vendor_opening_balances').upsert(
-      { store_code: store.code, vendor_id: vendorId, as_of_date: dateFrom, balance },
-      { onConflict: 'vendor_id,as_of_date' },
-    )
-    setSavingOpeningBalance(false)
-    if (err) {
-      setError(err.message)
-      return
-    }
-    setDataKey((k) => k + 1)
+    saveOpeningBalance(balance)
   }
 
   // "부가세 별도" 거래처는 명세표의 "금액"이 공급가액만이고 부가세를 더해야 진짜 합계가 되는
@@ -317,22 +303,6 @@ export default function VendorDetailScreen() {
       return
     }
     setVendor((v) => ({ ...v, vat_separate: next }))
-  }
-
-  const handleDeleteOpeningBalance = async () => {
-    if (!deleteOpeningBalanceTarget || !supabase) return
-    setDeletingOpeningBalance(true)
-    setError('')
-
-    const { error: err } = await supabase.from('vendor_opening_balances').delete().eq('id', deleteOpeningBalanceTarget.id)
-    setDeletingOpeningBalance(false)
-    if (err) {
-      setError(err.message)
-      return
-    }
-
-    setDeleteOpeningBalanceTarget(null)
-    setDataKey((k) => k + 1)
   }
 
   // 명세표(전표) 삭제 시 그에 딸린 품목별 단가·수량·금액(invoices)까지 함께 지운다.
@@ -394,6 +364,138 @@ export default function VendorDetailScreen() {
             </label>
           </div>
 
+          <div className="cost-summary">
+            <div className="cost-summary-row">
+              <span>현재 미지급금 (장부)</span>
+              <strong className={liveBalance > 0 ? 'alert-up' : liveBalance < 0 ? 'alert-down' : ''}>{fmt(liveBalance)}원</strong>
+            </div>
+          </div>
+          <p className="hint">
+            장부 시작 잔액({addDays(LEDGER_START, -1)} 기준)에 그 뒤 입고를 더하고 직접 입력한 결제를 뺀 금액이에요.
+          </p>
+
+          {!ledger.hasOpening && (
+            <div className="price-alert-box">
+              <p className="price-alert-title">장부 시작 잔액을 아직 안 넣었어요</p>
+              <p className="hint">
+                {addDays(LEDGER_START, -1)}까지 남아 있던 잔액을 아래에 넣어주세요. 지금은 0원부터 계산했어요.
+              </p>
+            </div>
+          )}
+          <div className="field">
+            <label htmlFor="startBalance">장부 시작 잔액 ({addDays(LEDGER_START, -1)} 기준 잔액)</label>
+            <AmountInput
+              id="startBalance"
+              className="input"
+              value={startBalanceInput}
+              onChange={setStartBalanceInput}
+              placeholder="예: 6,000,000"
+            />
+            {openingSuggestion && (
+              <p className="hint">
+                제안 {fmt(openingSuggestion.amount)}원 · {openingSuggestion.source}{' '}
+                <button
+                  type="button"
+                  className="link-btn"
+                  style={{ marginTop: 0 }}
+                  onClick={() => setStartBalanceInput(String(Math.round(openingSuggestion.amount)))}
+                >
+                  이 값 넣기
+                </button>
+              </p>
+            )}
+          </div>
+          <button type="button" className="btn-secondary" onClick={handleSaveOpeningBalance} disabled={savingOpeningBalance}>
+            {savingOpeningBalance ? '저장 중...' : '시작 잔액 저장'}
+          </button>
+
+          {undatedPayments.length > 0 && (
+            <p className="error-text">
+              날짜 없는 결제 기록 {undatedPayments.length}건은 장부에서 빠져 있어요. 아래 결제 내역에서 결제일을 넣어주세요.
+            </p>
+          )}
+
+          {issues.map((issue) => {
+            const gap = Math.abs(issue.amount)
+            return (
+              <div key={issue.batchId} className="price-alert-box price-alert-box-danger">
+                <p className="price-alert-title">
+                  ⚠️ {issue.statementDate} 명세표 잔액과 장부가 {fmt(gap)}원 달라요
+                </p>
+                <p className="hint">
+                  명세표 전잔액 {fmt(issue.statementBalance)}원 · 장부 {fmt(issue.ledgerBalance)}원
+                </p>
+                {issue.amount < 0 && issue.canRegisterPayment && (
+                  <>
+                    <p className="hint">
+                      {issue.fromDate} ~ {issue.toDate} 사이에 {fmt(gap)}원 결제를 빠뜨린 것 같아요. 실제 결제일을 고르고
+                      등록하세요.
+                    </p>
+                    <div className="invoice-form">
+                      <input
+                        type="date"
+                        className="input"
+                        min={issue.fromDate}
+                        max={issue.toDate}
+                        value={issueDates[issue.batchId] ?? issue.toDate}
+                        onChange={(e) => setIssueDates((prev) => ({ ...prev, [issue.batchId]: e.target.value }))}
+                        aria-label="빠진 결제의 결제일"
+                      />
+                      <button
+                        type="button"
+                        className="btn-primary"
+                        onClick={() => handleRegisterIssuePayment(issue)}
+                        disabled={registeringIssueId === issue.batchId}
+                      >
+                        {registeringIssueId === issue.batchId ? '등록 중...' : '결제로 등록'}
+                      </button>
+                    </div>
+                  </>
+                )}
+                {issue.amount > 0 && (
+                  <p className="hint">
+                    명세표 잔액이 장부보다 많아요. 입고를 빠뜨렸거나, 결제를 실제보다 많이(중복으로) 입력했는지 확인해 주세요.
+                  </p>
+                )}
+                {issue.amount < 0 && !issue.canRegisterPayment && !issue.isFirst && (
+                  <p className="hint">같은 날 명세표끼리 잔액이 달라요. 명세표 잔액 입력이 맞는지 확인해 주세요.</p>
+                )}
+                {issue.isFirst && (
+                  <>
+                    <p className="hint">
+                      장부 시작 잔액이 틀렸을 수도 있어요. 시작 잔액을 {fmt(ledger.opening + issue.amount)}원으로 고치면 이
+                      명세표와 맞아요.
+                    </p>
+                    <button
+                      type="button"
+                      className="btn-secondary"
+                      onClick={() => handleFixOpening(issue)}
+                      disabled={savingOpeningBalance}
+                    >
+                      시작 잔액을 {fmt(ledger.opening + issue.amount)}원으로 고치기
+                    </button>
+                  </>
+                )}
+              </div>
+            )
+          })}
+
+          <h2 className="section-title">기간 원장</h2>
+          <div className="month-nav">
+            <button
+              type="button"
+              className="chip"
+              onClick={() => goMonth(-1)}
+              disabled={navMonth <= LEDGER_START_MONTH}
+              aria-label="이전 달"
+            >
+              ◀
+            </button>
+            <strong>{isWholeMonth ? monthLabel(navMonth) : '직접 지정한 기간'}</strong>
+            <button type="button" className="chip" onClick={() => goMonth(1)} aria-label="다음 달">
+              ▶
+            </button>
+          </div>
           <div className="date-range">
             <input
               type="date"
@@ -417,151 +519,56 @@ export default function VendorDetailScreen() {
               aria-label="종료일"
             />
           </div>
-          <p className="hint">
-            아래 누적 입고액·누적 결제액·입고 내역은 이 기간 기준이에요. 기본은 이번 달이고, 원하는 기간으로 바꿀 수 있어요.
-          </p>
-
-          <div className="field">
-            <label htmlFor="openingBalance">기초 잔액 ({dateFrom} 이전 이월 미지급 잔액)</label>
-            <AmountInput
-              id="openingBalance"
-              className="input"
-              value={openingBalanceInput}
-              onChange={setOpeningBalanceInput}
-              placeholder="예: 6,000,000"
-            />
-          </div>
-          <button type="button" className="btn-secondary" onClick={handleSaveOpeningBalance} disabled={savingOpeningBalance}>
-            {savingOpeningBalance ? '저장 중...' : '기초 잔액 저장'}
-          </button>
-          <p className="hint">
-            {effectiveOpeningBalance
-              ? `${effectiveOpeningBalance.as_of_date} 기준으로 저장한 ${Math.round(Number(effectiveOpeningBalance.balance)).toLocaleString()}원을 기초 잔액으로 반영했어요.`
-              : '아직 기초 잔액을 입력하지 않아 0원으로 계산했어요. 이 거래처와 이 앱을 쓰기 전부터 거래해오셨다면, 입력하면 아래 누적 결제액이 더 정확해져요.'}
-          </p>
-
-          {openingBalances.length > 0 && (
-            <ul className="history-list">
-              {openingBalances.map((b) => (
-                <li key={b.id} className="history-row">
-                  <div className="history-row-main">
-                    <span className="history-item">{b.as_of_date} 기준</span>
-                    <div className="history-row-main-end">
-                      <span>{Math.round(Number(b.balance)).toLocaleString()}원</span>
-                      <button
-                        type="button"
-                        className="icon-btn"
-                        aria-label="기초 잔액 삭제"
-                        onClick={() => setDeleteOpeningBalanceTarget(b)}
-                      >
-                        ✕
-                      </button>
-                    </div>
-                  </div>
-
-                  {deleteOpeningBalanceTarget?.id === b.id && (
-                    <div className="price-alert-box price-alert-box-danger">
-                      <p className="price-alert-title">이 기초 잔액을 삭제할까요?</p>
-                      <p className="hint">잘못 입력한 기초 잔액만 지워지고, 되돌릴 수 없어요.</p>
-                      <div className="invoice-form">
-                        <button
-                          type="button"
-                          className="btn-secondary"
-                          onClick={() => setDeleteOpeningBalanceTarget(null)}
-                          disabled={deletingOpeningBalance}
-                        >
-                          취소
-                        </button>
-                        <button
-                          type="button"
-                          className="btn-primary"
-                          onClick={handleDeleteOpeningBalance}
-                          disabled={deletingOpeningBalance}
-                        >
-                          {deletingOpeningBalance ? '삭제 중...' : '삭제'}
-                        </button>
-                      </div>
-                    </div>
-                  )}
-                </li>
-              ))}
-            </ul>
-          )}
-
           <div className="cost-summary">
             <div className="cost-summary-row">
-              <span>
-                미지급금
-                {anchorDate && (
-                  <>
-                    {' '}
-                    ({anchorDate} {latestBatchWithBalance ? '명세표' : '기초 잔액'} 기준 + 이후 실시간 반영)
-                  </>
-                )}
-              </span>
-              <strong className={liveBalance > 0 ? 'alert-up' : liveBalance < 0 ? 'alert-down' : ''}>
-                {Math.round(liveBalance).toLocaleString()}원
-              </strong>
+              <span>이월 잔액 ({addDays(periodStart, -1)}까지)</span>
+              <strong>{fmt(periodLedger.carryOver)}원</strong>
             </div>
             <div className="cost-summary-row">
-              <span>누적 입고액(기간)</span>
-              <strong>{Math.round(periodTotalAmount).toLocaleString()}원</strong>
+              <span>입고</span>
+              <strong>+ {fmt(periodLedger.invoiced)}원</strong>
             </div>
             <div className="cost-summary-row">
-              <span>누적 결제액(기간)</span>
-              <strong>{Math.round(periodPaymentTotal).toLocaleString()}원</strong>
+              <span>결제</span>
+              <strong>− {fmt(periodLedger.paid)}원</strong>
+            </div>
+            <div className="cost-summary-row">
+              <span>기간 말 잔액</span>
+              <strong className={periodLedger.ending > 0 ? 'alert-up' : ''}>{fmt(periodLedger.ending)}원</strong>
             </div>
           </div>
           <p className="hint">
-            미지급금은 가장 최근 명세표 잔액(또는 기초 잔액)에 그 이후의 입고·결제 기록을 실시간으로 반영한 값이에요.
-            누적 결제액(기간)은 이것과 별개로, 그 기간에 실제로 등록하신 결제 기록만 더한 값이에요(추정 아님). 결제일이
-            없는 기록은 어느 기간 것인지 몰라서 이 합계에서 빠져요.
+            아래 입고 내역도 이 기간 기준이에요. {LEDGER_START} 이전 날짜는 장부 시작일부터 계산해요.
           </p>
 
-          {impliedPaymentAmount != null ? (
-            <div className="price-alert-box price-alert-box-danger">
-              <p className="price-alert-title">
-                잔액차이가 있습니다. ({Math.round(impliedPaymentAmount).toLocaleString()}원) 결제로 등록할까요?
-              </p>
-              <p className="hint">
-                {balanceMismatch.previousDate}일자 결제로 등록하면 {balanceMismatch.newestDate} 명세표 잔액과 맞아떨어져요.
-              </p>
-              <div className="invoice-form">
-                <button
-                  type="button"
-                  className="btn-secondary"
-                  onClick={() => setDataKey((k) => k + 1)}
-                  disabled={registeringReconciliation}
-                >
-                  다시확인
-                </button>
-                <button
-                  type="button"
-                  className="btn-primary"
-                  onClick={handleRegisterReconciliation}
-                  disabled={registeringReconciliation}
-                >
-                  {registeringReconciliation ? '등록 중...' : '등록'}
-                </button>
-              </div>
-            </div>
-          ) : (
-            balanceMismatch && (
-              <div className="price-alert-box price-alert-box-danger">
-                <p className="price-alert-title">⚠️ 결제 기록이 맞지 않으니 확인해 주세요.</p>
-                <p className="hint">
-                  {balanceMismatch.newestDate} 명세표 잔액은 {Math.round(balanceMismatch.actual).toLocaleString()}
-                  원인데, 직전 명세표 잔액에 그 사이 입고·결제 기록을 반영하면{' '}
-                  {Math.round(balanceMismatch.expected).toLocaleString()}원이 나와요. (
-                  {balanceMismatch.diff > 0 ? '+' : ''}
-                  {Math.round(balanceMismatch.diff).toLocaleString()}원 차이)
-                </p>
-              </div>
-            )
-          )}
+          <h2 className="section-title">월별 원장</h2>
+          <div className="ledger-table-wrap">
+            <table className="ledger-table">
+              <thead>
+                <tr>
+                  <th>월</th>
+                  <th>이월</th>
+                  <th>입고</th>
+                  <th>결제</th>
+                  <th>잔액</th>
+                </tr>
+              </thead>
+              <tbody>
+                {monthlyLedger.map((row) => (
+                  <tr key={row.month}>
+                    <td>{Number(row.month.slice(5))}월</td>
+                    <td>{fmt(row.carryOver)}</td>
+                    <td>{fmt(row.invoiced)}</td>
+                    <td>{fmt(row.paid)}</td>
+                    <td>{fmt(row.ending)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
 
           <h2 className="section-title">결제 입력</h2>
-          <p className="hint">이미 명세표 잔액에 반영된 결제는 다시 입력하지 않아도 돼요.</p>
+          <p className="hint">결제할 때마다 입력해 주세요. 장부의 미지급금은 입력한 결제로만 줄어요.</p>
           <div className="field">
             <label htmlFor="paymentAmount">결제 금액</label>
             <AmountInput
@@ -571,6 +578,13 @@ export default function VendorDetailScreen() {
               onChange={setPaymentAmount}
               placeholder="예: 200,000"
             />
+            {liveBalance > 0 && (
+              <div className="preset-row" style={{ marginTop: 8 }}>
+                <button type="button" className="chip" onClick={() => setPaymentAmount(String(Math.round(liveBalance)))}>
+                  잔액 전액 ({fmt(liveBalance)}원)
+                </button>
+              </div>
+            )}
           </div>
           <div className="field">
             <label htmlFor="paymentDate">결제일 (필수)</label>
@@ -591,6 +605,18 @@ export default function VendorDetailScreen() {
               onChange={(e) => setPaymentMemo(e.target.value)}
               placeholder="예: 계좌이체"
             />
+            <div className="preset-row" style={{ marginTop: 8 }}>
+              {PAYMENT_MEMO_PRESETS.map((m) => (
+                <button
+                  key={m}
+                  type="button"
+                  className={`chip${paymentMemo === m ? ' chip-active' : ''}`}
+                  onClick={() => setPaymentMemo(m)}
+                >
+                  {m}
+                </button>
+              ))}
+            </div>
           </div>
           <button
             type="button"
@@ -687,6 +713,15 @@ export default function VendorDetailScreen() {
                   <span className="history-item">{batch.invoice_date ?? '날짜 미입력'}</span>
                   <div className="history-row-main-end">
                     <span>{Math.round(Number(batch.total_amount)).toLocaleString()}원</span>
+                    {paidIds.has(batch.id) ? (
+                      <span className="paid-badge">✓ 결제됨</span>
+                    ) : (
+                      canRecordBatchPayment(batch) && (
+                        <button type="button" className="link-btn" onClick={() => setPayBatchTarget(batch)}>
+                          결제완료
+                        </button>
+                      )
+                    )}
                     <button
                       type="button"
                       className="link-btn"
@@ -706,6 +741,28 @@ export default function VendorDetailScreen() {
                     </button>
                   </div>
                 </div>
+
+                {payBatchTarget?.id === batch.id && (
+                  <div className="price-alert-box">
+                    <p className="price-alert-title">
+                      {Math.round(Number(batch.total_amount)).toLocaleString()}원을 {batch.invoice_date} 결제로 기록할까요?
+                    </p>
+                    <p className="hint">입고 때 "바로 결제 완료"를 체크한 것과 똑같이 결제 기록이 남아요.</p>
+                    <div className="invoice-form">
+                      <button
+                        type="button"
+                        className="btn-secondary"
+                        onClick={() => setPayBatchTarget(null)}
+                        disabled={payingBatch}
+                      >
+                        취소
+                      </button>
+                      <button type="button" className="btn-primary" onClick={handlePayBatch} disabled={payingBatch}>
+                        {payingBatch ? '저장 중...' : '확인'}
+                      </button>
+                    </div>
+                  </div>
+                )}
 
                 {deleteTarget?.id === batch.id && (
                   <div className="price-alert-box price-alert-box-danger">

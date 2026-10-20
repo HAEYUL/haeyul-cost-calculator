@@ -505,6 +505,13 @@ h1 {
   font-size: 15px;
 }
 
+.paid-badge {
+  padding: 0 4px;
+  color: #2f9e5c;
+  font-size: 15px;
+  white-space: nowrap;
+}
+
 .history-vendor {
   color: var(--text-muted);
   font-size: 15px;
@@ -965,4 +972,53 @@ h1 {
 .print-table td:first-child {
   text-align: left;
   white-space: nowrap;
+}
+
+.month-nav {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  margin: 16px 0 8px;
+}
+
+.month-nav .chip {
+  padding: 6px 14px;
+}
+
+.ledger-table-wrap {
+  overflow-x: auto;
+  margin-top: 8px;
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.ledger-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+
+.ledger-table th,
+.ledger-table td {
+  padding: 8px 6px;
+  text-align: right;
+  white-space: nowrap;
+  border-bottom: 1px solid var(--border);
+}
+
+.ledger-table th:first-child,
+.ledger-table td:first-child {
+  text-align: left;
+}
+
+.ledger-table th {
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+.ledger-table tr:last-child td {
+  border-bottom: none;
 }

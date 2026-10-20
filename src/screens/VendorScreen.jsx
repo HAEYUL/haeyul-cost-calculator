@@ -2,28 +2,24 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useStore } from '../context/StoreContext'
 import { supabase } from '../lib/supabaseClient'
-import { rowDateStr } from '../lib/rowDateStr'
 import { monthRange } from '../lib/dateRange'
-
-// 이번 달의 [시작일, 다음 달 시작일) 범위. dateStr이 start 이상 end 미만이면 이번 달.
-function monthBounds() {
-  const now = new Date()
-  const y = now.getFullYear()
-  const m = now.getMonth()
-  const start = `${y}-${String(m + 1).padStart(2, '0')}-01`
-  const next = new Date(y, m + 1, 1)
-  const end = `${next.getFullYear()}-${String(next.getMonth() + 1).padStart(2, '0')}-01`
-  return { start, end }
-}
+import {
+  LEDGER_START_MONTH,
+  currentMonth,
+  groupByVendor,
+  makeLedger,
+  monthBounds,
+  monthLabel,
+  shiftMonth,
+} from '../lib/vendorLedger'
 
 export default function VendorScreen() {
   const { store } = useStore()
   const navigate = useNavigate()
 
   const [vendors, setVendors] = useState([])
-  const [monthlyTotalByVendor, setMonthlyTotalByVendor] = useState(new Map())
-  const [estimatedPaymentByVendor, setEstimatedPaymentByVendor] = useState(new Map())
-  const [liveBalanceByVendor, setLiveBalanceByVendor] = useState(new Map())
+  const [ledgerByVendor, setLedgerByVendor] = useState(new Map())
+  const [month, setMonth] = useState(() => currentMonth())
   const [allPayments, setAllPayments] = useState([])
   const [paymentDateFrom, setPaymentDateFrom] = useState(() => monthRange().start)
   const [paymentDateTo, setPaymentDateTo] = useState(() => monthRange().end)
@@ -52,7 +48,7 @@ export default function VendorScreen() {
       supabase.from('vendors').select('id, name').eq('store_code', store.code).order('name'),
       supabase
         .from('invoice_batches')
-        .select('vendor_id, total_amount, invoice_date, statement_balance, current_balance, created_at')
+        .select('id, vendor_id, total_amount, invoice_date, statement_balance, current_balance, created_at')
         .eq('store_code', store.code),
       supabase.from('vendor_payments').select('vendor_id, amount, paid_date').eq('store_code', store.code),
       supabase.from('vendor_opening_balances').select('vendor_id, as_of_date, balance').eq('store_code', store.code),
@@ -64,114 +60,22 @@ export default function VendorScreen() {
         return
       }
 
-      const { start: monthStart, end: monthEnd } = monthBounds()
-      const monthlyTotal = new Map()
-      const monthLatestBalance = new Map() // 이번 달 안에서 가장 최근 잔액 (결제 추정용, 명세표 잔액 기준)
-      const prevBalance = new Map() // 이번 달 시작 전 마지막 잔액
-
-      const batchesByVendor = new Map()
-      for (const b of batchesRes.data ?? []) {
-        if (!batchesByVendor.has(b.vendor_id)) batchesByVendor.set(b.vendor_id, [])
-        batchesByVendor.get(b.vendor_id).push(b)
-
-        const dateStr = rowDateStr(b)
-        const isThisMonth = dateStr >= monthStart && dateStr < monthEnd
-        const dateValue = new Date(b.invoice_date ?? b.created_at).getTime()
-
-        if (isThisMonth) {
-          monthlyTotal.set(b.vendor_id, (monthlyTotal.get(b.vendor_id) ?? 0) + Number(b.total_amount))
-        }
-
-        if (b.statement_balance != null) {
-          // 명세표에 적힌 잔액은 그날 입고분을 더하기 전의 전잔액이라, 당일 입고액을 더해야
-          // 그 시점의 실제 잔액이 된다.
-          const value = Number(b.statement_balance) + Number(b.total_amount)
-
-          if (isThisMonth) {
-            const existingMonth = monthLatestBalance.get(b.vendor_id)
-            if (!existingMonth || dateValue > existingMonth.dateValue) {
-              monthLatestBalance.set(b.vendor_id, { value, dateValue })
-            }
-          } else if (dateStr < monthStart) {
-            const existingPrev = prevBalance.get(b.vendor_id)
-            if (!existingPrev || dateValue > existingPrev.dateValue) {
-              prevBalance.set(b.vendor_id, { value, dateValue })
-            }
-          }
-        }
-      }
-      // 거래처 상세와 같은 기준(입고일 desc, 생성 시각 desc)으로 최신순 정렬해둔다.
-      for (const list of batchesByVendor.values()) {
-        list.sort((a, b) => {
-          const ad = rowDateStr(a)
-          const bd = rowDateStr(b)
-          if (ad !== bd) return ad < bd ? 1 : -1
-          return new Date(b.created_at) - new Date(a.created_at)
+      // 거래처마다 장부(시작 잔액 + 입고 − 결제)를 만들어둔다. 메인 메뉴·거래처 상세와 같은 계산이다.
+      const batchesByVendor = groupByVendor(batchesRes.data)
+      const paymentsByVendor = groupByVendor(paymentsRes.data)
+      const openingByVendor = groupByVendor(openingRes.data)
+      const ledgers = new Map()
+      for (const v of vendorsRes.data ?? []) {
+        const batches = batchesByVendor.get(v.id) ?? []
+        const payments = paymentsByVendor.get(v.id) ?? []
+        ledgers.set(v.id, {
+          ...makeLedger({ batches, payments, openings: openingByVendor.get(v.id) }),
+          hasActivity: batches.length > 0 || payments.length > 0,
         })
       }
 
-      const paymentsByVendor = new Map()
-      for (const p of paymentsRes.data ?? []) {
-        if (!paymentsByVendor.has(p.vendor_id)) paymentsByVendor.set(p.vendor_id, [])
-        paymentsByVendor.get(p.vendor_id).push(p)
-      }
-      const openingByVendor = new Map()
-      for (const o of openingRes.data ?? []) {
-        if (!openingByVendor.has(o.vendor_id)) openingByVendor.set(o.vendor_id, [])
-        openingByVendor.get(o.vendor_id).push(o)
-      }
-
-      // 미지급금(실시간) = 거래처 상세 화면과 똑같은 방식으로 계산한다: 전잔액/현잔액이 적힌
-      // 가장 최근 명세표(또는 기초 잔액)를 앵커로 삼고, 그 이후 입고액을 더하고 그 이후 결제를
-      // 뺀다. 이렇게 해야 거래처 목록과 상세 화면의 미지급금이 항상 같은 숫자로 보인다.
-      const hasBalanceInfo = (batch) => batch.statement_balance != null || batch.current_balance != null
-      const endingBalanceOf = (batch) =>
-        batch.current_balance != null
-          ? Number(batch.current_balance)
-          : Number(batch.statement_balance) + Number(batch.total_amount)
-
-      const liveBalance = new Map()
-      for (const [vendorId, batches] of batchesByVendor) {
-        const payments = paymentsByVendor.get(vendorId) ?? []
-        const openings = openingByVendor.get(vendorId) ?? []
-
-        const anchorIndex = batches.findIndex(hasBalanceInfo)
-        const anchorBatch = anchorIndex >= 0 ? batches[anchorIndex] : undefined
-        const latestOpening = [...openings].sort((a, b) => (a.as_of_date < b.as_of_date ? 1 : -1))[0]
-
-        const anchorDate = anchorBatch ? rowDateStr(anchorBatch) : (latestOpening?.as_of_date ?? null)
-        const anchorBalance = anchorBatch
-          ? endingBalanceOf(anchorBatch)
-          : latestOpening
-            ? Number(latestOpening.balance)
-            : 0
-
-        const batchesSinceAnchor = anchorBatch ? batches.slice(0, anchorIndex) : batches
-        const invoicedSinceAnchor = batchesSinceAnchor.reduce((sum, b) => sum + Number(b.total_amount), 0)
-        const paymentsSinceAnchor = payments
-          .filter((p) => !anchorDate || !p.paid_date || p.paid_date >= anchorDate)
-          .reduce((sum, p) => sum + Number(p.amount), 0)
-
-        // 전잔액/현잔액이 찍힌 명세표나 기초 잔액이 하나도 없어도(anchorBatch, latestOpening 둘 다
-        // 없어도) 0원부터 시작해서 "입고 합계 − 결제 합계"로 계산할 수 있다 — 거래처 상세 화면과
-        // 같은 계산 방식이다. batchesByVendor에 있는 거래처는 이미 입고 기록이 최소 1건은 있으니
-        // 항상 계산해서 보여준다.
-        liveBalance.set(vendorId, anchorBalance + invoicedSinceAnchor - paymentsSinceAnchor)
-      }
-
-      // 결제액(추정) = 당월 입고금액 − (당월 최근 잔액 − 전월까지의 마지막 잔액).
-      // 당월에 잔액이 찍힌 명세표가 없으면(당월 입고 자체가 없거나 잔액 미기재) 추정할 수 없다.
-      const estimatedPayment = new Map()
-      for (const [vendorId, { value: monthBalance }] of monthLatestBalance) {
-        const prev = prevBalance.get(vendorId)?.value ?? 0
-        const monthTotal = monthlyTotal.get(vendorId) ?? 0
-        estimatedPayment.set(vendorId, monthTotal - (monthBalance - prev))
-      }
-
       setVendors(vendorsRes.data ?? [])
-      setMonthlyTotalByVendor(monthlyTotal)
-      setEstimatedPaymentByVendor(estimatedPayment)
-      setLiveBalanceByVendor(liveBalance)
+      setLedgerByVendor(ledgers)
       setAllPayments(paymentsRes.data ?? [])
       setLoading(false)
     })
@@ -179,21 +83,32 @@ export default function VendorScreen() {
 
   if (!store) return null
 
+  const { start: monthStart, end: monthEnd } = monthBounds(month)
+  const isCurrentMonth = month >= currentMonth()
+  const isZero = (n) => Math.abs(Math.round(n)) < 1
+
   const vendorsWithBalance = vendors
     .map((v) => {
-      const monthTotal = monthlyTotalByVendor.get(v.id) ?? 0
-      const estimatedPayment = estimatedPaymentByVendor.has(v.id) ? estimatedPaymentByVendor.get(v.id) : null
-      const balance = liveBalanceByVendor.has(v.id) ? liveBalanceByVendor.get(v.id) : null
-      return { ...v, monthTotal, estimatedPayment, balance }
+      const ledger = ledgerByVendor.get(v.id)
+      const period = ledger ? ledger.period(monthStart, monthEnd) : { carryOver: 0, invoiced: 0, paid: 0, ending: 0 }
+      return {
+        ...v,
+        ...period,
+        balance: period.ending,
+        issueCount: ledger ? ledger.reconcile().length : 0,
+        needsSetup: ledger ? ledger.hasActivity && !ledger.hasOpening : false,
+      }
     })
+    // 미지급이 큰 거래처부터, 잔액 0원인 거래처는 맨 아래로 모은다.
     .sort((a, b) => {
-      if (a.balance == null && b.balance == null) return a.name.localeCompare(b.name)
-      if (a.balance == null) return 1
-      if (b.balance == null) return -1
+      if (isZero(a.balance) !== isZero(b.balance)) return isZero(a.balance) ? 1 : -1
+      if (isZero(a.balance)) return a.name.localeCompare(b.name)
       return b.balance - a.balance
     })
 
-  const totalBalance = vendorsWithBalance.reduce((sum, v) => sum + (v.balance ?? 0), 0)
+  const needsSetupCount = vendorsWithBalance.filter((v) => v.needsSetup).length
+
+  const totalBalance = vendorsWithBalance.reduce((sum, v) => sum + v.balance, 0)
 
   // 전체 거래처 입금액(기간) = 선택한 기간에 실제로 등록된 결제 기록을 전 거래처 걸쳐 더한 값.
   // 결제일 없는 기록은 거래처 상세 화면과 같은 기준으로 제외한다.
@@ -343,15 +258,45 @@ export default function VendorScreen() {
           ← 메인 메뉴
         </button>
         <h1>거래처 관리</h1>
-        <p className="subtitle">{store.name} · 거래처별 당월 입고·결제와 최근 명세표 잔액을 확인해요</p>
+        <p className="subtitle">{store.name} · 거래처별 이월 잔액·입고·결제와 미지급금(장부)을 확인해요</p>
       </div>
+
+      {!loading && !error && vendors.length > 0 && (
+        <>
+          {needsSetupCount > 0 && (
+            <div className="price-alert-box">
+              <p className="price-alert-title">장부 시작 잔액을 아직 안 넣은 거래처가 {needsSetupCount}곳 있어요</p>
+              <p className="hint">시작 잔액(9월 말 잔액)이 없으면 0원부터 계산해서 미지급이 실제와 다를 수 있어요.</p>
+            </div>
+          )}
+          <button type="button" className="btn-secondary" onClick={() => navigate('/vendors/ledger-setup')}>
+            장부 시작 설정
+          </button>
+
+          <div className="month-nav">
+            <button
+              type="button"
+              className="chip"
+              onClick={() => setMonth((m) => shiftMonth(m, -1))}
+              disabled={month <= LEDGER_START_MONTH}
+              aria-label="이전 달"
+            >
+              ◀
+            </button>
+            <strong>{monthLabel(month)}</strong>
+            <button type="button" className="chip" onClick={() => setMonth((m) => shiftMonth(m, 1))} aria-label="다음 달">
+              ▶
+            </button>
+          </div>
+        </>
+      )}
 
       {!supabase && <p className="hint">Supabase가 설정되지 않았습니다.</p>}
 
       {!loading && !error && vendors.length > 0 && (
         <div className="cost-summary">
           <div className="cost-summary-row">
-            <span>전체 미지급금 (명세표 잔액 합계)</span>
+            <span>{isCurrentMonth ? '전체 미지급금' : `전체 월말 잔액 (${monthLabel(month)})`}</span>
             <strong className={totalBalance > 0 ? 'alert-up' : ''}>{Math.round(totalBalance).toLocaleString()}원</strong>
           </div>
         </div>
@@ -450,16 +395,21 @@ export default function VendorScreen() {
             <button type="button" className="cost-row-btn" onClick={() => navigate(`/vendors/${v.id}`)}>
               <div className="history-row-main">
                 <span className="history-item">{v.name}</span>
-                {v.balance != null ? (
-                  <span className={v.balance > 0 ? 'alert-up' : ''}>미지급 {Math.round(v.balance).toLocaleString()}원</span>
-                ) : (
-                  <span className="hint">명세표 잔액 정보 없음</span>
-                )}
+                <span className={v.balance > 0 ? 'alert-up' : ''}>
+                  {isCurrentMonth ? '미지급' : '월말 잔액'} {Math.round(v.balance).toLocaleString()}원
+                </span>
               </div>
               <div className="history-row-sub">
-                <span>당월 입고 {Math.round(v.monthTotal).toLocaleString()}원</span>
-                <span>결제(추정) {v.estimatedPayment != null ? `${Math.round(v.estimatedPayment).toLocaleString()}원` : '-'}</span>
+                <span>지난달 잔액 {Math.round(v.carryOver).toLocaleString()}원</span>
+                <span>이달 입고 {Math.round(v.invoiced).toLocaleString()}원</span>
+                <span>이달 결제 {Math.round(v.paid).toLocaleString()}원</span>
               </div>
+              {(v.issueCount > 0 || v.needsSetup) && (
+                <div className="history-row-sub">
+                  {v.needsSetup && <span className="alert-up">장부 시작 잔액 미입력</span>}
+                  {v.issueCount > 0 && <span className="alert-up">⚠️ 명세표 잔액과 차이 {v.issueCount}건 (확인 필요)</span>}
+                </div>
+              )}
             </button>
             <div className="inventory-row-actions">
               <button

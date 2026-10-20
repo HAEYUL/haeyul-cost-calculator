@@ -7,6 +7,7 @@ import { computeReorderAlerts } from '../lib/reorderCalc'
 import { UNIT_LABELS } from '../lib/units'
 import { stockKey } from '../lib/stockKey'
 import { rowDateStr } from '../lib/rowDateStr'
+import { groupByVendor, makeLedger } from '../lib/vendorLedger'
 
 const MENU_SECTIONS = [
   {
@@ -155,71 +156,29 @@ export default function MainMenuScreen() {
         return
       }
 
-      // 미지급금(전체 거래처 합계, 실시간)과 이번 달 입고 총액. 거래처 목록·상세 화면과 같은
-      // 방식으로 계산해야 화면마다 숫자가 어긋나지 않는다: 전잔액/현잔액이 적힌 가장 최근
-      // 명세표(또는 기초 잔액)를 앵커로 삼아, 그 이후 입고액을 더하고 그 이후 결제를 뺀다.
+      // 미지급금(전체 거래처 합계)과 이번 달 입고 총액. 거래처 목록·상세 화면과 같은 장부
+      // 계산(장부 시작 잔액 + 입고 − 결제)을 써야 화면마다 숫자가 어긋나지 않는다.
       const { start: monthStart, end: monthEnd } = monthBounds()
       let monthSum = 0
 
-      const batchesByVendor = new Map()
+      const batchesByVendor = groupByVendor(batchesRes.data)
+      const paymentsByVendor = groupByVendor(paymentsRes.data)
+      const openingByVendor = groupByVendor(openingRes.data)
       for (const b of batchesRes.data ?? []) {
-        if (!batchesByVendor.has(b.vendor_id)) batchesByVendor.set(b.vendor_id, [])
-        batchesByVendor.get(b.vendor_id).push(b)
-
         const dateStr = rowDateStr(b)
         if (dateStr >= monthStart && dateStr < monthEnd) {
           monthSum += Number(b.total_amount)
         }
       }
-      for (const list of batchesByVendor.values()) {
-        list.sort((a, b) => {
-          const ad = rowDateStr(a)
-          const bd = rowDateStr(b)
-          if (ad !== bd) return ad < bd ? 1 : -1
-          return new Date(b.created_at) - new Date(a.created_at)
-        })
-      }
-
-      const paymentsByVendor = new Map()
-      for (const p of paymentsRes.data ?? []) {
-        if (!paymentsByVendor.has(p.vendor_id)) paymentsByVendor.set(p.vendor_id, [])
-        paymentsByVendor.get(p.vendor_id).push(p)
-      }
-      const openingByVendor = new Map()
-      for (const o of openingRes.data ?? []) {
-        if (!openingByVendor.has(o.vendor_id)) openingByVendor.set(o.vendor_id, [])
-        openingByVendor.get(o.vendor_id).push(o)
-      }
-
-      const hasBalanceInfo = (batch) => batch.statement_balance != null || batch.current_balance != null
-      const endingBalanceOf = (batch) =>
-        batch.current_balance != null
-          ? Number(batch.current_balance)
-          : Number(batch.statement_balance) + Number(batch.total_amount)
 
       let balanceSum = 0
-      for (const [vendorId, batches] of batchesByVendor) {
-        const payments = paymentsByVendor.get(vendorId) ?? []
-        const openings = openingByVendor.get(vendorId) ?? []
-
-        const anchorIndex = batches.findIndex(hasBalanceInfo)
-        const anchorBatch = anchorIndex >= 0 ? batches[anchorIndex] : undefined
-        const latestOpening = [...openings].sort((a, b) => (a.as_of_date < b.as_of_date ? 1 : -1))[0]
-
-        const anchorDate = anchorBatch ? rowDateStr(anchorBatch) : (latestOpening?.as_of_date ?? null)
-        const anchorBalance = anchorBatch
-          ? endingBalanceOf(anchorBatch)
-          : latestOpening
-            ? Number(latestOpening.balance)
-            : 0
-
-        const batchesSinceAnchor = anchorBatch ? batches.slice(0, anchorIndex) : batches
-        const invoicedSinceAnchor = batchesSinceAnchor.reduce((sum, b) => sum + Number(b.total_amount), 0)
-        const paymentsSinceAnchor = payments
-          .filter((p) => !anchorDate || !p.paid_date || p.paid_date >= anchorDate)
-          .reduce((sum, p) => sum + Number(p.amount), 0)
-
-        balanceSum += anchorBalance + invoicedSinceAnchor - paymentsSinceAnchor
+      const vendorIds = new Set([...batchesByVendor.keys(), ...paymentsByVendor.keys(), ...openingByVendor.keys()])
+      for (const vendorId of vendorIds) {
+        balanceSum += makeLedger({
+          batches: batchesByVendor.get(vendorId),
+          payments: paymentsByVendor.get(vendorId),
+          openings: openingByVendor.get(vendorId),
+        }).current
       }
 
       // 재고 부족(마이너스) 품목
