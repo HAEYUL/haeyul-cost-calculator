@@ -15,6 +15,8 @@ export default function BulkPaymentScreen() {
   const navigate = useNavigate()
 
   const [rows, setRows] = useState([])
+  const [existingPayments, setExistingPayments] = useState([])
+  const [confirmDuplicates, setConfirmDuplicates] = useState(false)
   const [amounts, setAmounts] = useState({})
   const [paidDate, setPaidDate] = useState(() => todayStr())
   const [memo, setMemo] = useState('계좌이체')
@@ -25,6 +27,11 @@ export default function BulkPaymentScreen() {
   useEffect(() => {
     if (!store) navigate('/', { replace: true })
   }, [store, navigate])
+
+  // 송금액·결제일을 바꾸면 "이미 입력된 결제" 확인은 다시 받는다.
+  useEffect(() => {
+    setConfirmDuplicates(false)
+  }, [amounts, paidDate])
 
   useEffect(() => {
     if (!store || !supabase) return
@@ -60,6 +67,7 @@ export default function BulkPaymentScreen() {
         .filter((v) => Math.round(v.balance) >= 1)
         .sort((a, b) => b.balance - a.balance)
       setRows(nextRows)
+      setExistingPayments(paymentsRes.data ?? [])
     })
   }, [store])
 
@@ -72,11 +80,21 @@ export default function BulkPaymentScreen() {
 
   const filledRows = rows.filter((r) => amountOf(r.id) > 0)
   const total = filledRows.reduce((sum, r) => sum + amountOf(r.id), 0)
+  // 같은 결제일에 같은 금액 결제가 이미 있는 거래처(두 번 저장하려는 것일 수 있음)
+  const isDuplicate = (r) =>
+    existingPayments.some(
+      (p) => p.vendor_id === r.id && p.paid_date === paidDate && Math.round(Number(p.amount)) === Math.round(amountOf(r.id)),
+    )
+  const duplicateRows = filledRows.filter(isDuplicate)
 
   const handleSave = async () => {
     if (!supabase || filledRows.length === 0) return
     if (!paidDate) {
       setError('결제일을 넣어주세요.')
+      return
+    }
+    if (duplicateRows.length > 0 && !confirmDuplicates) {
+      setConfirmDuplicates(true)
       return
     }
     setSaving(true)
@@ -172,6 +190,9 @@ export default function BulkPaymentScreen() {
                     <span className={remaining < 0 ? 'alert-up' : ''}>
                       남는 잔액 {fmt(remaining)}원{remaining < 0 ? ' (미지급보다 많이 보냈어요)' : ''}
                     </span>
+                    {amountOf(r.id) > 0 && isDuplicate(r) && (
+                      <span className="alert-up">⚠️ 같은 날 같은 금액 결제가 이미 있어요</span>
+                    )}
                   </div>
                 </li>
               )
@@ -184,13 +205,26 @@ export default function BulkPaymentScreen() {
               <strong>{fmt(total)}원</strong>
             </div>
           </div>
+          {confirmDuplicates && duplicateRows.length > 0 && (
+            <div className="price-alert-box price-alert-box-danger">
+              <p className="price-alert-title">이미 입력된 결제 같아요 ({duplicateRows.map((r) => r.name).join(', ')})</p>
+              <p className="hint">
+                {paidDate}에 같은 금액 결제 기록이 이미 있어요. 실제로 두 번 송금했으면 아래 버튼을 다시 눌러 저장하고,
+                아니면 그 거래처 송금액을 지워주세요.
+              </p>
+            </div>
+          )}
           <button
             type="button"
             className="btn-primary"
             onClick={handleSave}
             disabled={saving || filledRows.length === 0 || !paidDate}
           >
-            {saving ? '저장 중...' : `${filledRows.length}곳 결제 모두 저장`}
+            {saving
+              ? '저장 중...'
+              : confirmDuplicates && duplicateRows.length > 0
+                ? '그래도 모두 저장'
+                : `${filledRows.length}곳 결제 모두 저장`}
           </button>
         </>
       )}

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
+import { useGoBack } from '../hooks/usePageHistoryState'
 import { useStore } from '../context/StoreContext'
 import { supabase } from '../lib/supabaseClient'
 import { reidentifyItem, weightConversionFactor } from '../lib/reidentifyItem'
@@ -13,6 +14,7 @@ const WASTE_REASONS = ['상함/부패', '유통기한 경과', '조리 실수', 
 export default function InventoryDetailScreen() {
   const { store } = useStore()
   const navigate = useNavigate()
+  const goBack = useGoBack('/inventory')
   const { itemName: encodedItemName, unit: unitParam } = useParams()
   const itemName = decodeURIComponent(encodedItemName ?? '')
   const unit = unitParam === NO_UNIT_KEY ? null : unitParam
@@ -423,8 +425,8 @@ export default function InventoryDetailScreen() {
   return (
     <div className="screen screen-wide">
       <div className="screen-header">
-        <button type="button" className="link-btn" onClick={() => navigate('/inventory')}>
-          ← 재고 관리
+        <button type="button" className="link-btn" onClick={goBack}>
+          ← 뒤로
         </button>
         <h1>{itemName}</h1>
         <p className="subtitle">{store.name} · {unitLabel ? `${unitLabel} 단위 재고` : '재고'}</p>

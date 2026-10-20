@@ -4,10 +4,11 @@ import { useStore } from '../context/StoreContext'
 import { supabase } from '../lib/supabaseClient'
 import { compressImage } from '../lib/compressImage'
 import InvoiceHistory from '../components/InvoiceHistory'
+import { useGoBack } from '../hooks/usePageHistoryState'
 import AmountInput from '../components/AmountInput'
 import { latestInvoiceInfoByItem, computeMenuCost } from '../lib/costCalc'
 import { UNIT_LABELS } from '../lib/units'
-import { paidBatchIds } from '../lib/batchPayment'
+import { findLinkedPayment, paidBatchIds } from '../lib/batchPayment'
 import { findVatAmountFixes } from '../lib/vatAmountFix'
 
 const MARGIN_WARNING_RATIO = 40
@@ -147,11 +148,13 @@ export default function InvoiceScreen() {
   const location = useLocation()
   const { batchId } = useParams()
   const editMode = Boolean(batchId)
-  const returnDateRange = location.state?.returnDateRange ?? null
-  // 입고입력 화면의 '저장된 입고 내역'에서 [수정]으로 들어왔으면 저장 후 그 화면으로 되돌아간다.
-  const returnToHistory = Boolean(location.state?.returnToHistory)
+  // 수정 화면은 저장·취소하면 들어온 화면(입고 내역·거래처 상세·부가세 점검)으로 돌아간다. 그 화면이
+  // 기간·필터를 방문 기록에 남겨두므로 보던 그대로 보인다. 링크로 바로 열었으면 거래처 상세로 간다.
+  const goBack = useGoBack('/invoices')
 
   const [loadingEdit, setLoadingEdit] = useState(editMode)
+  // 수정 전 명세표 값과 품목 id. 저장할 때 새 품목을 먼저 넣고 예전 품목을 지우고, 연결된 결제를 찾는 데 쓴다.
+  const [originalBatch, setOriginalBatch] = useState(null)
   const [previewUrl, setPreviewUrl] = useState(null)
   const [pendingImage, setPendingImage] = useState(null)
   const [analyzing, setAnalyzing] = useState(false)
@@ -169,6 +172,8 @@ export default function InvoiceScreen() {
   const [date, setDate] = useState('')
   const [statementBalance, setStatementBalance] = useState('')
   const [invoiceTotal, setInvoiceTotal] = useState('')
+  // 명세표의 "전일입금"(전잔액 + 당일 − 전일입금 = 현잔액). 저장하지 않고 현잔액 확인에만 쓴다.
+  const [previousDayPayment, setPreviousDayPayment] = useState('')
   const [currentBalance, setCurrentBalance] = useState('')
   const [paidInFull, setPaidInFull] = useState(false)
   const [paidInFullSuggested, setPaidInFullSuggested] = useState(false)
@@ -258,13 +263,29 @@ export default function InvoiceScreen() {
       .order('invoice_date', { ascending: false })
       .limit(1)
     if (editMode && batchId) query = query.neq('id', batchId)
-    query.then(({ data, error: err }) => {
-      if (!err && data?.length) {
-        setPreviousBatchBalance({ balance: Number(data[0].current_balance), date: data[0].invoice_date })
-      } else {
+    let cancelled = false
+    query.then(async ({ data, error: err }) => {
+      if (cancelled) return
+      if (err || !data?.length) {
         setPreviousBatchBalance(null)
+        return
       }
+      const previous = { balance: Number(data[0].current_balance), date: data[0].invoice_date }
+      // 직전 명세표 이후 이번 명세표 전날까지 앱에 입력한 결제. 전잔액에서 송금을 이미 뺀 양식은
+      // 이만큼 차이 나는 게 정상이라, 확인할 때 같이 반영한다.
+      const { data: paid } = await supabase
+        .from('vendor_payments')
+        .select('amount')
+        .eq('store_code', store.code)
+        .eq('vendor_id', vendorId)
+        .gte('paid_date', previous.date)
+        .lt('paid_date', date)
+      if (cancelled) return
+      setPreviousBatchBalance({ ...previous, paidBetween: (paid ?? []).reduce((sum, p) => sum + Number(p.amount), 0) })
     })
+    return () => {
+      cancelled = true
+    }
   }, [store, vendorId, date, editMode, batchId])
 
   // 수정 모드: 기존 명세표와 품목을 불러와 입력 폼에 채워 넣는다.
@@ -279,7 +300,7 @@ export default function InvoiceScreen() {
     supabase
       .from('invoice_batches')
       .select(
-        'id, vendor_id, invoice_date, statement_balance, current_balance, total_amount, invoices(item_name, quantity, unit_price, unit, amount, vat)',
+        'id, vendor_id, invoice_date, statement_balance, current_balance, total_amount, invoices(id, item_name, quantity, unit_price, unit, amount, vat)',
       )
       .eq('id', batchId)
       .single()
@@ -289,6 +310,13 @@ export default function InvoiceScreen() {
           setError(err.message)
           return
         }
+        setOriginalBatch({
+          id: data.id,
+          vendor_id: data.vendor_id,
+          invoice_date: data.invoice_date,
+          total_amount: data.total_amount,
+          itemIds: (data.invoices ?? []).map((item) => item.id),
+        })
         setVendorId(data.vendor_id)
         setDate(data.invoice_date ?? '')
         setStatementBalance(data.statement_balance != null ? String(data.statement_balance) : '')
@@ -325,6 +353,7 @@ export default function InvoiceScreen() {
       setStatementBalance('')
       setInvoiceTotal('')
       setCurrentBalance('')
+      setPreviousDayPayment('')
       setItems([])
       setDuplicateWarning(null)
       setAnalyzed(false)
@@ -371,6 +400,7 @@ export default function InvoiceScreen() {
       setStatementBalance(data.statementBalance != null ? String(data.statementBalance) : '')
       setInvoiceTotal(data.totalAmount != null ? String(data.totalAmount) : '')
       setCurrentBalance(data.currentBalance != null ? String(data.currentBalance) : '')
+      setPreviousDayPayment(data.previousDayPayment ? String(data.previousDayPayment) : '')
       setItems(
         (data.items ?? []).map((item) => ({
           name: item.name ?? '',
@@ -407,6 +437,10 @@ export default function InvoiceScreen() {
     }
     if (!vendorId || items.length === 0) {
       setError('거래처와 최소 1개의 품목이 필요합니다.')
+      return
+    }
+    if (!editMode && paidInFull && !date) {
+      setError('"바로 결제 완료"를 체크했으면 입고일을 넣어주세요. 날짜가 없으면 결제가 장부에 반영되지 않아요.')
       return
     }
 
@@ -447,38 +481,22 @@ export default function InvoiceScreen() {
 
     const validItems = items.filter((item) => item.name.trim())
 
+    // 명세표에 적힌 당일 입고액이 있으면 그 금액을 입고액으로 저장한다. 금액이 맞으면 품목 합계와 같고,
+    // 자투리 할인처럼 차이를 확인하고 "그래도 저장"한 경우엔 거래처가 실제로 청구한 금액이 장부에 들어가야 한다.
+    const itemsTotal = validItems.reduce(
+      (sum, item) => sum + itemAmount(item) + (resolvedVendorVatSeparate ? itemVat(item) : 0),
+      0,
+    )
+    // 부가세 별도 거래처의 당일 입고액이 공급가 합계로 적혀 있으면 부가세를 더한 품목 합계로 저장한다.
+    const supplyTotal = validItems.reduce((sum, item) => sum + itemAmount(item), 0)
+    const isSupplyOnlyTotal =
+      resolvedVendorVatSeparate && invoiceTotal !== '' && Math.abs(Number(invoiceTotal) - supplyTotal) <= AMOUNT_TOLERANCE
+    const savedTotal =
+      invoiceTotal !== '' && Number.isFinite(Number(invoiceTotal)) && !isSupplyOnlyTotal ? Number(invoiceTotal) : itemsTotal
+
     // 수정 모드: 새 명세표를 만드는 대신 기존 전표(batch)와 그 품목들을 덮어쓴다.
     // 중복 검사·단가 변동 알림은 새로 입고된 게 아니라 오입력을 고치는 것이므로 건너뛴다.
     if (editMode) {
-      const editTotalAmount = validItems.reduce(
-        (sum, item) => sum + itemAmount(item) + (resolvedVendorVatSeparate ? itemVat(item) : 0),
-        0,
-      )
-
-      const { error: updateErr } = await supabase
-        .from('invoice_batches')
-        .update({
-          vendor_id: resolvedVendorId,
-          invoice_date: date || null,
-          total_amount: editTotalAmount,
-          statement_balance: statementBalance === '' ? null : Number(statementBalance),
-          current_balance: currentBalance === '' ? null : Number(currentBalance),
-        })
-        .eq('id', batchId)
-
-      if (updateErr) {
-        setSaving(false)
-        setError(updateErr.message)
-        return
-      }
-
-      const { error: deleteOldErr } = await supabase.from('invoices').delete().eq('batch_id', batchId)
-      if (deleteOldErr) {
-        setSaving(false)
-        setError(deleteOldErr.message)
-        return
-      }
-
       const editRows = validItems.map((item) => ({
         store_code: store.code,
         vendor: resolvedVendorName,
@@ -494,19 +512,73 @@ export default function InvoiceScreen() {
         invoice_date: date || null,
       }))
 
-      const { error: insertEditErr } = await supabase.from('invoices').insert(editRows)
-      setSaving(false)
+      // 수정 전 명세표에 짝지어진 결제(바로 결제 완료·[결제완료])를 미리 찾아둔다.
+      const linkedPayment = originalBatch ? await findLinkedPayment({ storeCode: store.code, batch: originalBatch }) : null
+
+      // 새 품목을 먼저 넣고, 명세표를 고친 뒤, 예전 품목을 지운다. 중간에 인터넷이 끊겨도 품목이 사라지지 않는다.
+      const { data: insertedRows, error: insertEditErr } = await supabase.from('invoices').insert(editRows).select('id')
       if (insertEditErr) {
+        setSaving(false)
         setError(insertEditErr.message)
         return
       }
 
+      const { error: updateErr } = await supabase
+        .from('invoice_batches')
+        .update({
+          vendor_id: resolvedVendorId,
+          invoice_date: date || null,
+          total_amount: savedTotal,
+          statement_balance: statementBalance === '' ? null : Number(statementBalance),
+          current_balance: currentBalance === '' ? null : Number(currentBalance),
+        })
+        .eq('id', batchId)
+
+      if (updateErr) {
+        const newIds = (insertedRows ?? []).map((r) => r.id)
+        if (newIds.length > 0) await supabase.from('invoices').delete().in('id', newIds)
+        setSaving(false)
+        setError(updateErr.message)
+        return
+      }
+
+      const oldIds = originalBatch?.itemIds ?? []
+      if (oldIds.length > 0) {
+        const { error: deleteOldErr } = await supabase.from('invoices').delete().in('id', oldIds)
+        if (deleteOldErr) {
+          setSaving(false)
+          setError(`수정은 저장됐지만 예전 품목을 지우지 못해 품목이 두 번 보일 수 있어요. 이 명세표를 다시 [수정]으로 열어 중복된 품목을 지워주세요. (${deleteOldErr.message})`)
+          return
+        }
+      }
+
+      // 결제 처리된 명세표였다면 결제 금액·날짜·거래처도 같이 맞춘다(안 그러면 차액만큼 미지급이 남는다).
+      if (linkedPayment) {
+        const nextPaidDate = date || linkedPayment.paid_date
+        const changed =
+          Math.round(Number(linkedPayment.amount)) !== Math.round(savedTotal) ||
+          linkedPayment.paid_date !== nextPaidDate ||
+          linkedPayment.vendor_id !== resolvedVendorId
+        if (changed) {
+          const { error: paymentErr } = await supabase
+            .from('vendor_payments')
+            .update({ amount: savedTotal, paid_date: nextPaidDate, vendor_id: resolvedVendorId })
+            .eq('id', linkedPayment.id)
+          if (paymentErr) {
+            setSaving(false)
+            setError(`명세표는 고쳤지만 결제 기록을 맞추지 못했어요. 거래처 화면에서 결제 금액을 확인해주세요. (${paymentErr.message})`)
+            return
+          }
+        }
+      }
+
+      setSaving(false)
       if (didCreateVendor) setVendorsVersion((v) => v + 1)
-      if (returnToHistory) {
+      if (location.key !== 'default') {
         navigate(-1)
         return
       }
-      navigate(`/vendors/${resolvedVendorId}`, returnDateRange ? { state: { dateRange: returnDateRange } } : undefined)
+      navigate(`/vendors/${resolvedVendorId}`)
       return
     }
 
@@ -594,10 +666,7 @@ export default function InvoiceScreen() {
       }
     }
 
-    const totalAmount = validItems.reduce(
-      (sum, item) => sum + itemAmount(item) + (resolvedVendorVatSeparate ? itemVat(item) : 0),
-      0,
-    )
+    const totalAmount = savedTotal
 
     const { data: batch, error: batchErr } = await supabase
       .from('invoice_batches')
@@ -752,6 +821,7 @@ export default function InvoiceScreen() {
     setStatementBalance('')
     setInvoiceTotal('')
     setCurrentBalance('')
+    setPreviousDayPayment('')
     setPaidInFull(false)
     setPaidInFullSuggested(false)
     setItems([])
@@ -794,15 +864,21 @@ export default function InvoiceScreen() {
     (sum, item) => sum + itemAmount(item) + (currentVendorVatSeparate ? itemVat(item) : 0),
     0,
   )
+  // 부가세 별도 거래처는 명세표 합계가 공급가 합계(부가세 빼고)로 적히는 경우가 있어, 그 값과 맞아도 정상으로 본다.
+  const supplySum = validItemsForSum.reduce((sum, item) => sum + itemAmount(item), 0)
+  const matchesSupplyTotal =
+    currentVendorVatSeparate && invoiceTotal !== '' && Math.abs(supplySum - Number(invoiceTotal)) <= AMOUNT_TOLERANCE
   const totalMismatch =
-    invoiceTotal !== '' && Math.abs(itemsSum - Number(invoiceTotal)) > AMOUNT_TOLERANCE
+    invoiceTotal !== '' && !matchesSupplyTotal && Math.abs(itemsSum - Number(invoiceTotal)) > AMOUNT_TOLERANCE
       ? { itemsSum, invoiceTotal: Number(invoiceTotal) }
       : null
   const hasAmountMismatch = itemMismatches.length > 0 || totalMismatch != null
 
   // 명세표 안에서: 현잔액 = 전잔액 + 당일입고액이 맞는지 (1원 오차는 허용)
   const computedCurrentBalance =
-    statementBalance !== '' && invoiceTotal !== '' ? Number(statementBalance) + Number(invoiceTotal) : null
+    statementBalance !== '' && invoiceTotal !== ''
+      ? Number(statementBalance) + Number(invoiceTotal) - Number(previousDayPayment || 0)
+      : null
   const currentBalanceMismatch =
     currentBalance !== '' &&
     computedCurrentBalance != null &&
@@ -811,11 +887,25 @@ export default function InvoiceScreen() {
       : null
 
   // 명세표 사이: 이번 전잔액이 이 거래처의 직전 명세표 현잔액과 이어지는지 (직전 현잔액이 없으면 생략)
+  // 전잔액은 양식에 따라 직전 현잔액 그대로(전일입금을 따로 빼는 양식)이거나, 그 사이 송금을 이미 뺀 값이다.
+  // 어느 쪽과도 맞지 않을 때만 알려준다.
+  const previousBalanceCandidates = previousBatchBalance
+    ? [
+        previousBatchBalance.balance,
+        previousBatchBalance.balance - (previousBatchBalance.paidBetween ?? 0),
+        previousBatchBalance.balance - Number(previousDayPayment || 0),
+      ]
+    : []
   const previousBalanceMismatch =
     previousBatchBalance != null &&
     statementBalance !== '' &&
-    Math.abs(Number(statementBalance) - previousBatchBalance.balance) > AMOUNT_TOLERANCE
-      ? { previousDate: previousBatchBalance.date, previous: previousBatchBalance.balance, entered: Number(statementBalance) }
+    previousBalanceCandidates.every((c) => Math.abs(Number(statementBalance) - c) > AMOUNT_TOLERANCE)
+      ? {
+          previousDate: previousBatchBalance.date,
+          previous: previousBatchBalance.balance,
+          paidBetween: previousBatchBalance.paidBetween ?? 0,
+          entered: Number(statementBalance),
+        }
       : null
 
   // 이미 있는 물품명과 90% 이상 비슷하지만 완전히 같지는 않은 항목을 찾는다. 새 물품으로
@@ -1059,6 +1149,19 @@ export default function InvoiceScreen() {
         />
       </div>
       <div className="field">
+        <label htmlFor="previousDayPayment">전일입금 (명세표에 있으면)</label>
+        <AmountInput
+          id="previousDayPayment"
+          className="input"
+          value={previousDayPayment}
+          onChange={setPreviousDayPayment}
+          placeholder="예: 5,000,000"
+        />
+        <p className="hint">
+          "전잔액 + 당일 − 전일입금 = 현잔액" 양식이면 넣어주세요. 현잔액 확인에만 쓰고, 결제 기록은 따로 입력해요.
+        </p>
+      </div>
+      <div className="field">
         <label htmlFor="currentBalance">명세표 현잔액(현잔고, 총잔금, 잔금, 총잔액, 총미수금)</label>
         <AmountInput
           id="currentBalance"
@@ -1088,9 +1191,15 @@ export default function InvoiceScreen() {
         <div className="price-alert-box price-alert-box-danger">
           <p className="price-alert-title">⚠️ 현잔액이 맞지 않아요</p>
           <p className="hint">
-            전잔액 + 당일입고액 = {Math.round(currentBalanceMismatch.computed).toLocaleString()}원인데, 입력하신
-            현잔액은 {Math.round(currentBalanceMismatch.entered).toLocaleString()}원이에요.
+            전잔액 + 당일입고액{previousDayPayment ? ' − 전일입금' : ''} ={' '}
+            {Math.round(currentBalanceMismatch.computed).toLocaleString()}원인데, 입력하신 현잔액은{' '}
+            {Math.round(currentBalanceMismatch.entered).toLocaleString()}원이에요.
           </p>
+          {!previousDayPayment && currentBalanceMismatch.computed > currentBalanceMismatch.entered && (
+            <p className="hint">
+              명세표에 "전일입금"이 적혀 있다면 위 전일입금 칸에 넣어주세요. 그 금액만큼 차이 나는 게 정상이에요.
+            </p>
+          )}
         </div>
       )}
 
@@ -1100,8 +1209,10 @@ export default function InvoiceScreen() {
           <p className="hint">
             {previousBalanceMismatch.previousDate} 명세표의 현잔액은{' '}
             {Math.round(previousBalanceMismatch.previous).toLocaleString()}원인데, 이번 전잔액은{' '}
-            {Math.round(previousBalanceMismatch.entered).toLocaleString()}원이에요. 그 사이 결제하신 게 있다면
-            "결제 입력"에 넣어주세요.
+            {Math.round(previousBalanceMismatch.entered).toLocaleString()}원이에요.
+            {previousBalanceMismatch.paidBetween > 0 &&
+              ` 그 사이 입력하신 결제 ${Math.round(previousBalanceMismatch.paidBetween).toLocaleString()}원을 빼도 맞지 않아요.`}{' '}
+            그 사이 결제하신 게 더 있다면 "결제 입력"에 넣어주세요.
           </p>
         </div>
       )}
@@ -1151,6 +1262,8 @@ export default function InvoiceScreen() {
           <p className="hint">
             품목의 수량·단가·금액이나 당일 입고액을 확인해서 맞춰주세요. 거래처가 자투리를 떼고 적은
             경우처럼 실제로 맞는 차이라면, 아래 버튼으로 그대로 저장할 수 있어요.
+            {totalMismatch &&
+              ` 그래도 저장하면 입고액은 명세표의 당일 입고액 ${Math.round(totalMismatch.invoiceTotal).toLocaleString()}원으로 저장돼요.`}
           </p>
           <button type="button" className="btn-secondary" onClick={() => handleSave()} disabled={saving}>
             {saving ? '저장 중...' : '차이 확인했어요, 그래도 저장'}
@@ -1312,7 +1425,7 @@ export default function InvoiceScreen() {
           </button>
         )}
         {editMode && (
-          <button type="button" className="btn-secondary" onClick={() => navigate(-1)} disabled={saving}>
+          <button type="button" className="btn-secondary" onClick={goBack} disabled={saving}>
             취소
           </button>
         )}

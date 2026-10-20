@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react'
-import { useLocation, useNavigate } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
 import { UNIT_LABELS } from '../lib/units'
 import { rowDateStr } from '../lib/rowDateStr'
 import { canRecordBatchPayment, paidBatchIds, recordBatchPayment } from '../lib/batchPayment'
+import { useHistoryState } from '../hooks/usePageHistoryState'
 
 function todayStr() {
   const d = new Date()
@@ -19,18 +20,15 @@ function rowDateValue(row) {
 
 export default function InvoiceHistory({ storeCode, refreshKey }) {
   const navigate = useNavigate()
-  const location = useLocation()
-  // 명세표 수정 화면에 다녀오면 보던 기간·거래처 필터를 그대로 이어서 보여준다.
-  const savedFilter = location.state?.historyFilter
   const [batches, setBatches] = useState([])
   const [legacyRows, setLegacyRows] = useState([])
   const [payments, setPayments] = useState([])
   const [payTarget, setPayTarget] = useState(null)
   const [paying, setPaying] = useState(false)
   const [paymentsKey, setPaymentsKey] = useState(0)
-  const [selectedVendor, setSelectedVendor] = useState(savedFilter?.selectedVendor ?? 'all')
-  const [dateFrom, setDateFrom] = useState(savedFilter?.dateFrom ?? todayStr())
-  const [dateTo, setDateTo] = useState(savedFilter?.dateTo ?? todayStr())
+  const [selectedVendor, setSelectedVendor] = useHistoryState('historyVendor', 'all')
+  const [dateFrom, setDateFrom] = useHistoryState('historyDateFrom', () => todayStr())
+  const [dateTo, setDateTo] = useHistoryState('historyDateTo', () => todayStr())
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
@@ -97,15 +95,8 @@ export default function InvoiceHistory({ storeCode, refreshKey }) {
     setPaymentsKey((k) => k + 1)
   }
 
-  // 지금 화면의 히스토리 항목에 필터를 기록해두고 수정 화면으로 간다. 수정 화면에서 저장·취소하면
-  // 한 칸 뒤로 돌아오므로, 기록해둔 필터가 그대로 살아난다(뒤로가기 버튼으로 돌아와도 마찬가지).
-  const openEdit = (batchId) => {
-    navigate(location.pathname, {
-      replace: true,
-      state: { ...location.state, historyFilter: { dateFrom, dateTo, selectedVendor } },
-    })
-    navigate(`/invoices/edit/${batchId}`, { state: { returnToHistory: true } })
-  }
+  // 기간·거래처 필터는 이 화면의 방문 기록에 남아 있어, 수정 화면에서 저장·취소하고 돌아오면 그대로 보인다.
+  const openEdit = (batchId) => navigate(`/invoices/edit/${batchId}`)
 
   if (!supabase) {
     return <p className="hint">Supabase가 설정되지 않아 저장된 내역을 볼 수 없습니다.</p>

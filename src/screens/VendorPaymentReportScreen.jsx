@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
+import { useGoBack, useHistoryState } from '../hooks/usePageHistoryState'
 import { useStore } from '../context/StoreContext'
 import { supabase } from '../lib/supabaseClient'
 import { monthRange, DATE_RANGE_PRESETS as PRESETS } from '../lib/dateRange'
@@ -14,9 +15,11 @@ export default function VendorPaymentReportScreen() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
-  const [dateFrom, setDateFrom] = useState(() => location.state?.dateRange?.dateFrom ?? monthRange().start)
-  const [dateTo, setDateTo] = useState(() => location.state?.dateRange?.dateTo ?? monthRange().end)
-  const [activePreset, setActivePreset] = useState(null)
+  // 기간은 이 화면의 방문 기록에 남겨, 거래처 상세를 보고 돌아와도 그대로 보이게 한다.
+  const [dateFrom, setDateFrom] = useHistoryState('dateFrom', () => location.state?.dateRange?.dateFrom ?? monthRange().start)
+  const [dateTo, setDateTo] = useHistoryState('dateTo', () => location.state?.dateRange?.dateTo ?? monthRange().end)
+  const [activePreset, setActivePreset] = useHistoryState('activePreset', null)
+  const goBack = useGoBack('/menu')
 
   useEffect(() => {
     if (!store) navigate('/', { replace: true })
@@ -78,8 +81,8 @@ export default function VendorPaymentReportScreen() {
   return (
     <div className="screen screen-wide">
       <div className="screen-header">
-        <button type="button" className="link-btn" onClick={() => navigate('/menu')}>
-          ← 메인 메뉴
+        <button type="button" className="link-btn" onClick={goBack}>
+          ← 뒤로
         </button>
         <h1>거래처별 결제액</h1>
         <p className="subtitle">{store.name} · 기간을 골라 거래처별 결제(입금)액을 비교해요</p>

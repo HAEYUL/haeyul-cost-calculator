@@ -1,5 +1,6 @@
 import { Fragment, useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
+import { useGoBack } from '../hooks/usePageHistoryState'
 import { useStore } from '../context/StoreContext'
 import { supabase } from '../lib/supabaseClient'
 import { latestInvoiceInfoByItem, computeMenuCost, computeAllSubRecipeUnitCosts } from '../lib/costCalc'
@@ -18,6 +19,7 @@ const STATUS_LABEL = {
 export default function CostDetailScreen() {
   const { store } = useStore()
   const navigate = useNavigate()
+  const goBack = useGoBack('/cost')
   const { menuName: encoded } = useParams()
   const menuName = decodeURIComponent(encoded ?? '')
 
@@ -296,8 +298,8 @@ export default function CostDetailScreen() {
   return (
     <div className="screen screen-wide">
       <div className="screen-header">
-        <button type="button" className="link-btn" onClick={() => navigate('/cost')}>
-          ← 메뉴별 원가확인
+        <button type="button" className="link-btn" onClick={goBack}>
+          ← 뒤로
         </button>
         <h1>{menuName}</h1>
         <p className="subtitle">{store.name} · 재료 구성과 원가</p>

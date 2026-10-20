@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { paidBatchIds, canRecordBatchPayment } from './batchPayment'
+import { paidBatchIds, canRecordBatchPayment, matchPaymentsToBatches } from './batchPayment'
 
 const batch = (id, vendorId, date, total) => ({ id, vendor_id: vendorId, invoice_date: date, total_amount: total })
 const payment = (vendorId, date, amount) => ({ vendor_id: vendorId, paid_date: date, amount })
@@ -33,5 +33,19 @@ describe('canRecordBatchPayment', () => {
     expect(canRecordBatchPayment(batch('a', 'v1', null, 100))).toBe(false)
     expect(canRecordBatchPayment(batch('a', 'v1', '2026-10-16', 0))).toBe(false)
     expect(canRecordBatchPayment(batch('a', 'v1', '2026-10-16', 100))).toBe(true)
+  })
+})
+
+describe('matchPaymentsToBatches', () => {
+  it('명세표마다 짝지어진 결제 행을 돌려준다', () => {
+    const p1 = { id: 'p1', vendor_id: 'v1', paid_date: '2026-10-16', amount: 5000 }
+    const p2 = { id: 'p2', vendor_id: 'v1', paid_date: '2026-10-16', amount: 5000 }
+    const matched = matchPaymentsToBatches(
+      [batch('a', 'v1', '2026-10-16', 5000), batch('b', 'v1', '2026-10-16', 5000), batch('c', 'v1', '2026-10-16', 7000)],
+      [p1, p2],
+    )
+    expect(matched.get('a')).toBe(p1)
+    expect(matched.get('b')).toBe(p2)
+    expect(matched.has('c')).toBe(false)
   })
 })

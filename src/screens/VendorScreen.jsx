@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { useStore } from '../context/StoreContext'
 import { supabase } from '../lib/supabaseClient'
 import { monthRange } from '../lib/dateRange'
+import { useHistoryState } from '../hooks/usePageHistoryState'
 import {
   LEDGER_START_MONTH,
   currentMonth,
@@ -20,18 +21,19 @@ export default function VendorScreen() {
 
   const [vendors, setVendors] = useState([])
   const [ledgerByVendor, setLedgerByVendor] = useState(new Map())
-  const [month, setMonth] = useState(() => currentMonth())
+  // 달·입금 기간·검색어는 이 화면의 방문 기록에 남겨, 거래처 상세를 보고 돌아와도 그대로 보이게 한다.
+  const [month, setMonth] = useHistoryState('month', () => currentMonth())
   const [vatFixCount, setVatFixCount] = useState(0)
   const [allPayments, setAllPayments] = useState([])
-  const [paymentDateFrom, setPaymentDateFrom] = useState(() => monthRange().start)
-  const [paymentDateTo, setPaymentDateTo] = useState(() => monthRange().end)
+  const [paymentDateFrom, setPaymentDateFrom] = useHistoryState('paymentDateFrom', () => monthRange().start)
+  const [paymentDateTo, setPaymentDateTo] = useHistoryState('paymentDateTo', () => monthRange().end)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [newName, setNewName] = useState('')
   const [saving, setSaving] = useState(false)
   const [dataKey, setDataKey] = useState(0)
-  const [searchOpen, setSearchOpen] = useState(false)
-  const [searchQuery, setSearchQuery] = useState('')
+  const [searchOpen, setSearchOpen] = useHistoryState('searchOpen', false)
+  const [searchQuery, setSearchQuery] = useHistoryState('searchQuery', '')
 
   const [deleteTarget, setDeleteTarget] = useState(null)
   const [deleteCounts, setDeleteCounts] = useState(null)
@@ -399,7 +401,7 @@ export default function VendorScreen() {
             placeholder="거래처명으로 검색"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            autoFocus
+            autoFocus={!searchQuery}
           />
         </div>
       )}

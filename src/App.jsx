@@ -1,5 +1,6 @@
 import { BrowserRouter, Routes, Route } from 'react-router-dom'
 import { StoreProvider } from './context/StoreContext'
+import { ScrollManager } from './hooks/usePageHistoryState'
 import StoreSelectScreen from './screens/StoreSelectScreen'
 import MainMenuScreen from './screens/MainMenuScreen'
 import InvoiceScreen from './screens/InvoiceScreen'
@@ -35,6 +36,7 @@ export default function App() {
   return (
     <StoreProvider>
       <BrowserRouter>
+        <ScrollManager />
         <Routes>
           <Route path="/" element={<StoreSelectScreen />} />
           <Route path="/menu" element={<MainMenuScreen />} />

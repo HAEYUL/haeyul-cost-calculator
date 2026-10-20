@@ -6,7 +6,8 @@ import AmountInput from '../components/AmountInput'
 import { UNIT_LABELS } from '../lib/units'
 import { rowDateStr } from '../lib/rowDateStr'
 import { monthRange } from '../lib/dateRange'
-import { canRecordBatchPayment, paidBatchIds, recordBatchPayment } from '../lib/batchPayment'
+import { useGoBack, useHistoryState } from '../hooks/usePageHistoryState'
+import { canRecordBatchPayment, matchPaymentsToBatches, recordBatchPayment } from '../lib/batchPayment'
 import {
   LEDGER_START,
   LEDGER_START_MONTH,
@@ -39,28 +40,24 @@ export default function VendorDetailScreen() {
   const [dataKey, setDataKey] = useState(0)
   const [savingVatSeparate, setSavingVatSeparate] = useState(false)
 
-  // 명세표 수정 화면에 갔다가 돌아온 경우에만(location.state로 전달됨) 고른 기간을 유지하고,
-  // 그 외의 재진입(메인 메뉴 등을 거쳐 다시 들어온 경우, 다른 거래처로 이동한 경우)에는
-  // 항상 이번 달로 되돌아간다.
-  const [dateFrom, setDateFrom] = useState(() => location.state?.dateRange?.dateFrom ?? monthRange().start)
-  const [dateTo, setDateTo] = useState(() => location.state?.dateRange?.dateTo ?? monthRange().end)
-
-  useEffect(() => {
-    setDateFrom(location.state?.dateRange?.dateFrom ?? monthRange().start)
-    setDateTo(location.state?.dateRange?.dateTo ?? monthRange().end)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [vendorId])
+  // 고른 기간은 이 화면의 방문 기록에 남겨, 명세표 수정 등을 보고 돌아와도 그대로 보이게 한다.
+  // 새로 들어오면 넘겨받은 기간(리포트에서 온 경우) 또는 이번 달로 시작한다.
+  const [dateFrom, setDateFrom] = useHistoryState('dateFrom', () => location.state?.dateRange?.dateFrom ?? monthRange().start)
+  const [dateTo, setDateTo] = useHistoryState('dateTo', () => location.state?.dateRange?.dateTo ?? monthRange().end)
+  const goBack = useGoBack('/vendors')
 
   const [paymentAmount, setPaymentAmount] = useState('')
   const [paymentDate, setPaymentDate] = useState(() => todayStr())
   const [paymentMemo, setPaymentMemo] = useState('')
   const [savingPayment, setSavingPayment] = useState(false)
+  const [duplicatePaymentWarning, setDuplicatePaymentWarning] = useState(false)
   const [paymentDateEdits, setPaymentDateEdits] = useState({})
   const [savingPaymentDateId, setSavingPaymentDateId] = useState(null)
   const [issueDates, setIssueDates] = useState({})
   const [registeringIssueId, setRegisteringIssueId] = useState(null)
 
   const [deleteTarget, setDeleteTarget] = useState(null)
+  const [deleteLinkedPayment, setDeleteLinkedPayment] = useState(true)
   const [deleting, setDeleting] = useState(false)
 
   const [payBatchTarget, setPayBatchTarget] = useState(null)
@@ -76,6 +73,11 @@ export default function VendorDetailScreen() {
   useEffect(() => {
     if (!store) navigate('/', { replace: true })
   }, [store, navigate])
+
+  // 금액·날짜를 바꾸면 "이미 입력된 결제" 확인은 다시 받는다.
+  useEffect(() => {
+    setDuplicatePaymentWarning(false)
+  }, [paymentAmount, paymentDate])
 
   useEffect(() => {
     if (!store || !supabase) return
@@ -154,11 +156,12 @@ export default function VendorDetailScreen() {
   })
 
   // 기간과 상관없이 전체 명세표·결제로 짝을 지어야, 기간을 바꿔도 결제됨 표시가 흔들리지 않는다.
-  const paidIds = paidBatchIds(batches, payments)
+  const linkedPaymentByBatch = matchPaymentsToBatches(batches, payments)
+  const paidIds = new Set(linkedPaymentByBatch.keys())
 
   const undatedPayments = ledger.undatedPayments
 
-  const handleAddPayment = async () => {
+  const handleAddPayment = async (force = false) => {
     const amount = Number(paymentAmount)
     if (!paymentAmount || !Number.isFinite(amount) || amount <= 0 || !supabase) {
       setError('결제 금액을 0보다 크게 입력하세요.')
@@ -168,6 +171,15 @@ export default function VendorDetailScreen() {
       setError('결제일을 등록해 주세요.')
       return
     }
+    // 같은 날 같은 금액 결제가 이미 있으면 두 번 입력한 건 아닌지 먼저 확인받는다.
+    const isDuplicate = payments.some(
+      (p) => p.paid_date === paymentDate && Math.round(Number(p.amount)) === Math.round(amount),
+    )
+    if (isDuplicate && !force) {
+      setDuplicatePaymentWarning(true)
+      return
+    }
+    setDuplicatePaymentWarning(false)
     setSavingPayment(true)
     setError('')
     const { error: err } = await supabase.from('vendor_payments').insert({
@@ -319,11 +331,19 @@ export default function VendorDetailScreen() {
     }
 
     const { error: batchErr } = await supabase.from('invoice_batches').delete().eq('id', deleteTarget.id)
-    setDeleting(false)
     if (batchErr) {
+      setDeleting(false)
       setError(batchErr.message)
       return
     }
+
+    // 바로 결제 완료·[결제완료]로 같이 생긴 결제 기록도 지운다. 안 지우면 미지급이 마이너스로 남는다.
+    const linkedPayment = linkedPaymentByBatch.get(deleteTarget.id)
+    if (linkedPayment && deleteLinkedPayment) {
+      const { error: paymentErr } = await supabase.from('vendor_payments').delete().eq('id', linkedPayment.id)
+      if (paymentErr) setError(`명세표는 지웠지만 결제 기록을 지우지 못했어요. 아래 결제 내역에서 지워주세요. (${paymentErr.message})`)
+    }
+    setDeleting(false)
 
     // 보관해 둔 원본 사진도 함께 지운다 (최선 노력 — 실패해도 명세표 삭제 자체는 이미 끝난 뒤).
     if (deleteTarget.photo_path) {
@@ -344,8 +364,8 @@ export default function VendorDetailScreen() {
   return (
     <div className="screen screen-wide">
       <div className="screen-header">
-        <button type="button" className="link-btn" onClick={() => navigate('/vendors')}>
-          ← 거래처 목록
+        <button type="button" className="link-btn" onClick={goBack}>
+          ← 뒤로
         </button>
         <h1>{vendor?.name ?? '거래처'}</h1>
         <p className="subtitle">{store.name} · 입고·결제 내역과 미지급금</p>
@@ -621,11 +641,27 @@ export default function VendorDetailScreen() {
           <button
             type="button"
             className="btn-primary"
-            onClick={handleAddPayment}
+            onClick={() => handleAddPayment()}
             disabled={savingPayment || !paymentAmount || !paymentDate}
           >
             {savingPayment ? '저장 중...' : '결제 기록 추가'}
           </button>
+          {duplicatePaymentWarning && (
+            <div className="price-alert-box price-alert-box-danger">
+              <p className="price-alert-title">이미 입력된 결제 같아요</p>
+              <p className="hint">
+                {paymentDate}에 {fmt(paymentAmount || 0)}원 결제 기록이 이미 있어요. 실제로 두 번 송금했을 때만 추가하세요.
+              </p>
+              <div className="invoice-form">
+                <button type="button" className="btn-secondary" onClick={() => setDuplicatePaymentWarning(false)}>
+                  취소
+                </button>
+                <button type="button" className="btn-primary" onClick={() => handleAddPayment(true)} disabled={savingPayment}>
+                  그래도 추가
+                </button>
+              </div>
+            </div>
+          )}
 
           <h2 className="section-title">결제 내역 ({payments.length}건)</h2>
           {payments.length === 0 && <p className="hint">아직 결제 기록이 없습니다.</p>}
@@ -726,7 +762,7 @@ export default function VendorDetailScreen() {
                       type="button"
                       className="link-btn"
                       onClick={() =>
-                        navigate(`/invoices/edit/${batch.id}`, { state: { returnDateRange: { dateFrom, dateTo } } })
+                        navigate(`/invoices/edit/${batch.id}`)
                       }
                     >
                       수정
@@ -735,7 +771,10 @@ export default function VendorDetailScreen() {
                       type="button"
                       className="icon-btn"
                       aria-label="명세표 삭제"
-                      onClick={() => setDeleteTarget(batch)}
+                      onClick={() => {
+                        setDeleteTarget(batch)
+                        setDeleteLinkedPayment(true)
+                      }}
                     >
                       ✕
                     </button>
@@ -768,6 +807,19 @@ export default function VendorDetailScreen() {
                   <div className="price-alert-box price-alert-box-danger">
                     <p className="price-alert-title">이 명세표를 삭제할까요?</p>
                     <p className="hint">딸린 품목별 단가·수량·금액도 모두 함께 삭제되고, 되돌릴 수 없어요.</p>
+                    {linkedPaymentByBatch.has(batch.id) && (
+                      <label className="toggle-row">
+                        <input
+                          type="checkbox"
+                          checked={deleteLinkedPayment}
+                          onChange={(e) => setDeleteLinkedPayment(e.target.checked)}
+                        />
+                        <span>
+                          이 명세표의 결제 기록({fmt(linkedPaymentByBatch.get(batch.id).amount)}원,{' '}
+                          {linkedPaymentByBatch.get(batch.id).paid_date})도 같이 지우기
+                        </span>
+                      </label>
+                    )}
                     <div className="invoice-form">
                       <button
                         type="button"
