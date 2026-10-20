@@ -269,6 +269,9 @@ export default function VendorScreen() {
               <p className="hint">시작 잔액(9월 말 잔액)이 없으면 0원부터 계산해서 미지급이 실제와 다를 수 있어요.</p>
             </div>
           )}
+          <button type="button" className="btn-primary" onClick={() => navigate('/vendors/bulk-payment')}>
+            일괄 결제 입력 (15일·말일)
+          </button>
           <button type="button" className="btn-secondary" onClick={() => navigate('/vendors/ledger-setup')}>
             장부 시작 설정
           </button>

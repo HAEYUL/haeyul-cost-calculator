@@ -7,6 +7,7 @@ import PriceAlertsScreen from './screens/PriceAlertsScreen'
 import VendorScreen from './screens/VendorScreen'
 import VendorDetailScreen from './screens/VendorDetailScreen'
 import LedgerSetupScreen from './screens/LedgerSetupScreen'
+import BulkPaymentScreen from './screens/BulkPaymentScreen'
 import SpendingReportScreen from './screens/SpendingReportScreen'
 import VendorPaymentReportScreen from './screens/VendorPaymentReportScreen'
 import BackupScreen from './screens/BackupScreen'
@@ -41,6 +42,7 @@ export default function App() {
           <Route path="/price-alerts" element={<PriceAlertsScreen />} />
           <Route path="/vendors" element={<VendorScreen />} />
           <Route path="/vendors/ledger-setup" element={<LedgerSetupScreen />} />
+          <Route path="/vendors/bulk-payment" element={<BulkPaymentScreen />} />
           <Route path="/vendors/:vendorId" element={<VendorDetailScreen />} />
           <Route path="/spending-report" element={<SpendingReportScreen />} />
           <Route path="/vendor-payment-report" element={<VendorPaymentReportScreen />} />
