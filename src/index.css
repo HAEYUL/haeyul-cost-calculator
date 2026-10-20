@@ -1022,3 +1022,19 @@ h1 {
 .ledger-table tr:last-child td {
   border-bottom: none;
 }
+
+.bulk-payment-input {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.bulk-payment-input .input {
+  flex: 1;
+  min-width: 0;
+}
+
+.bulk-payment-input .chip {
+  flex-shrink: 0;
+}

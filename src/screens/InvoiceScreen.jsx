@@ -7,6 +7,7 @@ import InvoiceHistory from '../components/InvoiceHistory'
 import AmountInput from '../components/AmountInput'
 import { latestInvoiceInfoByItem, computeMenuCost } from '../lib/costCalc'
 import { UNIT_LABELS } from '../lib/units'
+import { paidBatchIds } from '../lib/batchPayment'
 
 const MARGIN_WARNING_RATIO = 40
 
@@ -169,6 +170,7 @@ export default function InvoiceScreen() {
   const [invoiceTotal, setInvoiceTotal] = useState('')
   const [currentBalance, setCurrentBalance] = useState('')
   const [paidInFull, setPaidInFull] = useState(false)
+  const [paidInFullSuggested, setPaidInFullSuggested] = useState(false)
   const [previousBatchBalance, setPreviousBatchBalance] = useState(null)
   const [items, setItems] = useState([])
   const [saving, setSaving] = useState(false)
@@ -204,6 +206,39 @@ export default function InvoiceScreen() {
         if (!err) setItemNameRecords(data ?? [])
       })
   }, [store, historyKey])
+
+  // 거래처를 고르면, 그 거래처의 가장 최근 명세표가 입고 당일 결제된 것(즉시 결제 거래처)인지 보고
+  // "바로 결제 완료"를 미리 체크해 둔다. 15일·말일에 몰아서 결제하는 거래처는 체크하지 않는다.
+  useEffect(() => {
+    if (editMode) return
+    if (!store || !supabase || !vendorId || vendorId === 'new') {
+      setPaidInFull(false)
+      setPaidInFullSuggested(false)
+      return
+    }
+    let cancelled = false
+    Promise.all([
+      supabase
+        .from('invoice_batches')
+        .select('id, vendor_id, invoice_date, total_amount')
+        .eq('store_code', store.code)
+        .eq('vendor_id', vendorId)
+        .not('invoice_date', 'is', null)
+        .order('invoice_date', { ascending: false })
+        .order('created_at', { ascending: false })
+        .limit(1),
+      supabase.from('vendor_payments').select('vendor_id, amount, paid_date').eq('store_code', store.code).eq('vendor_id', vendorId),
+    ]).then(([batchRes, paymentRes]) => {
+      if (cancelled || batchRes.error || paymentRes.error) return
+      const latest = batchRes.data?.[0]
+      const wasPaidImmediately = latest ? paidBatchIds([latest], paymentRes.data ?? []).has(latest.id) : false
+      setPaidInFull(wasPaidImmediately)
+      setPaidInFullSuggested(wasPaidImmediately)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [store, vendorId, editMode])
 
   // 거래처+입고일이 정해지면, 그 거래처가 이 날짜보다 전에 마지막으로 저장한 명세표의
   // 현잔액을 불러온다. "이번 명세표의 전잔액"이 그 값과 이어지는지 대조하기 위함이다.
@@ -717,6 +752,7 @@ export default function InvoiceScreen() {
     setInvoiceTotal('')
     setCurrentBalance('')
     setPaidInFull(false)
+    setPaidInFullSuggested(false)
     setItems([])
     if (didCreateVendor) setVendorsVersion((v) => v + 1)
   }
@@ -1030,6 +1066,9 @@ export default function InvoiceScreen() {
             <input type="checkbox" checked={paidInFull} onChange={(e) => setPaidInFull(e.target.checked)} />
             <span>이 거래 바로 결제 완료 (합계금액만큼 결제 기록도 자동으로 남겨요)</span>
           </label>
+          {paidInFullSuggested && paidInFull && (
+            <p className="hint">지난번 입고 때 바로 결제한 거래처라 미리 체크해 뒀어요. 외상이면 체크를 풀어주세요.</p>
+          )}
         </div>
       )}
 
