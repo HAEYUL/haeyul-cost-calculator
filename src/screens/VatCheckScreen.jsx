@@ -88,7 +88,7 @@ export default function VatCheckScreen() {
                 <button
                   type="button"
                   className="link-btn"
-                  onClick={() => navigate(`/invoices/edit/${r.id}`, { state: { returnToHistory: true } })}
+                  onClick={() => navigate(`/invoices/edit/${r.id}`)}
                 >
                   수정
                 </button>

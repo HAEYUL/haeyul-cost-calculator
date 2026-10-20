@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
+import { useGoBack } from '../hooks/usePageHistoryState'
 import { useStore } from '../context/StoreContext'
 import { supabase } from '../lib/supabaseClient'
 import { parseScale } from '../lib/parseScale'
@@ -7,6 +8,7 @@ import { parseScale } from '../lib/parseScale'
 export default function RecipeDetailScreen() {
   const { store } = useStore()
   const navigate = useNavigate()
+  const goBack = useGoBack('/recipes')
   const { menuName: encodedMenuName } = useParams()
   const menuName = decodeURIComponent(encodedMenuName ?? '')
 
@@ -46,8 +48,8 @@ export default function RecipeDetailScreen() {
   return (
     <div className="screen screen-wide">
       <div className="screen-header">
-        <button type="button" className="link-btn" onClick={() => navigate('/recipes')}>
-          ← 레시피 목록
+        <button type="button" className="link-btn" onClick={goBack}>
+          ← 뒤로
         </button>
         <h1>{menuName}</h1>
         <p className="subtitle">배율을 입력하면 재료량이 바로 바뀝니다</p>

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useHistoryState } from '../hooks/usePageHistoryState'
 import { useStore } from '../context/StoreContext'
 import { supabase } from '../lib/supabaseClient'
 import { reidentifyItem, weightConversionFactor } from '../lib/reidentifyItem'
@@ -15,12 +16,13 @@ export default function InventoryScreen() {
   const [rows, setRows] = useState([])
   const [pinnedNames, setPinnedNames] = useState(new Set())
   const [recipeUnitByItem, setRecipeUnitByItem] = useState(new Map())
-  const [showAll, setShowAll] = useState(false)
+  // 전체 보기·검색어는 이 화면의 방문 기록에 남겨, 재고 상세를 보고 돌아와도 그대로 보이게 한다.
+  const [showAll, setShowAll] = useHistoryState('showAll', false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [dataKey, setDataKey] = useState(0)
-  const [searchOpen, setSearchOpen] = useState(false)
-  const [searchQuery, setSearchQuery] = useState('')
+  const [searchOpen, setSearchOpen] = useHistoryState('searchOpen', false)
+  const [searchQuery, setSearchQuery] = useHistoryState('searchQuery', '')
 
   const [renameTarget, setRenameTarget] = useState(null)
   const [renameInput, setRenameInput] = useState('')
@@ -563,7 +565,7 @@ export default function InventoryScreen() {
                 placeholder="품목명으로 검색"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                autoFocus
+                autoFocus={!searchQuery}
               />
             </div>
           )}

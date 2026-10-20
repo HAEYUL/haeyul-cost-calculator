@@ -4,6 +4,7 @@ import { useStore } from '../context/StoreContext'
 import { supabase } from '../lib/supabaseClient'
 import { compressImage } from '../lib/compressImage'
 import InvoiceHistory from '../components/InvoiceHistory'
+import { useGoBack } from '../hooks/usePageHistoryState'
 import AmountInput from '../components/AmountInput'
 import { latestInvoiceInfoByItem, computeMenuCost } from '../lib/costCalc'
 import { UNIT_LABELS } from '../lib/units'
@@ -147,9 +148,9 @@ export default function InvoiceScreen() {
   const location = useLocation()
   const { batchId } = useParams()
   const editMode = Boolean(batchId)
-  const returnDateRange = location.state?.returnDateRange ?? null
-  // 입고입력 화면의 '저장된 입고 내역'에서 [수정]으로 들어왔으면 저장 후 그 화면으로 되돌아간다.
-  const returnToHistory = Boolean(location.state?.returnToHistory)
+  // 수정 화면은 저장·취소하면 들어온 화면(입고 내역·거래처 상세·부가세 점검)으로 돌아간다. 그 화면이
+  // 기간·필터를 방문 기록에 남겨두므로 보던 그대로 보인다. 링크로 바로 열었으면 거래처 상세로 간다.
+  const goBack = useGoBack('/invoices')
 
   const [loadingEdit, setLoadingEdit] = useState(editMode)
   // 수정 전 명세표 값과 품목 id. 저장할 때 새 품목을 먼저 넣고 예전 품목을 지우고, 연결된 결제를 찾는 데 쓴다.
@@ -262,13 +263,29 @@ export default function InvoiceScreen() {
       .order('invoice_date', { ascending: false })
       .limit(1)
     if (editMode && batchId) query = query.neq('id', batchId)
-    query.then(({ data, error: err }) => {
-      if (!err && data?.length) {
-        setPreviousBatchBalance({ balance: Number(data[0].current_balance), date: data[0].invoice_date })
-      } else {
+    let cancelled = false
+    query.then(async ({ data, error: err }) => {
+      if (cancelled) return
+      if (err || !data?.length) {
         setPreviousBatchBalance(null)
+        return
       }
+      const previous = { balance: Number(data[0].current_balance), date: data[0].invoice_date }
+      // 직전 명세표 이후 이번 명세표 전날까지 앱에 입력한 결제. 전잔액에서 송금을 이미 뺀 양식은
+      // 이만큼 차이 나는 게 정상이라, 확인할 때 같이 반영한다.
+      const { data: paid } = await supabase
+        .from('vendor_payments')
+        .select('amount')
+        .eq('store_code', store.code)
+        .eq('vendor_id', vendorId)
+        .gte('paid_date', previous.date)
+        .lt('paid_date', date)
+      if (cancelled) return
+      setPreviousBatchBalance({ ...previous, paidBetween: (paid ?? []).reduce((sum, p) => sum + Number(p.amount), 0) })
     })
+    return () => {
+      cancelled = true
+    }
   }, [store, vendorId, date, editMode, batchId])
 
   // 수정 모드: 기존 명세표와 품목을 불러와 입력 폼에 채워 넣는다.
@@ -470,7 +487,12 @@ export default function InvoiceScreen() {
       (sum, item) => sum + itemAmount(item) + (resolvedVendorVatSeparate ? itemVat(item) : 0),
       0,
     )
-    const savedTotal = invoiceTotal !== '' && Number.isFinite(Number(invoiceTotal)) ? Number(invoiceTotal) : itemsTotal
+    // 부가세 별도 거래처의 당일 입고액이 공급가 합계로 적혀 있으면 부가세를 더한 품목 합계로 저장한다.
+    const supplyTotal = validItems.reduce((sum, item) => sum + itemAmount(item), 0)
+    const isSupplyOnlyTotal =
+      resolvedVendorVatSeparate && invoiceTotal !== '' && Math.abs(Number(invoiceTotal) - supplyTotal) <= AMOUNT_TOLERANCE
+    const savedTotal =
+      invoiceTotal !== '' && Number.isFinite(Number(invoiceTotal)) && !isSupplyOnlyTotal ? Number(invoiceTotal) : itemsTotal
 
     // 수정 모드: 새 명세표를 만드는 대신 기존 전표(batch)와 그 품목들을 덮어쓴다.
     // 중복 검사·단가 변동 알림은 새로 입고된 게 아니라 오입력을 고치는 것이므로 건너뛴다.
@@ -552,11 +574,11 @@ export default function InvoiceScreen() {
 
       setSaving(false)
       if (didCreateVendor) setVendorsVersion((v) => v + 1)
-      if (returnToHistory) {
+      if (location.key !== 'default') {
         navigate(-1)
         return
       }
-      navigate(`/vendors/${resolvedVendorId}`, returnDateRange ? { state: { dateRange: returnDateRange } } : undefined)
+      navigate(`/vendors/${resolvedVendorId}`)
       return
     }
 
@@ -842,8 +864,12 @@ export default function InvoiceScreen() {
     (sum, item) => sum + itemAmount(item) + (currentVendorVatSeparate ? itemVat(item) : 0),
     0,
   )
+  // 부가세 별도 거래처는 명세표 합계가 공급가 합계(부가세 빼고)로 적히는 경우가 있어, 그 값과 맞아도 정상으로 본다.
+  const supplySum = validItemsForSum.reduce((sum, item) => sum + itemAmount(item), 0)
+  const matchesSupplyTotal =
+    currentVendorVatSeparate && invoiceTotal !== '' && Math.abs(supplySum - Number(invoiceTotal)) <= AMOUNT_TOLERANCE
   const totalMismatch =
-    invoiceTotal !== '' && Math.abs(itemsSum - Number(invoiceTotal)) > AMOUNT_TOLERANCE
+    invoiceTotal !== '' && !matchesSupplyTotal && Math.abs(itemsSum - Number(invoiceTotal)) > AMOUNT_TOLERANCE
       ? { itemsSum, invoiceTotal: Number(invoiceTotal) }
       : null
   const hasAmountMismatch = itemMismatches.length > 0 || totalMismatch != null
@@ -861,11 +887,25 @@ export default function InvoiceScreen() {
       : null
 
   // 명세표 사이: 이번 전잔액이 이 거래처의 직전 명세표 현잔액과 이어지는지 (직전 현잔액이 없으면 생략)
+  // 전잔액은 양식에 따라 직전 현잔액 그대로(전일입금을 따로 빼는 양식)이거나, 그 사이 송금을 이미 뺀 값이다.
+  // 어느 쪽과도 맞지 않을 때만 알려준다.
+  const previousBalanceCandidates = previousBatchBalance
+    ? [
+        previousBatchBalance.balance,
+        previousBatchBalance.balance - (previousBatchBalance.paidBetween ?? 0),
+        previousBatchBalance.balance - Number(previousDayPayment || 0),
+      ]
+    : []
   const previousBalanceMismatch =
     previousBatchBalance != null &&
     statementBalance !== '' &&
-    Math.abs(Number(statementBalance) - previousBatchBalance.balance) > AMOUNT_TOLERANCE
-      ? { previousDate: previousBatchBalance.date, previous: previousBatchBalance.balance, entered: Number(statementBalance) }
+    previousBalanceCandidates.every((c) => Math.abs(Number(statementBalance) - c) > AMOUNT_TOLERANCE)
+      ? {
+          previousDate: previousBatchBalance.date,
+          previous: previousBatchBalance.balance,
+          paidBetween: previousBatchBalance.paidBetween ?? 0,
+          entered: Number(statementBalance),
+        }
       : null
 
   // 이미 있는 물품명과 90% 이상 비슷하지만 완전히 같지는 않은 항목을 찾는다. 새 물품으로
@@ -1169,8 +1209,10 @@ export default function InvoiceScreen() {
           <p className="hint">
             {previousBalanceMismatch.previousDate} 명세표의 현잔액은{' '}
             {Math.round(previousBalanceMismatch.previous).toLocaleString()}원인데, 이번 전잔액은{' '}
-            {Math.round(previousBalanceMismatch.entered).toLocaleString()}원이에요. 그 사이 결제하신 게 있다면
-            "결제 입력"에 넣어주세요.
+            {Math.round(previousBalanceMismatch.entered).toLocaleString()}원이에요.
+            {previousBalanceMismatch.paidBetween > 0 &&
+              ` 그 사이 입력하신 결제 ${Math.round(previousBalanceMismatch.paidBetween).toLocaleString()}원을 빼도 맞지 않아요.`}{' '}
+            그 사이 결제하신 게 더 있다면 "결제 입력"에 넣어주세요.
           </p>
         </div>
       )}
@@ -1383,7 +1425,7 @@ export default function InvoiceScreen() {
           </button>
         )}
         {editMode && (
-          <button type="button" className="btn-secondary" onClick={() => navigate(-1)} disabled={saving}>
+          <button type="button" className="btn-secondary" onClick={goBack} disabled={saving}>
             취소
           </button>
         )}

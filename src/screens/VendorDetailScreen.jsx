@@ -6,6 +6,7 @@ import AmountInput from '../components/AmountInput'
 import { UNIT_LABELS } from '../lib/units'
 import { rowDateStr } from '../lib/rowDateStr'
 import { monthRange } from '../lib/dateRange'
+import { useGoBack, useHistoryState } from '../hooks/usePageHistoryState'
 import { canRecordBatchPayment, matchPaymentsToBatches, recordBatchPayment } from '../lib/batchPayment'
 import {
   LEDGER_START,
@@ -39,17 +40,11 @@ export default function VendorDetailScreen() {
   const [dataKey, setDataKey] = useState(0)
   const [savingVatSeparate, setSavingVatSeparate] = useState(false)
 
-  // 명세표 수정 화면에 갔다가 돌아온 경우에만(location.state로 전달됨) 고른 기간을 유지하고,
-  // 그 외의 재진입(메인 메뉴 등을 거쳐 다시 들어온 경우, 다른 거래처로 이동한 경우)에는
-  // 항상 이번 달로 되돌아간다.
-  const [dateFrom, setDateFrom] = useState(() => location.state?.dateRange?.dateFrom ?? monthRange().start)
-  const [dateTo, setDateTo] = useState(() => location.state?.dateRange?.dateTo ?? monthRange().end)
-
-  useEffect(() => {
-    setDateFrom(location.state?.dateRange?.dateFrom ?? monthRange().start)
-    setDateTo(location.state?.dateRange?.dateTo ?? monthRange().end)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [vendorId])
+  // 고른 기간은 이 화면의 방문 기록에 남겨, 명세표 수정 등을 보고 돌아와도 그대로 보이게 한다.
+  // 새로 들어오면 넘겨받은 기간(리포트에서 온 경우) 또는 이번 달로 시작한다.
+  const [dateFrom, setDateFrom] = useHistoryState('dateFrom', () => location.state?.dateRange?.dateFrom ?? monthRange().start)
+  const [dateTo, setDateTo] = useHistoryState('dateTo', () => location.state?.dateRange?.dateTo ?? monthRange().end)
+  const goBack = useGoBack('/vendors')
 
   const [paymentAmount, setPaymentAmount] = useState('')
   const [paymentDate, setPaymentDate] = useState(() => todayStr())
@@ -369,8 +364,8 @@ export default function VendorDetailScreen() {
   return (
     <div className="screen screen-wide">
       <div className="screen-header">
-        <button type="button" className="link-btn" onClick={() => navigate('/vendors')}>
-          ← 거래처 목록
+        <button type="button" className="link-btn" onClick={goBack}>
+          ← 뒤로
         </button>
         <h1>{vendor?.name ?? '거래처'}</h1>
         <p className="subtitle">{store.name} · 입고·결제 내역과 미지급금</p>
@@ -767,7 +762,7 @@ export default function VendorDetailScreen() {
                       type="button"
                       className="link-btn"
                       onClick={() =>
-                        navigate(`/invoices/edit/${batch.id}`, { state: { returnDateRange: { dateFrom, dateTo } } })
+                        navigate(`/invoices/edit/${batch.id}`)
                       }
                     >
                       수정
