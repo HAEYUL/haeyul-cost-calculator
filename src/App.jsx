@@ -8,6 +8,7 @@ import VendorScreen from './screens/VendorScreen'
 import VendorDetailScreen from './screens/VendorDetailScreen'
 import LedgerSetupScreen from './screens/LedgerSetupScreen'
 import BulkPaymentScreen from './screens/BulkPaymentScreen'
+import VatCheckScreen from './screens/VatCheckScreen'
 import SpendingReportScreen from './screens/SpendingReportScreen'
 import VendorPaymentReportScreen from './screens/VendorPaymentReportScreen'
 import BackupScreen from './screens/BackupScreen'
@@ -43,6 +44,7 @@ export default function App() {
           <Route path="/vendors" element={<VendorScreen />} />
           <Route path="/vendors/ledger-setup" element={<LedgerSetupScreen />} />
           <Route path="/vendors/bulk-payment" element={<BulkPaymentScreen />} />
+          <Route path="/vendors/vat-check" element={<VatCheckScreen />} />
           <Route path="/vendors/:vendorId" element={<VendorDetailScreen />} />
           <Route path="/spending-report" element={<SpendingReportScreen />} />
           <Route path="/vendor-payment-report" element={<VendorPaymentReportScreen />} />

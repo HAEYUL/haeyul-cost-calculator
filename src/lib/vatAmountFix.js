@@ -25,3 +25,22 @@ export function findVatAmountFixes(items, vatSeparate) {
     })
     .filter(Boolean)
 }
+
+// 저장된 명세표(invoices 품목 포함) 중 위 문제가 있는 것만 골라, 고칠 품목과 빠진(또는 더 들어간)
+// 부가세 합계를 붙여서 돌려준다. vatSeparateByVendor: 거래처 id → 부가세 별도 여부
+export function findBatchesNeedingVatFix(batches, vatSeparateByVendor) {
+  return (batches ?? [])
+    .map((batch) => {
+      const items = (batch.invoices ?? []).map((row) => ({
+        name: row.item_name ?? '',
+        quantity: row.quantity ?? '',
+        unitPrice: row.unit_price ?? '',
+        amount: row.amount ?? '',
+        vat: row.vat ?? '',
+      }))
+      const fixes = findVatAmountFixes(items, vatSeparateByVendor.get(batch.vendor_id) ?? false)
+      if (fixes.length === 0) return null
+      return { ...batch, fixes, diff: fixes.reduce((sum, f) => sum + f.to - f.from, 0) }
+    })
+    .filter(Boolean)
+}

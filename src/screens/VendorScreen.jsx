@@ -12,6 +12,7 @@ import {
   monthLabel,
   shiftMonth,
 } from '../lib/vendorLedger'
+import { findBatchesNeedingVatFix } from '../lib/vatAmountFix'
 
 export default function VendorScreen() {
   const { store } = useStore()
@@ -20,6 +21,7 @@ export default function VendorScreen() {
   const [vendors, setVendors] = useState([])
   const [ledgerByVendor, setLedgerByVendor] = useState(new Map())
   const [month, setMonth] = useState(() => currentMonth())
+  const [vatFixCount, setVatFixCount] = useState(0)
   const [allPayments, setAllPayments] = useState([])
   const [paymentDateFrom, setPaymentDateFrom] = useState(() => monthRange().start)
   const [paymentDateTo, setPaymentDateTo] = useState(() => monthRange().end)
@@ -45,10 +47,12 @@ export default function VendorScreen() {
     setLoading(true)
     setError('')
     Promise.all([
-      supabase.from('vendors').select('id, name').eq('store_code', store.code).order('name'),
+      supabase.from('vendors').select('id, name, vat_separate').eq('store_code', store.code).order('name'),
       supabase
         .from('invoice_batches')
-        .select('id, vendor_id, total_amount, invoice_date, statement_balance, current_balance, created_at')
+        .select(
+          'id, vendor_id, total_amount, invoice_date, statement_balance, current_balance, created_at, invoices(item_name, quantity, unit_price, amount, vat)',
+        )
         .eq('store_code', store.code),
       supabase.from('vendor_payments').select('vendor_id, amount, paid_date').eq('store_code', store.code),
       supabase.from('vendor_opening_balances').select('vendor_id, as_of_date, balance').eq('store_code', store.code),
@@ -76,6 +80,8 @@ export default function VendorScreen() {
 
       setVendors(vendorsRes.data ?? [])
       setLedgerByVendor(ledgers)
+      const vatSeparateByVendor = new Map((vendorsRes.data ?? []).map((v) => [v.id, !!v.vat_separate]))
+      setVatFixCount(findBatchesNeedingVatFix(batchesRes.data, vatSeparateByVendor).length)
       setAllPayments(paymentsRes.data ?? [])
       setLoading(false)
     })
@@ -272,8 +278,17 @@ export default function VendorScreen() {
           <button type="button" className="btn-primary" onClick={() => navigate('/vendors/bulk-payment')}>
             일괄 결제 입력 (15일·말일)
           </button>
+          {vatFixCount > 0 && (
+            <div className="price-alert-box price-alert-box-danger">
+              <p className="price-alert-title">부가세 금액 확인이 필요한 명세표가 {vatFixCount}장 있어요</p>
+              <p className="hint">공급가만 들어가 입고액·미지급이 부가세만큼 적게 잡혀 있어요.</p>
+            </div>
+          )}
           <button type="button" className="btn-secondary" onClick={() => navigate('/vendors/ledger-setup')}>
             장부 시작 설정
+          </button>
+          <button type="button" className="btn-secondary" onClick={() => navigate('/vendors/vat-check')}>
+            부가세 금액 점검{vatFixCount > 0 ? ` (${vatFixCount}장)` : ''}
           </button>
 
           <div className="month-nav">
