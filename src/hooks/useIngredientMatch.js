@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { supabase } from '../lib/supabaseClient'
+import { apiFetch } from '../lib/apiFetch'
 
 // 레시피/부재료 재료 줄 하나를 그 자리에서 바로 입고 물품과 매칭할 수 있게 해주는 공용 로직.
 // "재료 매칭" 화면의 추천/직접 선택 방식을 그대로 재사용해서, 다른 화면으로 이동하지 않고도
@@ -25,7 +26,7 @@ export function useIngredientMatch({ storeCode, invoiceItems, onMatchSaved }) {
     if (invoiceItems.length === 0) return
     setSuggesting(true)
     try {
-      const res = await fetch('/api/match-ingredient', {
+      const res = await apiFetch('/api/match-ingredient', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ingredientName: trimmed, candidateItems: invoiceItems }),

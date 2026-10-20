@@ -67,6 +67,8 @@ export default function VendorDetailScreen() {
   const [deletingPayment, setDeletingPayment] = useState(false)
 
   const [openingBalances, setOpeningBalances] = useState([])
+  // 명세표 사진은 비공개 보관함에 있어서, 로그인한 기기에서만 열리는 1시간짜리 링크를 받아 보여준다.
+  const [photoLinks, setPhotoLinks] = useState({})
   const [startBalanceInput, setStartBalanceInput] = useState('')
   const [savingOpeningBalance, setSavingOpeningBalance] = useState(false)
 
@@ -121,6 +123,25 @@ export default function VendorDetailScreen() {
       setLoading(false)
     })
   }, [store, vendorId, dataKey])
+
+  useEffect(() => {
+    const paths = batches.map((b) => b.photo_path).filter(Boolean)
+    if (!supabase || paths.length === 0) {
+      setPhotoLinks({})
+      return
+    }
+    let cancelled = false
+    supabase.storage
+      .from('invoice-photos')
+      .createSignedUrls(paths, 60 * 60)
+      .then(({ data }) => {
+        if (cancelled) return
+        setPhotoLinks(Object.fromEntries((data ?? []).filter((d) => d.signedUrl).map((d) => [d.path, d.signedUrl])))
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [batches])
 
   // 저장해 둔 장부 시작 잔액을 입력칸에 불러온다.
   useEffect(() => {
@@ -359,7 +380,6 @@ export default function VendorDetailScreen() {
     setDataKey((k) => k + 1)
   }
 
-  const photoUrl = (photoPath) => supabase.storage.from('invoice-photos').getPublicUrl(photoPath).data.publicUrl
 
   return (
     <div className="screen screen-wide">
@@ -848,15 +868,19 @@ export default function VendorDetailScreen() {
                 )}
                 {batch.photo_path && (
                   <div className="inventory-row-actions">
-                    <a
-                      className="link-btn"
-                      href={photoUrl(batch.photo_path)}
-                      target="_blank"
-                      rel="noreferrer"
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      📷 원본 사진 보기
-                    </a>
+                    {photoLinks[batch.photo_path] ? (
+                      <a
+                        className="link-btn"
+                        href={photoLinks[batch.photo_path]}
+                        target="_blank"
+                        rel="noreferrer"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        📷 원본 사진 보기
+                      </a>
+                    ) : (
+                      <span className="hint">📷 사진 불러오는 중...</span>
+                    )}
                   </div>
                 )}
                 {batch.invoices?.length > 0 && (

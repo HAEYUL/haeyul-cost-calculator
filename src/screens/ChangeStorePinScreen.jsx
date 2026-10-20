@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useStore } from '../context/StoreContext'
 import { supabase } from '../lib/supabaseClient'
-import { hashPin } from '../lib/pinHash'
+import { apiFetch } from '../lib/apiFetch'
 
 export default function ChangeStorePinScreen() {
   const { store } = useStore()
@@ -37,41 +37,39 @@ export default function ChangeStorePinScreen() {
     }
     if (!supabase) return
 
+    // 서버에서 현재 PIN을 확인하고 바꾼다. 이 매장의 다른 기기(예전 매니저 기기 포함)는 모두 로그아웃되고,
+    // 이 기기는 새 출입증을 받아 계속 쓴다.
     setSaving(true)
-    const { data, error: fetchErr } = await supabase
-      .from('stores')
-      .select('pin_hash')
-      .eq('code', store.code)
-      .single()
-    if (fetchErr) {
+    try {
+      const res = await apiFetch('/api/change-pin', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ currentPin, newPin }),
+      })
+      const body = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        setError(body.error || '비밀번호를 바꾸지 못했어요.')
+        return
+      }
+      const { error: sessionErr } = await supabase.auth.setSession({
+        access_token: body.session.access_token,
+        refresh_token: body.session.refresh_token,
+      })
+      if (sessionErr) {
+        setError(sessionErr.message)
+        return
+      }
+    } catch {
+      setError('인터넷 연결을 확인하고 다시 시도해주세요.')
+      return
+    } finally {
       setSaving(false)
-      setError(fetchErr.message)
-      return
-    }
-
-    const currentHash = await hashPin(currentPin, store.code)
-    if (currentHash !== data.pin_hash) {
-      setSaving(false)
-      setError('현재 비밀번호가 틀렸습니다.')
-      return
-    }
-
-    const newHash = await hashPin(newPin, store.code)
-    const { error: updateErr } = await supabase
-      .from('stores')
-      .update({ pin_hash: newHash, failed_attempts: 0, locked_until: null })
-      .eq('code', store.code)
-
-    setSaving(false)
-    if (updateErr) {
-      setError(updateErr.message)
-      return
     }
 
     setCurrentPin('')
     setNewPin('')
     setConfirmPin('')
-    setSaveMessage('비밀번호를 변경했습니다.')
+    setSaveMessage('비밀번호를 변경했습니다. 이 매장을 쓰던 다른 기기는 새 비밀번호로 다시 들어가야 해요.')
   }
 
   return (

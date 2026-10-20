@@ -1,6 +1,7 @@
 import { analyzeRecipeImage } from './_analyzeRecipe.js'
+import { withStoreAuth } from './_storeAuth.js'
 
-export default async function handler(req, res) {
+async function handler(req, res) {
   if (req.method !== 'POST') {
     res.status(405).json({ error: 'Method not allowed' })
     return
@@ -20,3 +21,6 @@ export default async function handler(req, res) {
     res.status(500).json({ error: err.message || '분석 중 오류가 발생했습니다' })
   }
 }
+
+// 로그인한 매장 기기만 쓸 수 있다(앱 주소를 아는 외부인이 AI 요금을 쓰지 못하게).
+export default withStoreAuth(handler)

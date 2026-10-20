@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useStore } from '../context/StoreContext'
 import { supabase } from '../lib/supabaseClient'
+import { apiFetch } from '../lib/apiFetch'
 
 function MatchPanel({ ingredientName, invoiceItems, suggestions, suggesting, manualChoice, setManualChoice, onConfirm, onCancel, saving }) {
   return (
@@ -132,7 +133,7 @@ export default function MatchingScreen() {
 
     setSuggesting(true)
     try {
-      const res = await fetch('/api/match-ingredient', {
+      const res = await apiFetch('/api/match-ingredient', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ingredientName, candidateItems: invoiceItems }),

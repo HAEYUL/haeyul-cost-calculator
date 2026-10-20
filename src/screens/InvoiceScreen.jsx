@@ -10,6 +10,7 @@ import { latestInvoiceInfoByItem, computeMenuCost } from '../lib/costCalc'
 import { UNIT_LABELS } from '../lib/units'
 import { findLinkedPayment, paidBatchIds } from '../lib/batchPayment'
 import { findVatAmountFixes } from '../lib/vatAmountFix'
+import { apiFetch } from '../lib/apiFetch'
 
 const MARGIN_WARNING_RATIO = 40
 
@@ -368,7 +369,7 @@ export default function InvoiceScreen() {
     setError('')
     setAnalyzed(false)
     try {
-      const res = await fetch('/api/analyze-invoice', {
+      const res = await apiFetch('/api/analyze-invoice', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(pendingImage),

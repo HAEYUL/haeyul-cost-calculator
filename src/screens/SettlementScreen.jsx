@@ -2,8 +2,8 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useStore } from '../context/StoreContext'
 import { supabase } from '../lib/supabaseClient'
-import { hashPin } from '../lib/pinHash'
 import { compressImage } from '../lib/compressImage'
+import { apiFetch } from '../lib/apiFetch'
 
 const MAX_ATTEMPTS = 5
 const LOCK_MINUTES = 5
@@ -30,8 +30,15 @@ function formatRemaining(ms) {
   return `${m}분 ${String(s).padStart(2, '0')}초`
 }
 
-function settlementSalt(storeCode) {
-  return `${storeCode}:settlement`
+// 결산 비밀번호는 서버에서 확인·저장한다(비밀번호 값은 화면으로 오지 않는다).
+async function settlementPinRequest(action, payload = {}) {
+  const res = await apiFetch('/api/settlement-pin', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ action, ...payload }),
+  })
+  const body = await res.json().catch(() => ({}))
+  return { ok: res.ok, body }
 }
 
 function unlockedStorageKey(storeCode) {
@@ -158,22 +165,19 @@ export default function SettlementScreen() {
       return
     }
     setAuthLoading(true)
-    supabase
-      .from('stores')
-      .select('settlement_pin_hash, settlement_failed_attempts, settlement_locked_until')
-      .eq('code', store.code)
-      .single()
-      .then(({ data, error: err }) => {
-        setAuthLoading(false)
-        if (err) {
-          setPinError(err.message)
+    settlementPinRequest('status')
+      .then(({ ok, body }) => {
+        if (!ok) {
+          setPinError(body.error || '결산 비밀번호 상태를 불러오지 못했어요.')
           return
         }
-        setAuth(data)
+        setAuth(body)
       })
+      .catch(() => setPinError('인터넷 연결을 확인해주세요.'))
+      .finally(() => setAuthLoading(false))
   }, [store])
 
-  const lockedUntilMs = auth?.settlement_locked_until ? new Date(auth.settlement_locked_until).getTime() : null
+  const lockedUntilMs = auth?.lockedUntil ? new Date(auth.lockedUntil).getTime() : null
   const isLocked = lockedUntilMs != null && lockedUntilMs > now
 
   useEffect(() => {
@@ -272,14 +276,10 @@ export default function SettlementScreen() {
     }
     if (!supabase) return
     setPinSubmitting(true)
-    const hash = await hashPin(newPin, settlementSalt(store.code))
-    const { error: err } = await supabase
-      .from('stores')
-      .update({ settlement_pin_hash: hash, settlement_failed_attempts: 0, settlement_locked_until: null })
-      .eq('code', store.code)
+    const { ok, body } = await settlementPinRequest('setup', { newPin }).catch(() => ({ ok: false, body: {} }))
     setPinSubmitting(false)
-    if (err) {
-      setPinError(err.message)
+    if (!ok) {
+      setPinError(body.error || '비밀번호를 설정하지 못했어요.')
       return
     }
     sessionStorage.setItem(unlockedStorageKey(store.code), '1')
@@ -287,42 +287,27 @@ export default function SettlementScreen() {
   }
 
   const handleUnlock = async () => {
-    if (!supabase || !auth || isLocked) return
+    if (!auth || isLocked) return
     if (!/^\d{4}$/.test(pinInput)) {
       setPinError('비밀번호 4자리를 입력하세요.')
       return
     }
     setPinSubmitting(true)
     setPinError('')
-    const hash = await hashPin(pinInput, settlementSalt(store.code))
-
-    if (hash === auth.settlement_pin_hash) {
-      await supabase
-        .from('stores')
-        .update({ settlement_failed_attempts: 0, settlement_locked_until: null })
-        .eq('code', store.code)
-      setPinSubmitting(false)
+    const { ok, body } = await settlementPinRequest('unlock', { pin: pinInput }).catch(() => ({ ok: false, body: {} }))
+    setPinSubmitting(false)
+    if (ok) {
       sessionStorage.setItem(unlockedStorageKey(store.code), '1')
       setUnlocked(true)
       return
     }
-
-    const nextAttempts = (auth.settlement_failed_attempts ?? 0) + 1
-    const shouldLock = nextAttempts >= MAX_ATTEMPTS
-    const nextLockedUntil = shouldLock ? new Date(Date.now() + LOCK_MINUTES * 60 * 1000).toISOString() : null
-
-    await supabase
-      .from('stores')
-      .update({ settlement_failed_attempts: shouldLock ? 0 : nextAttempts, settlement_locked_until: nextLockedUntil })
-      .eq('code', store.code)
-
-    setPinSubmitting(false)
     setPinInput('')
-    setAuth((prev) => ({ ...prev, settlement_failed_attempts: shouldLock ? 0 : nextAttempts, settlement_locked_until: nextLockedUntil }))
-    setNow(Date.now())
-    if (!shouldLock) {
-      setPinError(`비밀번호가 틀렸습니다 (${nextAttempts}/${MAX_ATTEMPTS})`)
+    if (body.lockedUntil) {
+      setAuth((prev) => ({ ...prev, lockedUntil: body.lockedUntil }))
+      setNow(Date.now())
+      return
     }
+    setPinError(body.error || '비밀번호를 확인하지 못했어요.')
   }
 
   const handleChangePin = async () => {
@@ -339,33 +324,12 @@ export default function SettlementScreen() {
     if (!supabase) return
 
     setChangePinSaving(true)
-    const { data, error: fetchErr } = await supabase
-      .from('stores')
-      .select('settlement_pin_hash')
-      .eq('code', store.code)
-      .single()
-    if (fetchErr) {
-      setChangePinSaving(false)
-      setChangePinError(fetchErr.message)
-      return
-    }
-
-    const currentHash = await hashPin(changeCurrentPin, settlementSalt(store.code))
-    if (currentHash !== data.settlement_pin_hash) {
-      setChangePinSaving(false)
-      setChangePinError('현재 비밀번호가 틀렸습니다.')
-      return
-    }
-
-    const newHash = await hashPin(changeNewPin, settlementSalt(store.code))
-    const { error: updateErr } = await supabase
-      .from('stores')
-      .update({ settlement_pin_hash: newHash, settlement_failed_attempts: 0, settlement_locked_until: null })
-      .eq('code', store.code)
-
+    const { ok, body } = await settlementPinRequest('change', { currentPin: changeCurrentPin, newPin: changeNewPin }).catch(
+      () => ({ ok: false, body: {} }),
+    )
     setChangePinSaving(false)
-    if (updateErr) {
-      setChangePinError(updateErr.message)
+    if (!ok) {
+      setChangePinError(body.error || '비밀번호를 바꾸지 못했어요.')
       return
     }
     setChangeCurrentPin('')
@@ -421,7 +385,7 @@ export default function SettlementScreen() {
     setAnalyzing(true)
     setUploadError('')
     try {
-      const res = await fetch('/api/analyze-settlement', {
+      const res = await apiFetch('/api/analyze-settlement', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(pendingImage),
@@ -530,7 +494,7 @@ export default function SettlementScreen() {
         {!supabase && <p className="hint">Supabase가 설정되지 않았습니다.</p>}
         {supabase && authLoading && <p className="hint">불러오는 중...</p>}
 
-        {supabase && !authLoading && auth && auth.settlement_pin_hash == null && (
+        {supabase && !authLoading && auth && !auth.hasPin && (
           <>
             <p className="hint">처음 사용이시네요. 이 화면 전용 비밀번호(4자리)를 새로 만드세요.</p>
             <div className="field">
@@ -567,7 +531,7 @@ export default function SettlementScreen() {
           </>
         )}
 
-        {supabase && !authLoading && auth && auth.settlement_pin_hash != null && (
+        {supabase && !authLoading && auth && auth.hasPin && (
           <>
             <div className="field">
               <label htmlFor="pinInput">비밀번호</label>
