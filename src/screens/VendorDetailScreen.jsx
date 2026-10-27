@@ -25,6 +25,7 @@ import {
 
 const PAYMENT_MEMO_PRESETS = ['계좌이체', '카드', '현금']
 const fmt = (n) => Math.round(Number(n)).toLocaleString()
+const isPreLedgerPayment = (p) => Boolean(p.paid_date) && p.paid_date < LEDGER_START
 
 export default function VendorDetailScreen() {
   const { store } = useStore()
@@ -65,6 +66,8 @@ export default function VendorDetailScreen() {
 
   const [deletePaymentTarget, setDeletePaymentTarget] = useState(null)
   const [deletingPayment, setDeletingPayment] = useState(false)
+  // 장부 시작 전 결제는 시작 잔액에 이미 녹아 있어서, 지울 때 시작 잔액도 그만큼 늘려야 미지급에 반영된다.
+  const [adjustOpeningOnDelete, setAdjustOpeningOnDelete] = useState(true)
 
   const [openingBalances, setOpeningBalances] = useState([])
   // 명세표 사진은 비공개 보관함에 있어서, 로그인한 기기에서만 열리는 1시간짜리 링크를 받아 보여준다.
@@ -157,6 +160,8 @@ export default function VendorDetailScreen() {
   const liveBalance = ledger.current
   const issues = ledger.reconcile()
   const openingSuggestion = ledger.hasOpening ? null : suggestOpening({ batches, payments })
+  // 명세표에 전잔액·현잔액을 한 번도 안 적는 거래처(디안·사방식품 등)는 장부를 대조할 기준이 없다.
+  const noStatementBalance = batches.length > 0 && !batches.some(hasBalanceInfo)
   const periodLedger = ledger.period(dateFrom, dateTo)
   const periodStart = !dateFrom || dateFrom < LEDGER_START ? LEDGER_START : dateFrom
   const monthlyLedger = ledger.months(currentMonth())
@@ -302,11 +307,25 @@ export default function VendorDetailScreen() {
     setError('')
 
     const { error: err } = await supabase.from('vendor_payments').delete().eq('id', deletePaymentTarget.id)
-    setDeletingPayment(false)
     if (err) {
+      setDeletingPayment(false)
       setError(err.message)
       return
     }
+
+    if (isPreLedgerPayment(deletePaymentTarget) && ledger.hasOpening && adjustOpeningOnDelete) {
+      const balance = ledger.opening + Number(deletePaymentTarget.amount)
+      const { error: openingErr } = await supabase.from('vendor_opening_balances').upsert(
+        { store_code: store.code, vendor_id: vendorId, as_of_date: LEDGER_START, balance },
+        { onConflict: 'vendor_id,as_of_date' },
+      )
+      if (openingErr) {
+        setError(
+          `결제는 지웠지만 시작 잔액을 고치지 못했어요. 시작 잔액을 ${fmt(balance)}원으로 직접 저장해 주세요. (${openingErr.message})`,
+        )
+      }
+    }
+    setDeletingPayment(false)
 
     setDeletePaymentTarget(null)
     setDataKey((k) => k + 1)
@@ -413,6 +432,16 @@ export default function VendorDetailScreen() {
           <p className="hint">
             장부 시작 잔액({addDays(LEDGER_START, -1)} 기준)에 그 뒤 입고를 더하고 직접 입력한 결제를 뺀 금액이에요.
           </p>
+
+          {noStatementBalance && (
+            <div className="price-alert-box">
+              <p className="price-alert-title">명세표에 잔액(전잔액·현잔액)이 없는 거래처예요</p>
+              <p className="hint">
+                잔액이 적힌 명세표가 없어서, 결제를 빠뜨리거나 잘못 지워도 앱이 차이를 찾아내지 못해요. 매달 말 거래처에
+                잔액을 물어보고 위 현재 미지급금과 맞는지 확인해 주세요.
+              </p>
+            </div>
+          )}
 
           {!ledger.hasOpening && (
             <div className="price-alert-box">
@@ -721,7 +750,10 @@ export default function VendorDetailScreen() {
                       type="button"
                       className="icon-btn"
                       aria-label="결제 기록 삭제"
-                      onClick={() => setDeletePaymentTarget(p)}
+                      onClick={() => {
+                        setDeletePaymentTarget(p)
+                        setAdjustOpeningOnDelete(true)
+                      }}
                     >
                       ✕
                     </button>
@@ -737,6 +769,32 @@ export default function VendorDetailScreen() {
                   <div className="price-alert-box price-alert-box-danger">
                     <p className="price-alert-title">이 결제 기록을 삭제할까요?</p>
                     <p className="hint">잘못 입력한 결제 기록만 지워지고, 되돌릴 수 없어요.</p>
+                    {isPreLedgerPayment(p) &&
+                      (ledger.hasOpening ? (
+                        <>
+                          <p className="hint">
+                            {LEDGER_START} 이전 결제라 장부 시작 잔액({fmt(ledger.opening)}원)에 이미 포함돼 있어요. 결제만
+                            지우면 미지급금이 그대로예요.
+                          </p>
+                          <label className="toggle-row">
+                            <input
+                              type="checkbox"
+                              checked={adjustOpeningOnDelete}
+                              onChange={(e) => setAdjustOpeningOnDelete(e.target.checked)}
+                              disabled={deletingPayment}
+                            />
+                            <span>
+                              시작 잔액도 {fmt(p.amount)}원 늘리기 ({fmt(ledger.opening)}원 →{' '}
+                              {fmt(ledger.opening + Number(p.amount))}원, 미지급으로 다시 잡혀요)
+                            </span>
+                          </label>
+                        </>
+                      ) : (
+                        <p className="hint">
+                          {LEDGER_START} 이전 결제예요. 장부 시작 잔액을 아직 안 넣어서, 지운 뒤 시작 잔액을 넣을 때 이
+                          결제가 빠진 금액으로 넣어주세요.
+                        </p>
+                      ))}
                     <div className="invoice-form">
                       <button
                         type="button"
