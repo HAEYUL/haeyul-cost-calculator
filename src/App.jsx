@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route } from 'react-router-dom'
 import { StoreProvider } from './context/StoreContext'
 import { ScrollManager } from './hooks/usePageHistoryState'
+import AppLayout from './components/AppLayout'
 import StoreSelectScreen from './screens/StoreSelectScreen'
 import MainMenuScreen from './screens/MainMenuScreen'
 import InvoiceScreen from './screens/InvoiceScreen'
@@ -39,36 +40,38 @@ export default function App() {
         <ScrollManager />
         <Routes>
           <Route path="/" element={<StoreSelectScreen />} />
-          <Route path="/menu" element={<MainMenuScreen />} />
-          <Route path="/invoices" element={<InvoiceScreen />} />
-          <Route path="/invoices/edit/:batchId" element={<InvoiceScreen />} />
-          <Route path="/price-alerts" element={<PriceAlertsScreen />} />
-          <Route path="/vendors" element={<VendorScreen />} />
-          <Route path="/vendors/ledger-setup" element={<LedgerSetupScreen />} />
-          <Route path="/vendors/bulk-payment" element={<BulkPaymentScreen />} />
-          <Route path="/vendors/vat-check" element={<VatCheckScreen />} />
-          <Route path="/vendors/:vendorId" element={<VendorDetailScreen />} />
-          <Route path="/spending-report" element={<SpendingReportScreen />} />
-          <Route path="/vendor-payment-report" element={<VendorPaymentReportScreen />} />
-          <Route path="/backup" element={<BackupScreen />} />
-          <Route path="/staff-schedule" element={<StaffScheduleScreen />} />
-          <Route path="/reorder-alerts" element={<ReorderAlertScreen />} />
-          <Route path="/consumption-pattern" element={<ConsumptionPatternScreen />} />
-          <Route path="/waste-report" element={<WasteReportScreen />} />
-          <Route path="/usage-report" element={<UsageReportScreen />} />
-          <Route path="/notification-settings" element={<NotificationSettingsScreen />} />
-          <Route path="/feedback" element={<FeedbackScreen />} />
-          <Route path="/ask" element={<AskScreen />} />
-          <Route path="/change-pin" element={<ChangeStorePinScreen />} />
-          <Route path="/inventory" element={<InventoryScreen />} />
-          <Route path="/inventory/:itemName/:unit" element={<InventoryDetailScreen />} />
-          <Route path="/price-trend" element={<PriceTrendScreen />} />
-          <Route path="/settlement" element={<SettlementScreen />} />
-          <Route path="/recipes" element={<RecipeScreen />} />
-          <Route path="/recipes/:menuName" element={<RecipeDetailScreen />} />
-          <Route path="/ingredient-matching" element={<MatchingScreen />} />
-          <Route path="/cost" element={<CostScreen />} />
-          <Route path="/cost/:menuName" element={<CostDetailScreen />} />
+          <Route element={<AppLayout />}>
+            <Route path="/menu" element={<MainMenuScreen />} />
+            <Route path="/invoices" element={<InvoiceScreen />} />
+            <Route path="/invoices/edit/:batchId" element={<InvoiceScreen />} />
+            <Route path="/price-alerts" element={<PriceAlertsScreen />} />
+            <Route path="/vendors" element={<VendorScreen />} />
+            <Route path="/vendors/ledger-setup" element={<LedgerSetupScreen />} />
+            <Route path="/vendors/bulk-payment" element={<BulkPaymentScreen />} />
+            <Route path="/vendors/vat-check" element={<VatCheckScreen />} />
+            <Route path="/vendors/:vendorId" element={<VendorDetailScreen />} />
+            <Route path="/spending-report" element={<SpendingReportScreen />} />
+            <Route path="/vendor-payment-report" element={<VendorPaymentReportScreen />} />
+            <Route path="/backup" element={<BackupScreen />} />
+            <Route path="/staff-schedule" element={<StaffScheduleScreen />} />
+            <Route path="/reorder-alerts" element={<ReorderAlertScreen />} />
+            <Route path="/consumption-pattern" element={<ConsumptionPatternScreen />} />
+            <Route path="/waste-report" element={<WasteReportScreen />} />
+            <Route path="/usage-report" element={<UsageReportScreen />} />
+            <Route path="/notification-settings" element={<NotificationSettingsScreen />} />
+            <Route path="/feedback" element={<FeedbackScreen />} />
+            <Route path="/ask" element={<AskScreen />} />
+            <Route path="/change-pin" element={<ChangeStorePinScreen />} />
+            <Route path="/inventory" element={<InventoryScreen />} />
+            <Route path="/inventory/:itemName/:unit" element={<InventoryDetailScreen />} />
+            <Route path="/price-trend" element={<PriceTrendScreen />} />
+            <Route path="/settlement" element={<SettlementScreen />} />
+            <Route path="/recipes" element={<RecipeScreen />} />
+            <Route path="/recipes/:menuName" element={<RecipeDetailScreen />} />
+            <Route path="/ingredient-matching" element={<MatchingScreen />} />
+            <Route path="/cost" element={<CostScreen />} />
+            <Route path="/cost/:menuName" element={<CostDetailScreen />} />
+          </Route>
         </Routes>
       </BrowserRouter>
     </StoreProvider>

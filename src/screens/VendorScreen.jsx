@@ -32,7 +32,6 @@ export default function VendorScreen() {
   const [newName, setNewName] = useState('')
   const [saving, setSaving] = useState(false)
   const [dataKey, setDataKey] = useState(0)
-  const [searchOpen, setSearchOpen] = useHistoryState('searchOpen', false)
   const [searchQuery, setSearchQuery] = useHistoryState('searchQuery', '')
 
   const [deleteTarget, setDeleteTarget] = useState(null)
@@ -117,6 +116,8 @@ export default function VendorScreen() {
   const needsSetupCount = vendorsWithBalance.filter((v) => v.needsSetup).length
 
   const totalBalance = vendorsWithBalance.reduce((sum, v) => sum + v.balance, 0)
+  const totalInvoiced = vendorsWithBalance.reduce((sum, v) => sum + v.invoiced, 0)
+  const totalPaid = vendorsWithBalance.reduce((sum, v) => sum + v.paid, 0)
 
   // 전체 거래처 입금액(기간) = 선택한 기간에 실제로 등록된 결제 기록을 전 거래처 걸쳐 더한 값.
   // 결제일 없는 기록은 거래처 상세 화면과 같은 기준으로 제외한다.
@@ -259,234 +260,275 @@ export default function VendorScreen() {
     setDataKey((k) => k + 1)
   }
 
+  const hasVendors = !loading && !error && vendors.length > 0
+
   return (
     <div className="screen screen-wide">
       <div className="screen-header">
         <button type="button" className="link-btn" onClick={() => navigate('/menu')}>
           ← 메인 메뉴
         </button>
-        <h1>거래처 관리</h1>
-        <p className="subtitle">{store.name} · 거래처별 이월 잔액·입고·결제와 미지급금(장부)을 확인해요</p>
+        <div className="page-title-row">
+          <div>
+            <h1>거래처 관리</h1>
+            <p className="subtitle">{store.name} · 거래처별 이월 잔액·입고·결제와 미지급금(장부)을 확인해요</p>
+          </div>
+          {hasVendors && (
+            <div className="page-actions">
+              <button type="button" className="action-btn" onClick={() => navigate('/vendors/ledger-setup')}>
+                장부 시작 설정
+              </button>
+              <button type="button" className="action-btn" onClick={() => navigate('/vendors/vat-check')}>
+                부가세 금액 점검{vatFixCount > 0 ? ` (${vatFixCount}장)` : ''}
+              </button>
+              <button
+                type="button"
+                className="action-btn action-btn-primary"
+                onClick={() => navigate('/vendors/bulk-payment')}
+              >
+                💳 일괄 결제 입력 (15일·말일)
+              </button>
+            </div>
+          )}
+        </div>
       </div>
 
-      {!loading && !error && vendors.length > 0 && (
-        <>
-          {needsSetupCount > 0 && (
-            <div className="price-alert-box">
-              <p className="price-alert-title">장부 시작 잔액을 아직 안 넣은 거래처가 {needsSetupCount}곳 있어요</p>
-              <p className="hint">시작 잔액(9월 말 잔액)이 없으면 0원부터 계산해서 미지급이 실제와 다를 수 있어요.</p>
-            </div>
-          )}
-          <button type="button" className="btn-primary" onClick={() => navigate('/vendors/bulk-payment')}>
-            일괄 결제 입력 (15일·말일)
-          </button>
-          {vatFixCount > 0 && (
-            <div className="price-alert-box price-alert-box-danger">
-              <p className="price-alert-title">부가세 금액 확인이 필요한 명세표가 {vatFixCount}장 있어요</p>
-              <p className="hint">공급가만 들어가 입고액·미지급이 부가세만큼 적게 잡혀 있어요.</p>
-            </div>
-          )}
-          <button type="button" className="btn-secondary" onClick={() => navigate('/vendors/ledger-setup')}>
-            장부 시작 설정
-          </button>
-          <button type="button" className="btn-secondary" onClick={() => navigate('/vendors/vat-check')}>
-            부가세 금액 점검{vatFixCount > 0 ? ` (${vatFixCount}장)` : ''}
-          </button>
-
-          <div className="month-nav">
-            <button
-              type="button"
-              className="chip"
-              onClick={() => setMonth((m) => shiftMonth(m, -1))}
-              disabled={month <= LEDGER_START_MONTH}
-              aria-label="이전 달"
-            >
-              ◀
-            </button>
-            <strong>{monthLabel(month)}</strong>
-            <button type="button" className="chip" onClick={() => setMonth((m) => shiftMonth(m, 1))} aria-label="다음 달">
-              ▶
-            </button>
-          </div>
-        </>
+      {hasVendors && needsSetupCount > 0 && (
+        <div className="price-alert-box">
+          <p className="price-alert-title">장부 시작 잔액을 아직 안 넣은 거래처가 {needsSetupCount}곳 있어요</p>
+          <p className="hint">시작 잔액(9월 말 잔액)이 없으면 0원부터 계산해서 미지급이 실제와 다를 수 있어요.</p>
+        </div>
+      )}
+      {hasVendors && vatFixCount > 0 && (
+        <div className="price-alert-box price-alert-box-danger">
+          <p className="price-alert-title">부가세 금액 확인이 필요한 명세표가 {vatFixCount}장 있어요</p>
+          <p className="hint">공급가만 들어가 입고액·미지급이 부가세만큼 적게 잡혀 있어요.</p>
+        </div>
       )}
 
       {!supabase && <p className="hint">Supabase가 설정되지 않았습니다.</p>}
-
-      {!loading && !error && vendors.length > 0 && (
-        <div className="cost-summary">
-          <div className="cost-summary-row">
-            <span>{isCurrentMonth ? '전체 미지급금' : `전체 월말 잔액 (${monthLabel(month)})`}</span>
-            <strong className={totalBalance > 0 ? 'alert-up' : ''}>{Math.round(totalBalance).toLocaleString()}원</strong>
-          </div>
-        </div>
-      )}
-
-      {!loading && !error && vendors.length > 0 && (
-        <div className="cost-summary">
-          <div className="date-range">
-            <input
-              type="date"
-              className="input"
-              value={paymentDateFrom}
-              onChange={(e) => setPaymentDateFrom(e.target.value)}
-              aria-label="시작일"
-            />
-            <span className="date-range-sep">~</span>
-            <input
-              type="date"
-              className="input"
-              value={paymentDateTo}
-              onChange={(e) => setPaymentDateTo(e.target.value)}
-              aria-label="종료일"
-            />
-          </div>
-          <button
-            type="button"
-            className="cost-row-btn"
-            style={{ marginTop: 8 }}
-            onClick={() =>
-              navigate('/vendor-payment-report', { state: { dateRange: { dateFrom: paymentDateFrom, dateTo: paymentDateTo } } })
-            }
-          >
-            <div className="cost-summary-row">
-              <span>전체 입금액 (결제 입금 합계)</span>
-              <strong>{Math.round(totalPaymentInPeriod).toLocaleString()}원</strong>
-            </div>
-            <p className="hint" style={{ margin: '4px 0 0' }}>거래처별로 보기 →</p>
-          </button>
-        </div>
-      )}
-
-      <div className="field">
-        <label htmlFor="newVendorName">새 거래처 추가</label>
-        <input
-          id="newVendorName"
-          className="input"
-          value={newName}
-          onChange={(e) => setNewName(e.target.value)}
-          placeholder="예: 국일농산"
-        />
-      </div>
-      <button type="button" className="btn-secondary" onClick={handleAdd} disabled={!newName.trim() || saving}>
-        {saving ? '추가 중...' : '거래처 추가'}
-      </button>
-
       {loading && <p className="hint">불러오는 중...</p>}
       {error && <p className="error-text">{error}</p>}
-      {!loading && !error && vendors.length === 0 && <p className="hint">등록된 거래처가 없습니다.</p>}
 
-      {!loading && vendors.length > 0 && (
-        <div className="history-header">
-          <h2 className="section-title">거래처 목록</h2>
-          <button
-            type="button"
-            className="icon-btn"
-            aria-label="거래처 검색"
-            onClick={() => {
-              setSearchOpen((v) => !v)
-              setSearchQuery('')
-            }}
-          >
-            🔍
-          </button>
+      {hasVendors && (
+        <div className="kpi-grid">
+          <div className="kpi-card">
+            <span className="kpi-label">{isCurrentMonth ? '전체 미지급금' : `전체 월말 잔액 (${monthLabel(month)})`}</span>
+            <strong className={`kpi-value${totalBalance > 0 ? ' alert-up' : ''}`}>{Math.round(totalBalance).toLocaleString()}원</strong>
+          </div>
+          <div className="kpi-card">
+            <span className="kpi-label">{monthLabel(month)} 입고</span>
+            <strong className="kpi-value">{Math.round(totalInvoiced).toLocaleString()}원</strong>
+          </div>
+          <div className="kpi-card">
+            <span className="kpi-label">{monthLabel(month)} 결제</span>
+            <strong className="kpi-value">{Math.round(totalPaid).toLocaleString()}원</strong>
+          </div>
+          <div className="kpi-card">
+            <span className="kpi-label">거래처 수</span>
+            <strong className="kpi-value">{vendors.length}곳</strong>
+          </div>
         </div>
       )}
 
-      {searchOpen && (
-        <div className="field">
-          <input
-            type="text"
-            className="input"
-            placeholder="거래처명으로 검색"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            autoFocus={!searchQuery}
-          />
-        </div>
-      )}
-
-      {trimmedQuery && <p className="hint">검색 결과 {visibleVendors.length}개</p>}
-      {trimmedQuery && visibleVendors.length === 0 && <p className="hint">일치하는 거래처가 없어요.</p>}
-
-      <ul className="history-list">
-        {visibleVendors.map((v) => (
-          <li key={v.id} className="history-row">
-            <button type="button" className="cost-row-btn" onClick={() => navigate(`/vendors/${v.id}`)}>
-              <div className="history-row-main">
-                <span className="history-item">{v.name}</span>
-                <span className={v.balance > 0 ? 'alert-up' : ''}>
-                  {isCurrentMonth ? '미지급' : '월말 잔액'} {Math.round(v.balance).toLocaleString()}원
-                </span>
-              </div>
-              <div className="history-row-sub">
-                <span>지난달 잔액 {Math.round(v.carryOver).toLocaleString()}원</span>
-                <span>이달 입고 {Math.round(v.invoiced).toLocaleString()}원</span>
-                <span>이달 결제 {Math.round(v.paid).toLocaleString()}원</span>
-              </div>
-              {(v.issueCount > 0 || v.needsSetup) && (
-                <div className="history-row-sub">
-                  {v.needsSetup && <span className="alert-up">장부 시작 잔액 미입력</span>}
-                  {v.issueCount > 0 && <span className="alert-up">⚠️ 명세표 잔액과 차이 {v.issueCount}건 (확인 필요)</span>}
-                </div>
-              )}
-            </button>
-            <div className="inventory-row-actions">
-              <button
-                type="button"
-                className="link-btn link-btn-danger"
-                onClick={() => openDeleteConfirm(v)}
-              >
-                거래처 삭제
-              </button>
-            </div>
-
-            {deleteTarget?.id === v.id && (
-              <div className="price-alert-box price-alert-box-danger">
-                {deleteCounts == null ? (
-                  <p className="hint">확인 중...</p>
-                ) : !hasVendorData ? (
-                  <>
-                    <p className="price-alert-title">"{v.name}" 거래처를 삭제할까요?</p>
-                    <p className="hint">입고·결제·기초 잔액 자료가 없는 거래처예요. 삭제하면 되돌릴 수 없어요.</p>
-                  </>
-                ) : deleteConfirmStage === 1 ? (
-                  <>
-                    <p className="price-alert-title">⚠️ "{v.name}"에는 자료가 있어요</p>
-                    <p className="hint">
-                      입고 {deleteCounts.batches}건, 결제 {deleteCounts.payments}건, 기초 잔액 {deleteCounts.balances}
-                      건이 함께 삭제돼요. 되돌릴 수 없어요.
-                    </p>
-                  </>
-                ) : (
-                  <>
-                    <p className="price-alert-title">정말 삭제할까요?</p>
-                    <p className="hint">다시 한번 확인할게요. "{v.name}"의 모든 자료가 지금 삭제돼요.</p>
-                  </>
-                )}
-                {error && <p className="error-text">{error}</p>}
-                <div className="invoice-form">
-                  <button type="button" className="btn-secondary" onClick={closeDeleteConfirm} disabled={deleting}>
-                    취소
-                  </button>
+      <div className="split-layout">
+        <div className="split-main">
+          {!loading && !error && vendors.length === 0 && <p className="hint">등록된 거래처가 없습니다.</p>}
+          {hasVendors && (
+            <div className="panel">
+              <div className="panel-header">
+                <h2 className="panel-title">
+                  거래처 목록 <span className="count-badge">{vendors.length}곳</span>
+                </h2>
+                <div className="month-nav">
                   <button
                     type="button"
-                    className="btn-primary"
-                    onClick={handleConfirmClick}
-                    disabled={deleting || deleteCounts == null}
+                    className="chip"
+                    onClick={() => setMonth((m) => shiftMonth(m, -1))}
+                    disabled={month <= LEDGER_START_MONTH}
+                    aria-label="이전 달"
                   >
-                    {deleting
-                      ? '삭제 중...'
-                      : hasVendorData && deleteConfirmStage === 1
-                        ? '자료 있음, 계속하기'
-                        : '삭제'}
+                    ◀
+                  </button>
+                  <strong>{monthLabel(month)}</strong>
+                  <button type="button" className="chip" onClick={() => setMonth((m) => shiftMonth(m, 1))} aria-label="다음 달">
+                    ▶
                   </button>
                 </div>
               </div>
-            )}
-          </li>
-        ))}
-      </ul>
+              <div className="toolbar">
+                <input
+                  type="search"
+                  className="input toolbar-search"
+                  placeholder="🔍 거래처명으로 검색"
+                  aria-label="거래처 검색"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                />
+              </div>
+
+              {trimmedQuery && <p className="hint">검색 결과 {visibleVendors.length}개</p>}
+              {trimmedQuery && visibleVendors.length === 0 && <p className="hint">일치하는 거래처가 없어요.</p>}
+
+              {visibleVendors.length > 0 && (
+                <ul className="data-list">
+                  <li className="data-head ven-line" aria-hidden="true">
+                    <span className="ven-main">
+                      <span className="ven-name">거래처</span>
+                      <span className="ven-num">지난달 잔액</span>
+                      <span className="ven-num">이달 입고</span>
+                      <span className="ven-num">이달 결제</span>
+                      <span className="ven-balance">{isCurrentMonth ? '현재 미지급' : '월말 잔액'}</span>
+                    </span>
+                    <span className="ven-actions">관리</span>
+                  </li>
+                  {visibleVendors.map((v) => (
+                    <li key={v.id} className="data-row">
+                      <div className="ven-line">
+                        <button type="button" className="cost-row-btn ven-main" onClick={() => navigate(`/vendors/${v.id}`)}>
+                          <span className="ven-name">
+                            <span className="history-item">{v.name}</span>
+                            {v.needsSetup && <span className="status-tag status-tag-danger">장부 시작 잔액 미입력</span>}
+                            {v.issueCount > 0 && (
+                              <span className="status-tag status-tag-danger">⚠️ 명세표 잔액 차이 {v.issueCount}건</span>
+                            )}
+                          </span>
+                          <span className="ven-num" data-label="지난달">
+                            {Math.round(v.carryOver).toLocaleString()}
+                          </span>
+                          <span className="ven-num" data-label="입고">
+                            {Math.round(v.invoiced).toLocaleString()}
+                          </span>
+                          <span className="ven-num" data-label="결제">
+                            {Math.round(v.paid).toLocaleString()}
+                          </span>
+                          <span className={`ven-balance${v.balance > 0 ? ' alert-up' : isZero(v.balance) ? ' paid-badge' : ''}`}>
+                            {Math.round(v.balance).toLocaleString()}원
+                          </span>
+                        </button>
+                        <div className="ven-actions">
+                          <button
+                            type="button"
+                            className="mini-btn"
+                            onClick={() => navigate(`/vendors/${v.id}`, { state: { scrollTo: 'payment' } })}
+                          >
+                            결제 입력
+                          </button>
+                          <button type="button" className="mini-btn mini-btn-danger" onClick={() => openDeleteConfirm(v)}>
+                            삭제
+                          </button>
+                        </div>
+                      </div>
+
+                      {deleteTarget?.id === v.id && (
+                        <div className="price-alert-box price-alert-box-danger">
+                          {deleteCounts == null ? (
+                            <p className="hint">확인 중...</p>
+                          ) : !hasVendorData ? (
+                            <>
+                              <p className="price-alert-title">"{v.name}" 거래처를 삭제할까요?</p>
+                              <p className="hint">입고·결제·기초 잔액 자료가 없는 거래처예요. 삭제하면 되돌릴 수 없어요.</p>
+                            </>
+                          ) : deleteConfirmStage === 1 ? (
+                            <>
+                              <p className="price-alert-title">⚠️ "{v.name}"에는 자료가 있어요</p>
+                              <p className="hint">
+                                입고 {deleteCounts.batches}건, 결제 {deleteCounts.payments}건, 기초 잔액 {deleteCounts.balances}
+                                건이 함께 삭제돼요. 되돌릴 수 없어요.
+                              </p>
+                            </>
+                          ) : (
+                            <>
+                              <p className="price-alert-title">정말 삭제할까요?</p>
+                              <p className="hint">다시 한번 확인할게요. "{v.name}"의 모든 자료가 지금 삭제돼요.</p>
+                            </>
+                          )}
+                          {error && <p className="error-text">{error}</p>}
+                          <div className="invoice-form">
+                            <button type="button" className="btn-secondary" onClick={closeDeleteConfirm} disabled={deleting}>
+                              취소
+                            </button>
+                            <button
+                              type="button"
+                              className="btn-primary"
+                              onClick={handleConfirmClick}
+                              disabled={deleting || deleteCounts == null}
+                            >
+                              {deleting
+                                ? '삭제 중...'
+                                : hasVendorData && deleteConfirmStage === 1
+                                  ? '자료 있음, 계속하기'
+                                  : '삭제'}
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          )}
+        </div>
+
+        <aside className="split-side">
+          <div className="panel">
+            <h2 className="panel-title">➕ 새 거래처 추가</h2>
+            <div className="field">
+              <label htmlFor="newVendorName" className="sr-only">
+                새 거래처명
+              </label>
+              <input
+                id="newVendorName"
+                className="input"
+                value={newName}
+                onChange={(e) => setNewName(e.target.value)}
+                placeholder="예: 국일농산"
+              />
+            </div>
+            <button type="button" className="btn-secondary" onClick={handleAdd} disabled={!newName.trim() || saving}>
+              {saving ? '추가 중...' : '거래처 추가'}
+            </button>
+          </div>
+
+          {hasVendors && (
+            <div className="panel">
+              <h2 className="panel-title">💰 기간별 입금액</h2>
+              <div className="date-range">
+                <input
+                  type="date"
+                  className="input"
+                  value={paymentDateFrom}
+                  onChange={(e) => setPaymentDateFrom(e.target.value)}
+                  aria-label="시작일"
+                />
+                <span className="date-range-sep">~</span>
+                <input
+                  type="date"
+                  className="input"
+                  value={paymentDateTo}
+                  onChange={(e) => setPaymentDateTo(e.target.value)}
+                  aria-label="종료일"
+                />
+              </div>
+              <button
+                type="button"
+                className="cost-row-btn"
+                style={{ marginTop: 8 }}
+                onClick={() =>
+                  navigate('/vendor-payment-report', { state: { dateRange: { dateFrom: paymentDateFrom, dateTo: paymentDateTo } } })
+                }
+              >
+                <div className="cost-summary-row">
+                  <span>전체 입금액 (결제 입금 합계)</span>
+                  <strong>{Math.round(totalPaymentInPeriod).toLocaleString()}원</strong>
+                </div>
+                <p className="hint" style={{ margin: '4px 0 0' }}>거래처별로 보기 →</p>
+              </button>
+            </div>
+          )}
+        </aside>
+      </div>
     </div>
   )
 }

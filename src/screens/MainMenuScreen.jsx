@@ -8,54 +8,7 @@ import { UNIT_LABELS } from '../lib/units'
 import { stockKey } from '../lib/stockKey'
 import { rowDateStr } from '../lib/rowDateStr'
 import { groupByVendor, makeLedger } from '../lib/vendorLedger'
-
-const MENU_SECTIONS = [
-  {
-    title: '입고 · 재고',
-    items: [
-      { label: '입고 입력', path: '/invoices' },
-      { label: '재고 관리', path: '/inventory' },
-    ],
-  },
-  {
-    title: '거래처 · 정산',
-    items: [
-      { label: '거래처 관리', path: '/vendors' },
-      { label: '거래처별 결제액', path: '/vendor-payment-report' },
-      { label: '거래처 물품 입고액', path: '/spending-report' },
-      { label: '단가 추이 조회', path: '/price-trend' },
-      { label: '매장운영결산', path: '/settlement' },
-    ],
-  },
-  {
-    title: '레시피 · 원가',
-    items: [
-      { label: '레시피 입력', path: '/recipes' },
-      { label: '재료 매칭', path: '/ingredient-matching' },
-      { label: '메뉴별 원가확인', path: '/cost' },
-    ],
-  },
-  {
-    title: '리포트 · 분석',
-    items: [
-      { label: '재주문 알림', path: '/reorder-alerts' },
-      { label: '소비 패턴 분석', path: '/consumption-pattern' },
-      { label: '품목별 사용 리포트', path: '/usage-report' },
-      { label: '폐기/손실 리포트', path: '/waste-report' },
-    ],
-  },
-  {
-    title: '설정 · 기타',
-    items: [
-      { label: '알림 설정', path: '/notification-settings' },
-      { label: '데이터 백업', path: '/backup' },
-      { label: '직원 근무표', path: '/staff-schedule' },
-      { label: '불편사항/건의사항', path: '/feedback' },
-      { label: '사용법 물어보기', path: '/ask' },
-      { label: '매장 비밀번호 변경', path: '/change-pin' },
-    ],
-  },
-]
+import { MENU_SECTIONS } from '../data/menuSections'
 
 const MARGIN_WARNING_RATIO = 40
 
@@ -278,11 +231,11 @@ export default function MainMenuScreen() {
   if (!store) return null
 
   return (
-    <div className="screen">
-      <div className="screen-header">
+    <div className="screen screen-menu">
+      <div className="menu-topbar">
         <button
           type="button"
-          className="link-btn"
+          className="link-btn menu-change-store"
           onClick={() => {
             setStore(null)
             navigate('/')
@@ -290,8 +243,8 @@ export default function MainMenuScreen() {
         >
           ← 매장 변경
         </button>
+        <div className="store-badge">{store.name}</div>
       </div>
-      <div className="store-badge">{store.name}</div>
 
       {!loading && !error && supabase && (
         <div className="dashboard">
@@ -393,17 +346,24 @@ export default function MainMenuScreen() {
 
       <div className="menu-list">
         {MENU_SECTIONS.map((section) => (
-          <div key={section.title} className="menu-group">
-            <p className="menu-group-title">{section.title}</p>
-            {section.items.map((item) => (
-              <button
-                key={item.path}
-                className="menu-btn"
-                onClick={() => navigate(item.path)}
-              >
-                {item.label}
-              </button>
-            ))}
+          <div key={section.title} className={`menu-group menu-group-${section.area}`}>
+            <p className="menu-group-title">
+              <span aria-hidden="true">{section.icon}</span> {section.title}
+            </p>
+            <div className="menu-group-items">
+              {section.items.map((item) => (
+                <button
+                  key={item.path}
+                  className="menu-btn"
+                  onClick={() => navigate(item.path)}
+                >
+                  <span className="menu-btn-icon" aria-hidden="true">
+                    {item.icon}
+                  </span>
+                  <span className="menu-btn-label">{item.label}</span>
+                </button>
+              ))}
+            </div>
           </div>
         ))}
       </div>
