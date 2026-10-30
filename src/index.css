@@ -1335,11 +1335,66 @@ button.kpi-card {
   font-size: 17px;
 }
 
-.inv-note {
-  flex-basis: 100%;
-  font-size: 13px;
-  font-weight: 400;
+.inv-name .history-item,
+.ven-name .history-item {
+  word-break: keep-all;
+  overflow-wrap: anywhere;
+}
+
+.inv-badge {
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--text-muted) 12%, transparent);
   color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: help;
+}
+
+.inv-badge-warn {
+  color: #b8860b;
+  background: rgba(184, 134, 11, 0.15);
+}
+
+.action-menu {
+  position: relative;
+}
+
+.action-menu-toggle {
+  padding: 6px 12px;
+}
+
+.action-menu-list {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  z-index: 20;
+  min-width: 160px;
+  display: flex;
+  flex-direction: column;
+  padding: 6px;
+  border-radius: 12px;
+  border: 1.5px solid var(--border);
+  background: var(--surface);
+  box-shadow: 0 10px 28px -8px rgba(0, 0, 0, 0.3);
+}
+
+.action-menu-item {
+  padding: 9px 12px;
+  border: none;
+  border-radius: 8px;
+  background: none;
+  color: var(--text);
+  font-size: 15px;
+  text-align: left;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.action-menu-item:hover,
+.action-menu-item:focus-visible {
+  background: color-mix(in srgb, var(--accent) 12%, var(--surface));
 }
 
 .inv-current,
@@ -1351,6 +1406,15 @@ button.kpi-card {
   font-size: 17px;
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
+}
+
+/* 카드형에서는 이름 바로 옆(오른쪽)에 남은 금액·재고가 오고, 세부 숫자는 다음 줄로 */
+.ven-balance {
+  order: 1;
+}
+
+.ven-num {
+  order: 2;
 }
 
 .inv-num,
@@ -1602,112 +1666,6 @@ button.kpi-card {
     flex: 1 1 260px;
   }
 
-  /* 목록을 표처럼: 제목줄 + 칸 맞춤 */
-  .data-list .data-head {
-    display: grid;
-    padding: 10px 0;
-    border-bottom: 1.5px solid var(--border);
-    background: color-mix(in srgb, var(--text-muted) 7%, transparent);
-    font-size: 13px;
-    font-weight: 700;
-    color: var(--text-muted);
-  }
-
-  .data-head .inv-name,
-  .data-head .ven-name,
-  .data-head .inv-current,
-  .data-head .ven-balance {
-    font-size: 13px;
-    font-weight: 700;
-  }
-
-  .data-head .inv-num,
-  .data-head .ven-num {
-    font-size: 13px;
-    color: var(--text-muted);
-  }
-
-  .data-row {
-    padding: 10px 0;
-  }
-
-  .data-row:hover {
-    background: color-mix(in srgb, var(--accent) 4%, transparent);
-  }
-
-  .inv-line {
-    grid-template-columns: 44px minmax(0, 1fr) 370px;
-    align-items: center;
-    gap: 0 8px;
-  }
-
-  .pin-btn,
-  .pin-btn-space {
-    justify-self: center;
-  }
-
-  .inv-main {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) 110px 70px 70px 70px 64px;
-    align-items: center;
-    gap: 8px;
-  }
-
-  .inv-name,
-  .ven-name {
-    font-size: 16px;
-  }
-
-  .inv-current,
-  .ven-balance {
-    flex-basis: auto;
-    margin-left: 0;
-    font-size: 16px;
-  }
-
-  .inv-num,
-  .ven-num {
-    text-align: right;
-    font-size: 15px;
-    color: var(--text);
-  }
-
-  .inv-num::before,
-  .ven-num::before {
-    content: none;
-  }
-
-  .inv-status {
-    text-align: center;
-  }
-
-  .inv-actions,
-  .ven-actions {
-    grid-column: auto;
-    justify-content: flex-end;
-    margin-top: 0;
-    padding-right: 8px;
-  }
-
-  .ven-line {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) 160px;
-    align-items: center;
-    gap: 0 8px;
-  }
-
-  .ven-line .ven-actions {
-    margin-top: 0;
-  }
-
-  .ven-main {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) 130px 130px 130px 150px;
-    align-items: center;
-    gap: 8px;
-    padding-left: 12px;
-  }
-
   .split-side {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1892,5 +1850,125 @@ button.kpi-card {
     border-radius: 9px;
     background: color-mix(in srgb, var(--accent) 12%, var(--surface));
     font-size: 17px;
+  }
+}
+
+/* 재고·거래처 목록을 표처럼 보여주는 건 넓은 화면(왼쪽 메뉴판을 빼고도 품목명 칸이 충분할 때)만.
+   그보다 좁거나 화면을 확대해서 보면 휴대폰처럼 카드형으로 보여 이름이 한 글자씩 끊기지 않는다. */
+@media (min-width: 1280px) {
+  /* 목록을 표처럼: 제목줄 + 칸 맞춤 */
+  .data-list .data-head {
+    display: grid;
+    padding: 10px 0;
+    border-bottom: 1.5px solid var(--border);
+    background: color-mix(in srgb, var(--text-muted) 7%, transparent);
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--text-muted);
+  }
+
+  .data-head .inv-name,
+  .data-head .ven-name,
+  .data-head .inv-current,
+  .data-head .ven-balance {
+    font-size: 13px;
+    font-weight: 700;
+  }
+
+  .data-head .inv-num,
+  .data-head .ven-num {
+    font-size: 13px;
+    color: var(--text-muted);
+  }
+
+  .data-row {
+    padding: 10px 0;
+  }
+
+  .data-row:hover {
+    background: color-mix(in srgb, var(--accent) 4%, transparent);
+  }
+
+  .inv-line {
+    grid-template-columns: 44px minmax(0, 1fr) 100px;
+    align-items: center;
+    gap: 0 8px;
+  }
+
+  .pin-btn,
+  .pin-btn-space {
+    justify-self: center;
+  }
+
+  .inv-main {
+    display: grid;
+    grid-template-columns: minmax(200px, 1fr) 110px 70px 70px 70px 64px;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .inv-name,
+  .ven-name {
+    font-size: 16px;
+  }
+
+  .inv-current,
+  .ven-balance {
+    flex-basis: auto;
+    margin-left: 0;
+    font-size: 16px;
+  }
+
+  .inv-num,
+  .ven-num {
+    text-align: right;
+    font-size: 15px;
+    color: var(--text);
+  }
+
+  .inv-num::before,
+  .ven-num::before {
+    content: none;
+  }
+
+  .inv-status {
+    text-align: center;
+  }
+
+  .inv-actions,
+  .ven-actions {
+    grid-column: auto;
+    justify-content: flex-end;
+    margin-top: 0;
+    padding-right: 8px;
+  }
+
+  .ven-line {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 160px;
+    align-items: center;
+    gap: 0 8px;
+  }
+
+  .ven-line .ven-actions {
+    margin-top: 0;
+  }
+
+  .ven-main {
+    display: grid;
+    grid-template-columns: minmax(160px, 1fr) 120px 120px 120px 140px;
+    align-items: center;
+    gap: 8px;
+    padding-left: 12px;
+  }
+
+  .ven-balance,
+  .ven-num {
+    order: 0;
+  }
+
+  .action-menu-list {
+    left: auto;
+    right: 0;
   }
 }

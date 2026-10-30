@@ -8,6 +8,7 @@ import { UNIT_LABELS } from '../lib/units'
 import { stockKey } from '../lib/stockKey'
 import { STOCK_STATUS, stockStatus } from '../lib/stockStatus'
 import { downloadCsv, rowsToCsv } from '../lib/csvExport'
+import ActionMenu from '../components/ActionMenu'
 
 const NO_UNIT_KEY = 'none'
 
@@ -334,15 +335,24 @@ export default function InventoryScreen() {
           <span className="inv-name">
             <span className="history-item">{r.itemName}</span>
             {r.unit === 'box' && !recipeUnitByItem.has(r.itemName) && (
-              <span className="inv-note">📦 박스당 개수/kg 환산 전 · "이름 수정" 또는 "레시피 단위"에서 등록</span>
-            )}
-            {recipeUnitByItem.has(r.itemName) && (
-              <span className="inv-note">
-                🍱 레시피 단위: {UNIT_LABELS[recipeUnitByItem.get(r.itemName).recipeUnit] ?? recipeUnitByItem.get(r.itemName).recipeUnit}
-                {' '}(1{r.unit ? unitText(r) : '단위 없음'} = {recipeUnitByItem.get(r.itemName).ratio}
-                {UNIT_LABELS[recipeUnitByItem.get(r.itemName).recipeUnit] ?? recipeUnitByItem.get(r.itemName).recipeUnit})
+              <span
+                className="inv-badge inv-badge-warn"
+                title='박스당 개수/kg 환산 전이에요. "이름 수정" 또는 "레시피 단위"에서 등록할 수 있어요.'
+              >
+                📦 환산 필요
               </span>
             )}
+            {recipeUnitByItem.has(r.itemName) &&
+              (() => {
+                const { recipeUnit, ratio } = recipeUnitByItem.get(r.itemName)
+                const recipeUnitLabel = UNIT_LABELS[recipeUnit] ?? recipeUnit
+                return (
+                  <span className="inv-badge" title={`레시피에서는 ${recipeUnitLabel} 단위로 원가를 계산해요`}>
+                    🍱 1{r.unit ? unitText(r) : '단위 없음'}={ratio}
+                    {recipeUnitLabel}
+                  </span>
+                )
+              })()}
           </span>
           <span className={`inv-current${r.current < 0 ? ' alert-up' : ''}`}>
             {r.current.toLocaleString()}
@@ -362,32 +372,23 @@ export default function InventoryScreen() {
           </span>
         </button>
         <div className="inv-actions">
-          <button
-            type="button"
-            className="mini-btn"
-            onClick={() => {
-              setRenameTarget({ itemName: r.itemName, unit: r.unit })
-              setRenameInput(r.itemName)
-              setRenameUnit(r.unit)
-              setRenameRatio('')
-              setRenameMessage('')
-            }}
-          >
-            이름 수정
-          </button>
-          <button type="button" className="mini-btn" onClick={() => openMergeTarget(r)}>
-            합치기
-          </button>
-          <button type="button" className="mini-btn" onClick={() => openRecipeUnit(r)}>
-            레시피 단위
-          </button>
-          <button
-            type="button"
-            className="mini-btn"
-            onClick={() => navigate(detailPath(r), { state: { scrollTo: 'stock-count' } })}
-          >
-            재고 실사
-          </button>
+          <ActionMenu
+            items={[
+              {
+                label: '이름 수정',
+                onClick: () => {
+                  setRenameTarget({ itemName: r.itemName, unit: r.unit })
+                  setRenameInput(r.itemName)
+                  setRenameUnit(r.unit)
+                  setRenameRatio('')
+                  setRenameMessage('')
+                },
+              },
+              { label: '합치기', onClick: () => openMergeTarget(r) },
+              { label: '레시피 단위 설정', onClick: () => openRecipeUnit(r) },
+              { label: '재고 실사', onClick: () => navigate(detailPath(r), { state: { scrollTo: 'stock-count' } }) },
+            ]}
+          />
         </div>
       </div>
 
