@@ -943,250 +943,261 @@ export default function InvoiceScreen() {
   return (
     <div className="screen screen-wide">
       <div className="screen-header">
-        <div className="screen-header-row">
-          <button type="button" className="link-btn" onClick={() => navigate('/menu')}>
-            ← 메인 메뉴
-          </button>
-          <button type="button" className="link-btn" onClick={() => navigate('/price-alerts')}>
-            단가 변동 알림함 →
-          </button>
+        <button type="button" className="link-btn" onClick={() => navigate('/menu')}>
+          ← 메인 메뉴
+        </button>
+        <div className="page-title-row">
+          <div>
+            <h1>{editMode ? '입고 수정' : '입고 입력'}</h1>
+            <p className="subtitle">
+              {editMode
+                ? `${store.name} · 저장된 명세표의 품목을 고쳐서 다시 저장해요`
+                : `${store.name} · 거래명세표 사진을 올리면 자동으로 읽어드려요`}
+            </p>
+          </div>
+          <div className="page-actions">
+            <button type="button" className="action-btn" onClick={() => navigate('/price-alerts')}>
+              🔔 단가 변동 알림함
+            </button>
+            <button type="button" className="action-btn" onClick={() => navigate('/vendors')}>
+              🏪 거래처 관리
+            </button>
+          </div>
         </div>
-        <div className="screen-header-row">
-          <span />
-          <button type="button" className="link-btn" onClick={() => navigate('/vendors')}>
-            거래처 관리 →
-          </button>
-        </div>
-        <h1>{editMode ? '입고 수정' : '입고 입력'}</h1>
-        <p className="subtitle">
-          {editMode
-            ? `${store.name} · 저장된 명세표의 품목을 고쳐서 다시 저장해요`
-            : `${store.name} · 거래명세표 사진을 올리면 자동으로 읽어드려요`}
-        </p>
       </div>
 
       {loadingEdit && <p className="hint">불러오는 중...</p>}
 
-      {!editMode && (
-        <>
-          <div className="upload-btn-row">
-            <label className="upload-btn">
-              {previewUrl ? '다른 파일 선택' : '파일 선택'}
-              <input type="file" accept="image/*" onChange={handleFileChange} hidden />
-            </label>
-            <label className="upload-btn">
-              카메라로 촬영
-              <input type="file" accept="image/*" capture="environment" onChange={handleFileChange} hidden />
-            </label>
-          </div>
+      <div className={`invoice-split${editMode ? ' invoice-split-single' : ''}`}>
+        {!editMode && (
+          <div className="panel invoice-photo">
+            <h2 className="panel-title">📷 명세표 사진</h2>
+            <div className="upload-btn-row">
+              <label className="upload-btn">
+                {previewUrl ? '다른 파일 선택' : '파일 선택'}
+                <input type="file" accept="image/*" onChange={handleFileChange} hidden />
+              </label>
+              <label className="upload-btn">
+                카메라로 촬영
+                <input type="file" accept="image/*" capture="environment" onChange={handleFileChange} hidden />
+              </label>
+            </div>
 
-          {previewUrl && (
-            <div className="photo-preview">
-              <img src={previewUrl} alt="거래명세표 미리보기" />
+            {previewUrl && (
+              <div className="photo-preview">
+                <img src={previewUrl} alt="거래명세표 미리보기" />
+              </div>
+            )}
+
+            {previewUrl && (
+              <button type="button" className="btn-primary" onClick={handleAnalyze} disabled={analyzing || analyzed}>
+                {analyzing ? '분석 중...' : analyzed ? '분석완료' : '분석하기'}
+              </button>
+            )}
+          </div>
+        )}
+
+        <div className="invoice-alerts">
+          {error && <p className="error-text">{error}</p>}
+          {saveMessage && <p className="success-text">{saveMessage}</p>}
+
+          {duplicateWarning && (
+            <div className="price-alert-box">
+              <p className="price-alert-title">이미 입고된 내역이 있어요</p>
+              <p className="hint">
+                {duplicateWarning.vendorName} · {duplicateWarning.date}에 이미 저장된 입고 내역이 있습니다.{' '}
+                {duplicateWarning.matchReason === 'balance'
+                  ? `명세표 전잔액(${Math.round(duplicateWarning.balance).toLocaleString()}원)이 같아요.`
+                  : `물품(${duplicateWarning.itemNames.join(', ')})이 겹쳐요.`}{' '}
+                같은 사진을 다시 올린 게 아닌지 확인해주세요.
+              </p>
+              <div className="invoice-form">
+                <button type="button" className="btn-secondary" onClick={() => setDuplicateWarning(null)}>
+                  취소
+                </button>
+                <button type="button" className="btn-primary" onClick={() => handleSave(true)} disabled={saving}>
+                  {saving ? '저장 중...' : '그래도 저장'}
+                </button>
+              </div>
             </div>
           )}
 
-          {previewUrl && (
-            <button type="button" className="btn-primary" onClick={handleAnalyze} disabled={analyzing || analyzed}>
-              {analyzing ? '분석 중...' : analyzed ? '분석완료' : '분석하기'}
-            </button>
+          {priceChanges.length > 0 && (
+            <div className="price-alert-box">
+              <p className="price-alert-title">단가가 변경된 품목이 있어요</p>
+              <ul className="price-alert-list">
+                {priceChanges.map((c) => {
+                  const diff = c.newPrice - c.previousPrice
+                  const pct = c.previousPrice !== 0 ? (diff / c.previousPrice) * 100 : null
+                  const up = diff > 0
+                  return (
+                    <li key={c.itemName} className={up ? 'alert-up' : 'alert-down'}>
+                      {c.itemName}: {c.previousPrice.toLocaleString()}원 → {c.newPrice.toLocaleString()}원
+                      {pct !== null && ` (${up ? '▲' : '▼'}${Math.abs(pct).toFixed(1)}%)`}
+                    </li>
+                  )
+                })}
+              </ul>
+            </div>
           )}
-        </>
-      )}
 
-      {error && <p className="error-text">{error}</p>}
-      {saveMessage && <p className="success-text">{saveMessage}</p>}
+          {marginAlerts.length > 0 && (
+            <div className="price-alert-box price-alert-box-danger">
+              <p className="price-alert-title">⚠️ 이 단가 변동으로 원가율이 높아진 메뉴가 있어요</p>
+              <ul className="price-alert-list">
+                {marginAlerts.map((m) => (
+                  <li key={m.menuName}>
+                    <button
+                      type="button"
+                      className="inline-link"
+                      onClick={() => navigate(`/cost/${encodeURIComponent(m.menuName)}`)}
+                    >
+                      {m.menuName}: 원가율 {m.ratio.toFixed(1)}%
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
 
-      {duplicateWarning && (
-        <div className="price-alert-box">
-          <p className="price-alert-title">이미 입고된 내역이 있어요</p>
-          <p className="hint">
-            {duplicateWarning.vendorName} · {duplicateWarning.date}에 이미 저장된 입고 내역이 있습니다.{' '}
-            {duplicateWarning.matchReason === 'balance'
-              ? `명세표 전잔액(${Math.round(duplicateWarning.balance).toLocaleString()}원)이 같아요.`
-              : `물품(${duplicateWarning.itemNames.join(', ')})이 겹쳐요.`}{' '}
-            같은 사진을 다시 올린 게 아닌지 확인해주세요.
-          </p>
-          <div className="invoice-form">
-            <button type="button" className="btn-secondary" onClick={() => setDuplicateWarning(null)}>
-              취소
-            </button>
-            <button type="button" className="btn-primary" onClick={() => handleSave(true)} disabled={saving}>
-              {saving ? '저장 중...' : '그래도 저장'}
-            </button>
-          </div>
-        </div>
-      )}
-
-      {priceChanges.length > 0 && (
-        <div className="price-alert-box">
-          <p className="price-alert-title">단가가 변경된 품목이 있어요</p>
-          <ul className="price-alert-list">
-            {priceChanges.map((c) => {
-              const diff = c.newPrice - c.previousPrice
-              const pct = c.previousPrice !== 0 ? (diff / c.previousPrice) * 100 : null
-              const up = diff > 0
-              return (
-                <li key={c.itemName} className={up ? 'alert-up' : 'alert-down'}>
-                  {c.itemName}: {c.previousPrice.toLocaleString()}원 → {c.newPrice.toLocaleString()}원
-                  {pct !== null && ` (${up ? '▲' : '▼'}${Math.abs(pct).toFixed(1)}%)`}
-                </li>
-              )
-            })}
-          </ul>
-        </div>
-      )}
-
-      {marginAlerts.length > 0 && (
-        <div className="price-alert-box price-alert-box-danger">
-          <p className="price-alert-title">⚠️ 이 단가 변동으로 원가율이 높아진 메뉴가 있어요</p>
-          <ul className="price-alert-list">
-            {marginAlerts.map((m) => (
-              <li key={m.menuName}>
+          {similarVendorPrompt && (
+            <div className="price-alert-box">
+              <p className="price-alert-title">비슷한 거래처가 있어요</p>
+              <p className="hint">
+                "{similarVendorPrompt.newName}"과(와) 기존 거래처 "{similarVendorPrompt.existingVendor.name}"이(가) 같은 곳인가요?
+              </p>
+              <div className="invoice-form">
                 <button
                   type="button"
-                  className="inline-link"
-                  onClick={() => navigate(`/cost/${encodeURIComponent(m.menuName)}`)}
+                  className="btn-secondary"
+                  onClick={() => {
+                    setVendorId('new')
+                    setNewVendorName(similarVendorPrompt.newName)
+                    setSimilarVendorPrompt(null)
+                  }}
                 >
-                  {m.menuName}: 원가율 {m.ratio.toFixed(1)}%
+                  아니요, 새 거래처예요
                 </button>
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
-
-      {similarVendorPrompt && (
-        <div className="price-alert-box">
-          <p className="price-alert-title">비슷한 거래처가 있어요</p>
-          <p className="hint">
-            "{similarVendorPrompt.newName}"과(와) 기존 거래처 "{similarVendorPrompt.existingVendor.name}"이(가) 같은 곳인가요?
-          </p>
-          <div className="invoice-form">
-            <button
-              type="button"
-              className="btn-secondary"
-              onClick={() => {
-                setVendorId('new')
-                setNewVendorName(similarVendorPrompt.newName)
-                setSimilarVendorPrompt(null)
-              }}
-            >
-              아니요, 새 거래처예요
-            </button>
-            <button
-              type="button"
-              className="btn-primary"
-              onClick={() => {
-                setVendorId(similarVendorPrompt.existingVendor.id)
-                setNewVendorName('')
-                setSimilarVendorPrompt(null)
-              }}
-            >
-              네, 같은 거래처예요
-            </button>
-          </div>
-        </div>
-      )}
-
-      <div className="field">
-        <label htmlFor="vendor">거래처</label>
-        <select
-          id="vendor"
-          className="select select-block"
-          value={vendorId}
-          onChange={(e) => setVendorId(e.target.value)}
-        >
-          <option value="">거래처 선택...</option>
-          {vendors.map((v) => (
-            <option key={v.id} value={v.id}>
-              {v.name}
-            </option>
-          ))}
-          <option value="new">+ 새 거래처 추가</option>
-        </select>
-        {currentVendorVatSeparate && (
-          <p className="hint">
-            이 거래처는 부가세 별도 거래처예요. 각 품목의 "금액"은 부가세를 뺀 공급가액만 입력하면 돼요
-            (부가세는 부가세 칸에 따로).
-          </p>
-        )}
-      </div>
-
-      {vendorId === 'new' && (
-        <div className="field">
-          <label htmlFor="newVendor">새 거래처명</label>
-          <input
-            id="newVendor"
-            className="input"
-            value={newVendorName}
-            onChange={(e) => setNewVendorName(e.target.value)}
-            placeholder="예: 국일농산"
-          />
-        </div>
-      )}
-      <div className="field">
-        <label htmlFor="date">입고일</label>
-        <input id="date" className="input" type="date" value={date} onChange={(e) => setDate(e.target.value)} />
-      </div>
-      <div className="field">
-        <label htmlFor="statementBalance">명세표 전잔액(전일잔고, 전잔고, 전잔금, 미수금)</label>
-        <AmountInput
-          id="statementBalance"
-          className="input"
-          value={statementBalance}
-          onChange={setStatementBalance}
-          placeholder="예: 3,054,500"
-        />
-      </div>
-      <div className="field">
-        <label htmlFor="invoiceTotal">당일 입고액(당일합계, 출고금액, 출고액, 합계)</label>
-        <AmountInput
-          id="invoiceTotal"
-          className="input"
-          value={invoiceTotal}
-          onChange={setInvoiceTotal}
-          placeholder="예: 300,000"
-        />
-      </div>
-      <div className="field">
-        <label htmlFor="previousDayPayment">전일입금 (명세표에 있으면)</label>
-        <AmountInput
-          id="previousDayPayment"
-          className="input"
-          value={previousDayPayment}
-          onChange={setPreviousDayPayment}
-          placeholder="예: 5,000,000"
-        />
-        <p className="hint">
-          "전잔액 + 당일 − 전일입금 = 현잔액" 양식이면 넣어주세요. 현잔액 확인에만 쓰고, 결제 기록은 따로 입력해요.
-        </p>
-      </div>
-      <div className="field">
-        <label htmlFor="currentBalance">명세표 현잔액(현잔고, 총잔금, 잔금, 총잔액, 총미수금)</label>
-        <AmountInput
-          id="currentBalance"
-          className="input"
-          value={currentBalance}
-          onChange={setCurrentBalance}
-          placeholder="예: 3,354,500"
-        />
-        {currentBalance === '' && (
-          <p className="hint">명세표에 현잔액이 적혀 있다면 입력해보세요. 전잔액과 대조해서 확인해드려요.</p>
-        )}
-      </div>
-
-      {!editMode && (
-        <div className="field">
-          <label className="toggle-row">
-            <input type="checkbox" checked={paidInFull} onChange={(e) => setPaidInFull(e.target.checked)} />
-            <span>이 거래 바로 결제 완료 (합계금액만큼 결제 기록도 자동으로 남겨요)</span>
-          </label>
-          {paidInFullSuggested && paidInFull && (
-            <p className="hint">지난번 입고 때 바로 결제한 거래처라 미리 체크해 뒀어요. 외상이면 체크를 풀어주세요.</p>
+                <button
+                  type="button"
+                  className="btn-primary"
+                  onClick={() => {
+                    setVendorId(similarVendorPrompt.existingVendor.id)
+                    setNewVendorName('')
+                    setSimilarVendorPrompt(null)
+                  }}
+                >
+                  네, 같은 거래처예요
+                </button>
+              </div>
+            </div>
           )}
         </div>
-      )}
+
+        <div className="panel invoice-info">
+          <h2 className="panel-title">🧾 명세표 정보</h2>
+          <div className="field-grid">
+            <div className="field">
+              <label htmlFor="vendor">거래처</label>
+              <select
+                id="vendor"
+                className="select select-block"
+                value={vendorId}
+                onChange={(e) => setVendorId(e.target.value)}
+              >
+                <option value="">거래처 선택...</option>
+                {vendors.map((v) => (
+                  <option key={v.id} value={v.id}>
+                    {v.name}
+                  </option>
+                ))}
+                <option value="new">+ 새 거래처 추가</option>
+              </select>
+              {currentVendorVatSeparate && (
+                <p className="hint">
+                  이 거래처는 부가세 별도 거래처예요. 각 품목의 "금액"은 부가세를 뺀 공급가액만 입력하면 돼요
+                  (부가세는 부가세 칸에 따로).
+                </p>
+              )}
+            </div>
+
+            {vendorId === 'new' && (
+              <div className="field">
+                <label htmlFor="newVendor">새 거래처명</label>
+                <input
+                  id="newVendor"
+                  className="input"
+                  value={newVendorName}
+                  onChange={(e) => setNewVendorName(e.target.value)}
+                  placeholder="예: 국일농산"
+                />
+              </div>
+            )}
+            <div className="field">
+              <label htmlFor="date">입고일</label>
+              <input id="date" className="input" type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+            </div>
+            <div className="field">
+              <label htmlFor="statementBalance">명세표 전잔액(전일잔고, 전잔고, 전잔금, 미수금)</label>
+              <AmountInput
+                id="statementBalance"
+                className="input"
+                value={statementBalance}
+                onChange={setStatementBalance}
+                placeholder="예: 3,054,500"
+              />
+            </div>
+            <div className="field">
+              <label htmlFor="invoiceTotal">당일 입고액(당일합계, 출고금액, 출고액, 합계)</label>
+              <AmountInput
+                id="invoiceTotal"
+                className="input"
+                value={invoiceTotal}
+                onChange={setInvoiceTotal}
+                placeholder="예: 300,000"
+              />
+            </div>
+            <div className="field">
+              <label htmlFor="previousDayPayment">전일입금 (명세표에 있으면)</label>
+              <AmountInput
+                id="previousDayPayment"
+                className="input"
+                value={previousDayPayment}
+                onChange={setPreviousDayPayment}
+                placeholder="예: 5,000,000"
+              />
+              <p className="hint">
+                "전잔액 + 당일 − 전일입금 = 현잔액" 양식이면 넣어주세요. 현잔액 확인에만 쓰고, 결제 기록은 따로 입력해요.
+              </p>
+            </div>
+            <div className="field">
+              <label htmlFor="currentBalance">명세표 현잔액(현잔고, 총잔금, 잔금, 총잔액, 총미수금)</label>
+              <AmountInput
+                id="currentBalance"
+                className="input"
+                value={currentBalance}
+                onChange={setCurrentBalance}
+                placeholder="예: 3,354,500"
+              />
+              {currentBalance === '' && (
+                <p className="hint">명세표에 현잔액이 적혀 있다면 입력해보세요. 전잔액과 대조해서 확인해드려요.</p>
+              )}
+            </div>
+
+            {!editMode && (
+              <div className="field">
+                <label className="toggle-row">
+                  <input type="checkbox" checked={paidInFull} onChange={(e) => setPaidInFull(e.target.checked)} />
+                  <span>이 거래 바로 결제 완료 (합계금액만큼 결제 기록도 자동으로 남겨요)</span>
+                </label>
+                {paidInFullSuggested && paidInFull && (
+                  <p className="hint">지난번 입고 때 바로 결제한 거래처라 미리 체크해 뒀어요. 외상이면 체크를 풀어주세요.</p>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
 
       {currentBalanceMismatch && (
         <div className="price-alert-box price-alert-box-danger">

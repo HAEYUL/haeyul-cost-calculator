@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useGoBack } from '../hooks/usePageHistoryState'
 import { useStore } from '../context/StoreContext'
+import { useScrollToSection } from '../hooks/useScrollToSection'
 import { supabase } from '../lib/supabaseClient'
 import { reidentifyItem, weightConversionFactor } from '../lib/reidentifyItem'
 import { UNIT_LABELS } from '../lib/units'
@@ -165,6 +166,8 @@ export default function InventoryDetailScreen() {
         setRecipeUnitConfig(data ? { recipeUnit: data.recipe_unit, ratio: Number(data.ratio) } : null)
       })
   }, [store, itemName, dataKey])
+
+  useScrollToSection(!loading)
 
   if (!store) return null
 
@@ -776,7 +779,7 @@ export default function InventoryDetailScreen() {
             {savingWaste ? '저장 중...' : '폐기 기록'}
           </button>
 
-          <h2 className="section-title">재고 실사(실물 확인)</h2>
+          <h2 id="stock-count" className="section-title">재고 실사(실물 확인)</h2>
           <p className="hint">
             직접 세어본 실제 수량을 입력하면, 계산상 재고({currentStock.toLocaleString()}
             {unitLabel})와 차이나는 만큼 자동으로 보정해요.

@@ -6,6 +6,8 @@ import { supabase } from '../lib/supabaseClient'
 import { reidentifyItem, weightConversionFactor } from '../lib/reidentifyItem'
 import { UNIT_LABELS } from '../lib/units'
 import { stockKey } from '../lib/stockKey'
+import { STOCK_STATUS, stockStatus } from '../lib/stockStatus'
+import { downloadCsv, rowsToCsv } from '../lib/csvExport'
 
 const NO_UNIT_KEY = 'none'
 
@@ -16,12 +18,12 @@ export default function InventoryScreen() {
   const [rows, setRows] = useState([])
   const [pinnedNames, setPinnedNames] = useState(new Set())
   const [recipeUnitByItem, setRecipeUnitByItem] = useState(new Map())
-  // 전체 보기·검색어는 이 화면의 방문 기록에 남겨, 재고 상세를 보고 돌아와도 그대로 보이게 한다.
-  const [showAll, setShowAll] = useHistoryState('showAll', false)
+  // 보기(관심/전체/부족/적음)·검색어는 이 화면의 방문 기록에 남겨, 재고 상세를 보고 돌아와도 그대로 보이게 한다.
+  // null이면 관심 품목이 있을 때 관심, 없을 때 전체로 시작한다.
+  const [filter, setFilter] = useHistoryState('filter', null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [dataKey, setDataKey] = useState(0)
-  const [searchOpen, setSearchOpen] = useHistoryState('searchOpen', false)
   const [searchQuery, setSearchQuery] = useHistoryState('searchQuery', '')
 
   const [renameTarget, setRenameTarget] = useState(null)
@@ -69,13 +71,15 @@ export default function InventoryScreen() {
       const stock = new Map()
       const ensure = (itemName, unit) => {
         const key = stockKey(itemName, unit)
-        if (!stock.has(key)) stock.set(key, { itemName, unit, received: 0, used: 0, wasted: 0, adjusted: 0 })
+        if (!stock.has(key)) stock.set(key, { itemName, unit, received: 0, receiptCount: 0, used: 0, wasted: 0, adjusted: 0 })
         return stock.get(key)
       }
 
       for (const row of invoicesRes.data ?? []) {
         if (row.quantity == null) continue
-        ensure(row.item_name, row.unit).received += Number(row.quantity)
+        const entry = ensure(row.item_name, row.unit)
+        entry.received += Number(row.quantity)
+        entry.receiptCount += 1
       }
       for (const row of usageRes.data ?? []) {
         ensure(row.item_name, row.unit).used += Number(row.used_qty)
@@ -88,7 +92,10 @@ export default function InventoryScreen() {
       }
 
       const list = [...stock.values()]
-        .map((r) => ({ ...r, current: r.received - r.used - r.wasted + r.adjusted }))
+        .map((r) => {
+          const current = r.received - r.used - r.wasted + r.adjusted
+          return { ...r, current, status: stockStatus({ current, received: r.received, receiptCount: r.receiptCount }) }
+        })
         .sort((a, b) => a.itemName.localeCompare(b.itemName))
 
       setRows(list)
@@ -104,9 +111,41 @@ export default function InventoryScreen() {
 
   const trimmedQuery = searchQuery.trim()
   const searchResults = trimmedQuery ? rows.filter((r) => r.itemName.includes(trimmedQuery)) : []
-  const pinnedRows = rows.filter((r) => pinnedNames.has(r.itemName))
-  const otherRows = rows.filter((r) => !pinnedNames.has(r.itemName))
-  const effectiveShowAll = showAll || pinnedNames.size === 0
+  const shortCount = rows.filter((r) => r.status === 'short').length
+  const lowCount = rows.filter((r) => r.status === 'low').length
+  const pinnedCount = rows.filter((r) => pinnedNames.has(r.itemName)).length
+  const activeFilter = filter ?? (pinnedCount > 0 ? 'pinned' : 'all')
+  const filteredRows = rows.filter((r) => {
+    if (activeFilter === 'pinned') return pinnedNames.has(r.itemName)
+    if (activeFilter === 'short') return r.status === 'short'
+    if (activeFilter === 'low') return r.status === 'low'
+    return true
+  })
+  const visibleRows = trimmedQuery ? searchResults : filteredRows
+
+  const FILTERS = [
+    { key: 'all', label: '전체', count: rows.length },
+    { key: 'pinned', label: '★ 관심', count: pinnedCount },
+    { key: 'short', label: '부족', count: shortCount },
+    { key: 'low', label: '적음', count: lowCount },
+  ]
+
+  const handleExport = () => {
+    const unitLabel = (r) => (r.unit ? UNIT_LABELS[r.unit] ?? r.unit : '')
+    const csv = rowsToCsv(rows, [
+      { label: '품목명', value: 'itemName' },
+      { label: '단위', value: unitLabel },
+      { label: '현재고', value: 'current' },
+      { label: '입고', value: 'received' },
+      { label: '사용', value: 'used' },
+      { label: '폐기', value: 'wasted' },
+      { label: '실사 보정', value: 'adjusted' },
+      { label: '상태', value: (r) => STOCK_STATUS[r.status].label },
+      { label: '관심 품목', value: (r) => (pinnedNames.has(r.itemName) ? '★' : '') },
+    ])
+    const today = new Date().toISOString().slice(0, 10)
+    downloadCsv(`재고현황_${store.name}_${today}.csv`, csv)
+  }
 
   const handlePin = async (r) => {
     if (!supabase) return
@@ -276,85 +315,80 @@ export default function InventoryScreen() {
     setDataKey((k) => k + 1)
   }
 
+  const detailPath = (r) => `/inventory/${encodeURIComponent(r.itemName)}/${r.unit ?? NO_UNIT_KEY}`
+  const unitText = (r) => (r.unit ? UNIT_LABELS[r.unit] ?? r.unit : '')
+
   const renderRow = (r, { pinned }) => (
-    <li key={stockKey(r.itemName, r.unit)} className="history-row">
-      <button
-        type="button"
-        className="cost-row-btn"
-        onClick={() => navigate(`/inventory/${encodeURIComponent(r.itemName)}/${r.unit ?? NO_UNIT_KEY}`)}
-      >
-        <div className="history-row-main">
-          <span className="history-item">{r.itemName}</span>
-          <span className={r.current < 0 ? 'alert-up' : ''}>
-            {r.current.toLocaleString()}
-            {r.unit ? UNIT_LABELS[r.unit] ?? r.unit : ''}
+    <li key={stockKey(r.itemName, r.unit)} className="data-row inv-row">
+      <div className="inv-line">
+        <button
+          type="button"
+          className={`pin-btn${pinned ? ' pin-btn-on' : ''}`}
+          aria-label={pinned ? `${r.itemName} 관심 품목에서 빼기` : `${r.itemName} 관심 품목에 추가`}
+          title={pinned ? '관심 품목에서 빼기' : '관심 품목에 추가'}
+          onClick={() => (pinned ? handleUnpin(r) : handlePin(r))}
+        >
+          {pinned ? '★' : '☆'}
+        </button>
+        <button type="button" className="cost-row-btn inv-main" onClick={() => navigate(detailPath(r))}>
+          <span className="inv-name">
+            <span className="history-item">{r.itemName}</span>
+            {r.unit === 'box' && !recipeUnitByItem.has(r.itemName) && (
+              <span className="inv-note">📦 박스당 개수/kg 환산 전 · "이름 수정" 또는 "레시피 단위"에서 등록</span>
+            )}
+            {recipeUnitByItem.has(r.itemName) && (
+              <span className="inv-note">
+                🍱 레시피 단위: {UNIT_LABELS[recipeUnitByItem.get(r.itemName).recipeUnit] ?? recipeUnitByItem.get(r.itemName).recipeUnit}
+                {' '}(1{r.unit ? unitText(r) : '단위 없음'} = {recipeUnitByItem.get(r.itemName).ratio}
+                {UNIT_LABELS[recipeUnitByItem.get(r.itemName).recipeUnit] ?? recipeUnitByItem.get(r.itemName).recipeUnit})
+              </span>
+            )}
           </span>
+          <span className={`inv-current${r.current < 0 ? ' alert-up' : ''}`}>
+            {r.current.toLocaleString()}
+            {unitText(r)}
+          </span>
+          <span className="inv-num" data-label="입고">
+            {r.received.toLocaleString()}
+          </span>
+          <span className="inv-num" data-label="사용">
+            {r.used.toLocaleString()}
+          </span>
+          <span className="inv-num" data-label="폐기">
+            {r.wasted.toLocaleString()}
+          </span>
+          <span className="inv-status">
+            <span className={`status-tag ${STOCK_STATUS[r.status].className}`}>{STOCK_STATUS[r.status].label}</span>
+          </span>
+        </button>
+        <div className="inv-actions">
+          <button
+            type="button"
+            className="mini-btn"
+            onClick={() => {
+              setRenameTarget({ itemName: r.itemName, unit: r.unit })
+              setRenameInput(r.itemName)
+              setRenameUnit(r.unit)
+              setRenameRatio('')
+              setRenameMessage('')
+            }}
+          >
+            이름 수정
+          </button>
+          <button type="button" className="mini-btn" onClick={() => openMergeTarget(r)}>
+            합치기
+          </button>
+          <button type="button" className="mini-btn" onClick={() => openRecipeUnit(r)}>
+            레시피 단위
+          </button>
+          <button
+            type="button"
+            className="mini-btn"
+            onClick={() => navigate(detailPath(r), { state: { scrollTo: 'stock-count' } })}
+          >
+            재고 실사
+          </button>
         </div>
-        <div className="history-row-sub">
-          <span>입고 {r.received.toLocaleString()}</span>
-          <span>사용 {r.used.toLocaleString()}</span>
-          {r.wasted > 0 && <span>폐기 {r.wasted.toLocaleString()}</span>}
-        </div>
-        {r.unit === 'box' && !recipeUnitByItem.has(r.itemName) && (
-          <p className="hint">📦 박스당 개수/kg 환산 전이에요 · "이름 수정" 또는 "레시피 단위 설정"에서 등록할 수 있어요</p>
-        )}
-        {recipeUnitByItem.has(r.itemName) && (
-          <p className="hint">
-            🍱 레시피 단위: {UNIT_LABELS[recipeUnitByItem.get(r.itemName).recipeUnit] ?? recipeUnitByItem.get(r.itemName).recipeUnit}
-            {' '}(1{r.unit ? UNIT_LABELS[r.unit] ?? r.unit : '단위 없음'} = {recipeUnitByItem.get(r.itemName).ratio}
-            {UNIT_LABELS[recipeUnitByItem.get(r.itemName).recipeUnit] ?? recipeUnitByItem.get(r.itemName).recipeUnit})
-          </p>
-        )}
-      </button>
-      <div className="inventory-row-actions">
-        <button
-          type="button"
-          className="link-btn"
-          onClick={(e) => {
-            e.stopPropagation()
-            setRenameTarget({ itemName: r.itemName, unit: r.unit })
-            setRenameInput(r.itemName)
-            setRenameUnit(r.unit)
-            setRenameRatio('')
-            setRenameMessage('')
-          }}
-        >
-          이름 수정
-        </button>
-        <button
-          type="button"
-          className="link-btn"
-          onClick={(e) => {
-            e.stopPropagation()
-            openMergeTarget(r)
-          }}
-        >
-          합치기
-        </button>
-        <button
-          type="button"
-          className="link-btn"
-          onClick={(e) => {
-            e.stopPropagation()
-            openRecipeUnit(r)
-          }}
-        >
-          레시피 단위 설정
-        </button>
-        <button
-          type="button"
-          className="link-btn"
-          onClick={(e) => {
-            e.stopPropagation()
-            if (pinned) {
-              handleUnpin(r)
-            } else {
-              handlePin(r)
-            }
-          }}
-        >
-          {pinned ? '숨기기' : '+ 관심 품목에 추가'}
-        </button>
       </div>
 
       {renameTarget && renameTarget.itemName === r.itemName && renameTarget.unit === r.unit && (
@@ -529,8 +563,19 @@ export default function InventoryScreen() {
         <button type="button" className="link-btn" onClick={() => navigate('/menu')}>
           ← 메인 메뉴
         </button>
-        <h1>재고 관리</h1>
-        <p className="subtitle">{store.name} · 입고량에서 사용량을 뺀 현재고예요</p>
+        <div className="page-title-row">
+          <div>
+            <h1>재고 관리</h1>
+            <p className="subtitle">{store.name} · 입고량에서 사용량을 뺀 현재고예요</p>
+          </div>
+          {rows.length > 0 && (
+            <div className="page-actions">
+              <button type="button" className="action-btn" onClick={handleExport}>
+                ⬇ 엑셀 저장
+              </button>
+            </div>
+          )}
+        </div>
       </div>
 
       {!supabase && <p className="hint">Supabase가 설정되지 않았습니다.</p>}
@@ -542,66 +587,84 @@ export default function InventoryScreen() {
 
       {!loading && rows.length > 0 && (
         <>
-          <div className="history-header">
-            <h2 className="section-title">관심 품목</h2>
-            <button
-              type="button"
-              className="icon-btn"
-              aria-label="품목 검색"
-              onClick={() => {
-                setSearchOpen((v) => !v)
-                setSearchQuery('')
-              }}
-            >
-              🔍
+          <div className="kpi-grid">
+            <button type="button" className="kpi-card" onClick={() => setFilter('all')}>
+              <span className="kpi-label">전체 품목</span>
+              <strong className="kpi-value">{rows.length}개</strong>
+            </button>
+            <button type="button" className="kpi-card" onClick={() => setFilter('short')}>
+              <span className="kpi-label">재고 부족(마이너스)</span>
+              <strong className={`kpi-value${shortCount > 0 ? ' alert-up' : ''}`}>{shortCount}개</strong>
+            </button>
+            <button type="button" className="kpi-card" onClick={() => setFilter('low')}>
+              <span className="kpi-label">재고 적음</span>
+              <strong className={`kpi-value${lowCount > 0 ? ' cost-warning' : ''}`}>{lowCount}개</strong>
+            </button>
+            <button type="button" className="kpi-card" onClick={() => setFilter('pinned')}>
+              <span className="kpi-label">관심 품목</span>
+              <strong className="kpi-value">{pinnedCount}개</strong>
             </button>
           </div>
 
-          {searchOpen && (
-            <div className="field">
+          <div className="panel">
+            <div className="toolbar">
               <input
-                type="text"
-                className="input"
-                placeholder="품목명으로 검색"
+                type="search"
+                className="input toolbar-search"
+                placeholder="🔍 품목명으로 검색"
+                aria-label="품목 검색"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                autoFocus={!searchQuery}
               />
+              <div className="toolbar-chips">
+                {FILTERS.map((f) => (
+                  <button
+                    key={f.key}
+                    type="button"
+                    className={`chip${!trimmedQuery && activeFilter === f.key ? ' chip-active' : ''}`}
+                    onClick={() => {
+                      setFilter(f.key)
+                      setSearchQuery('')
+                    }}
+                  >
+                    {f.label} {f.count}
+                  </button>
+                ))}
+              </div>
             </div>
-          )}
+            <p className="hint panel-hint">
+              ☆를 누르면 관심 품목에 추가돼요. 상태는 평소 한 번 입고량의 절반보다 적게 남으면 "적음", 마이너스면
+              "부족"으로 표시해요.
+            </p>
 
-          {trimmedQuery ? (
-            <>
-              <p className="hint">검색 결과 {searchResults.length}개</p>
-              {searchResults.length === 0 && <p className="hint">일치하는 품목이 없어요.</p>}
-              <ul className="history-list">
-                {searchResults.map((r) => renderRow(r, { pinned: pinnedNames.has(r.itemName) }))}
+            {trimmedQuery && <p className="hint">검색 결과 {searchResults.length}개</p>}
+            {visibleRows.length === 0 && (
+              <p className="hint">
+                {trimmedQuery
+                  ? '일치하는 품목이 없어요.'
+                  : activeFilter === 'pinned'
+                    ? '아직 관심 품목이 없어요. "전체"에서 ☆를 눌러 골라주세요.'
+                    : '해당하는 품목이 없어요.'}
+              </p>
+            )}
+            {visibleRows.length > 0 && (
+              <ul className="data-list">
+                <li className="data-head inv-line" aria-hidden="true">
+                  <span className="pin-btn-space" />
+                  <span className="inv-main">
+                    <span className="inv-name">품목명</span>
+                    <span className="inv-current">현재고</span>
+                    <span className="inv-num">입고</span>
+                    <span className="inv-num">사용</span>
+                    <span className="inv-num">폐기</span>
+                    <span className="inv-status">상태</span>
+                  </span>
+                  <span className="inv-actions">관리</span>
+                </li>
+                {visibleRows.map((r) => renderRow(r, { pinned: pinnedNames.has(r.itemName) }))}
               </ul>
-            </>
-          ) : (
-            <>
-              {pinnedNames.size === 0 && <p className="hint">아직 선택한 품목이 없어요. 아래 전체 목록에서 골라주세요.</p>}
-              {pinnedNames.size > 0 && (
-                <ul className="history-list">{pinnedRows.map((r) => renderRow(r, { pinned: true }))}</ul>
-              )}
-
-              {effectiveShowAll && (
-                <>
-                  {pinnedNames.size > 0 && <h2 className="section-title">전체 품목</h2>}
-                  <ul className="history-list">{otherRows.map((r) => renderRow(r, { pinned: false }))}</ul>
-                  {pinnedNames.size > 0 && otherRows.length === 0 && (
-                    <p className="hint">모든 품목을 관심 품목에 추가했어요.</p>
-                  )}
-                </>
-              )}
-
-              {pinnedNames.size > 0 && (
-                <button type="button" className="btn-secondary" onClick={() => setShowAll((v) => !v)}>
-                  {showAll ? '접기' : `품목 모두보기 (전체 ${rows.length}개)`}
-                </button>
-              )}
-            </>
-          )}
+            )}
+          </div>
         </>
       )}
     </div>

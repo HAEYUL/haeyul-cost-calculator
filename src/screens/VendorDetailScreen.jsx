@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { useStore } from '../context/StoreContext'
+import { useScrollToSection } from '../hooks/useScrollToSection'
 import { supabase } from '../lib/supabaseClient'
 import AmountInput from '../components/AmountInput'
 import { UNIT_LABELS } from '../lib/units'
@@ -151,6 +152,8 @@ export default function VendorDetailScreen() {
     const saved = openingBalances.find((b) => b.as_of_date === LEDGER_START)
     setStartBalanceInput(saved ? String(saved.balance) : '')
   }, [openingBalances])
+
+  useScrollToSection(!loading)
 
   if (!store) return null
 
@@ -636,7 +639,7 @@ export default function VendorDetailScreen() {
             </table>
           </div>
 
-          <h2 className="section-title">결제 입력</h2>
+          <h2 id="payment" className="section-title">결제 입력</h2>
           <p className="hint">결제할 때마다 입력해 주세요. 장부의 미지급금은 입력한 결제로만 줄어요.</p>
           <div className="field">
             <label htmlFor="paymentAmount">결제 금액</label>
