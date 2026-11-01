@@ -147,6 +147,10 @@ export function timeRangeLabel(start, end) {
   return `${short(start)}~${short(end)}`
 }
 
+// 근무시간 고르기: 시 09~21, 분 00·30
+export const WORK_HOURS = Array.from({ length: 13 }, (_, i) => String(9 + i).padStart(2, '0'))
+export const WORK_MINUTES = ['00', '30']
+
 // 근무시간 직접 입력(치는 중): 숫자만 쳐도 '09' → '09', '090' → '09:0', '0900' → '09:00' (24시간 기준)
 export function formatTimeInput(raw) {
   const d = String(raw ?? '').replace(/\D/g, '').slice(0, 4)

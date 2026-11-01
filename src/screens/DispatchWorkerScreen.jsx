@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useStore } from '../context/StoreContext'
 import { supabase } from '../lib/supabaseClient'
@@ -41,6 +41,7 @@ export default function DispatchWorkerScreen() {
   const [form, setForm] = useState(null)
   const [saving, setSaving] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
+  const autoEditDone = useRef(false)
 
   useEffect(() => {
     if (!supabase) return
@@ -88,6 +89,16 @@ export default function DispatchWorkerScreen() {
     setMessage('')
     setError('')
   }
+
+  // 명부의 [정보 수정]으로 들어오면 바로 고치기 칸을 연다
+  useEffect(() => {
+    if (worker && !autoEditDone.current && searchParams.get('edit') === '1') {
+      autoEditDone.current = true
+      startEdit()
+    }
+    // startEdit는 worker에만 의존한다
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [worker, searchParams])
 
   const saveWorker = async () => {
     setError('')
@@ -196,6 +207,7 @@ export default function DispatchWorkerScreen() {
                     <th>근무시간</th>
                     <th className="num">일당</th>
                     <th className="num">송금</th>
+                    <th />
                   </tr>
                 </thead>
                 <tbody>
@@ -209,6 +221,22 @@ export default function DispatchWorkerScreen() {
                       <td className="num">{wonPlain(s.wage)}</td>
                       <td className={`num ${s.paid_date ? 'paid-text' : 'pending-text'}`}>
                         {s.paid_date ? `✔ ${dayLabel(s.paid_date)}` : '대기'}
+                      </td>
+                      <td className="num">
+                        {s.paid_date && !isAdmin ? (
+                          <span className="hint">🔒</span>
+                        ) : (
+                          <button
+                            type="button"
+                            className="chip edit-chip"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              navigate(`/dispatch/edit/${s.id}`)
+                            }}
+                          >
+                            수정
+                          </button>
+                        )}
                       </td>
                     </tr>
                   ))}
@@ -246,7 +274,7 @@ export default function DispatchWorkerScreen() {
 
       {!editing ? (
         <button type="button" className="btn-secondary" onClick={startEdit}>
-          ✏️ 인력 정보 고치기 (고정 파출·평소 포지션·계좌)
+          ✏️ 인력 정보 수정 (이름·주민번호·계좌·포지션·고정 파출)
         </button>
       ) : (
         <div className="cost-summary invoice-form">
