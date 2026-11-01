@@ -121,6 +121,13 @@ export default function AdminOverview({ stores, onOpenStore }) {
           </div>
           <p className="hint">매장 카드를 누르면 그 매장으로 바뀌어요</p>
         </div>
+        <button type="button" className="cost-summary admin-overview-card" onClick={() => navigate('/consolidated')}>
+          <div className="cost-summary-row">
+            <span>🧮 통합 매출·결산</span>
+            <strong>4개 매장 합산 →</strong>
+          </div>
+          <p className="hint">매장운영결산·일매출을 기간·월별/년별로 합쳐서 봐요</p>
+        </button>
       </div>
     </div>
   )

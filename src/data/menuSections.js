@@ -21,6 +21,7 @@ export const MENU_SECTIONS = [
       { label: '거래처 물품 입고액', path: '/spending-report', icon: '📥' },
       { label: '단가 추이 조회', path: '/price-trend', icon: '📈' },
       { label: '매장운영결산', path: '/settlement', icon: '📊' },
+      { label: '통합 매출·결산', path: '/consolidated', icon: '🧮' },
     ],
   },
   {
