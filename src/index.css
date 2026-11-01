@@ -2597,3 +2597,96 @@ button.kpi-card {
   font-size: 14px;
   color: var(--text-muted);
 }
+
+/* ---------- 통합 매출·결산 ---------- */
+.range-picker .rrn-row {
+  margin-top: 8px;
+}
+
+.group-row {
+  align-items: center;
+  margin-top: 8px;
+}
+
+.group-row .hint {
+  margin-right: 4px;
+  font-size: 14px;
+}
+
+.cons-section-title {
+  margin: 22px 0 8px;
+}
+
+.cons-table td:first-child,
+.cons-table th:first-child {
+  position: sticky;
+  left: 0;
+  background: var(--surface);
+  z-index: 1;
+}
+
+.cons-table .strong {
+  font-weight: 700;
+}
+
+.cons-table .minus {
+  color: #d84343;
+}
+
+.cons-table .total-row td {
+  font-weight: 700;
+  border-top: 2px solid var(--border);
+  background: color-mix(in srgb, var(--accent) 6%, var(--surface));
+}
+
+.cons-table tr.sunday td:first-child {
+  color: #d84343;
+}
+
+.cons-table tr.saturday td:first-child {
+  color: #3b6fd8;
+}
+
+.cons-table .clickable-cell {
+  cursor: pointer;
+}
+
+.cons-table .clickable-cell:hover {
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+}
+
+.sales-parts {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0 10px;
+}
+
+@media (min-width: 700px) {
+  .sales-parts {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+.okpos-note {
+  margin-bottom: 4px;
+}
+
+.okpos-note .hint {
+  margin: 0;
+}
+
+.rrn-row .sales-date {
+  flex: 0 0 auto;
+  width: 180px;
+}
+
+.sales-store {
+  flex: 1;
+  min-width: 0;
+  padding: 12px 14px;
+  font-size: 17px;
+}
+
+.time-input {
+  letter-spacing: 0.05em;
+}

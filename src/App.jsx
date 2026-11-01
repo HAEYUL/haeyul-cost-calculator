@@ -39,6 +39,7 @@ import DispatchShiftFormScreen from './screens/DispatchShiftFormScreen'
 import DispatchWorkerScreen from './screens/DispatchWorkerScreen'
 import DispatchPaymentsScreen from './screens/DispatchPaymentsScreen'
 import DispatchReportScreen from './screens/DispatchReportScreen'
+import ConsolidatedScreen from './screens/ConsolidatedScreen'
 
 export default function App() {
   return (
@@ -77,6 +78,7 @@ export default function App() {
             <Route path="/dispatch/workers/:workerId" element={<DispatchWorkerScreen />} />
             <Route path="/dispatch-payments" element={<DispatchPaymentsScreen />} />
             <Route path="/dispatch-report" element={<DispatchReportScreen />} />
+            <Route path="/consolidated" element={<ConsolidatedScreen />} />
             <Route path="/inventory" element={<InventoryScreen />} />
             <Route path="/inventory/:itemName/:unit" element={<InventoryDetailScreen />} />
             <Route path="/price-trend" element={<PriceTrendScreen />} />

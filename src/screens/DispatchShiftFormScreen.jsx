@@ -6,13 +6,15 @@ import { useGoBack } from '../hooks/usePageHistoryState'
 import { dispatchRequest, fetchShifts, fetchWorkers, SHIFT_COLUMNS, workerPayload } from '../lib/dispatchApi'
 import {
   findSimilarWorkers,
+  finishTimeInput,
+  formatTimeInput,
   hhmm,
   INSURANCE_DAY_LIMIT,
+  isValidTime,
   monthRange,
   POSITIONS,
   rrnDigits,
   rrnError,
-  SHIFT_PRESETS,
   showMaskedRrn,
   SIMILAR_REASON_LABELS,
   won,
@@ -41,9 +43,10 @@ export default function DispatchShiftFormScreen() {
   const [creatingNew, setCreatingNew] = useState(false)
   const [rrnFront, setRrnFront] = useState('')
   const [rrnBack, setRrnBack] = useState('')
-  const [start, setStart] = useState(SHIFT_PRESETS[0].start)
-  const [end, setEnd] = useState(SHIFT_PRESETS[0].end)
-  const [wage, setWage] = useState(String(SHIFT_PRESETS[0].wage))
+  // 근무시간·일당은 매번 직접 입력한다 (자동으로 채우지 않음)
+  const [start, setStart] = useState('')
+  const [end, setEnd] = useState('')
+  const [wage, setWage] = useState('')
   const [bank, setBank] = useState('')
   const [account, setAccount] = useState('')
   const [editingAccount, setEditingAccount] = useState(false)
@@ -69,11 +72,6 @@ export default function DispatchShiftFormScreen() {
     setEditingAccount(!w.account)
     setDuplicatePrompt(null)
     if (!editMode && w.default_position) setPosition(w.default_position)
-    if (!editMode && w.default_wage) {
-      setStart(hhmm(w.default_start) || SHIFT_PRESETS[0].start)
-      setEnd(hhmm(w.default_end) || SHIFT_PRESETS[0].end)
-      setWage(String(w.default_wage))
-    }
   }
 
   // 인력 명부와 (수정이면) 근무 기록 불러오기
@@ -148,19 +146,14 @@ export default function DispatchShiftFormScreen() {
     return findSimilarWorkers(nameInput, workers)
   }, [nameInput, workers, workerId, creatingNew])
 
-  const applyPreset = (p) => {
-    setStart(p.start)
-    setEnd(p.end)
-    setWage(String(p.wage))
-  }
 
   const handleSave = async () => {
     setError('')
     if (locked) return
     const wageNum = Number(String(wage).replace(/,/g, ''))
     if (!date) return setError('근무날짜를 입력하세요.')
-    if (!Number.isInteger(wageNum) || wageNum <= 0) return setError('일당을 숫자로 입력하세요.')
-    if (!start || !end) return setError('근무시간을 입력하세요.')
+    if (!isValidTime(start) || !isValidTime(end)) return setError('근무시간을 4자리 숫자로 입력하세요. 예: 0900 ~ 2100')
+    if (wage === '' || !Number.isInteger(wageNum) || wageNum <= 0) return setError('일당을 입력하세요.')
     if (!position) return setError('포지션(홀/주방)을 체크하세요.')
     if (!workerId && !creatingNew) {
       if (!nameInput.trim()) return setError('이름을 입력하세요.')
@@ -188,9 +181,6 @@ export default function DispatchShiftFormScreen() {
           rrn: rrnDigits(rrn),
           bank,
           account,
-          defaultStart: start,
-          defaultEnd: end,
-          defaultWage: wageNum,
           defaultPosition: position,
         })
         if (!ok) {
@@ -429,25 +419,30 @@ export default function DispatchShiftFormScreen() {
 
         <div className="field">
           <label>근무시간</label>
-          {!locked && (
-            <div className="preset-row">
-              {SHIFT_PRESETS.map((p) => (
-                <button
-                  key={p.key}
-                  type="button"
-                  className={start === p.start && end === p.end && Number(wage) === p.wage ? 'chip chip-active' : 'chip'}
-                  onClick={() => applyPreset(p)}
-                >
-                  {p.label} {p.start.slice(0, 2)}~{p.end.slice(0, 2)} · {won(p.wage)}
-                </button>
-              ))}
-            </div>
-          )}
           <div className="rrn-row">
-            <input type="time" className="input" value={start} onChange={(e) => setStart(e.target.value)} disabled={locked} aria-label="시작 시간" />
+            <input
+              className="input time-input"
+              inputMode="numeric"
+              value={start}
+              onChange={(e) => setStart(formatTimeInput(e.target.value))}
+              onBlur={() => setStart((v) => finishTimeInput(v))}
+              placeholder="시작 (예: 0900)"
+              disabled={locked}
+              aria-label="시작 시간"
+            />
             <span>~</span>
-            <input type="time" className="input" value={end} onChange={(e) => setEnd(e.target.value)} disabled={locked} aria-label="끝 시간" />
+            <input
+              className="input time-input"
+              inputMode="numeric"
+              value={end}
+              onChange={(e) => setEnd(formatTimeInput(e.target.value))}
+              onBlur={() => setEnd((v) => finishTimeInput(v))}
+              placeholder="끝 (예: 2100)"
+              disabled={locked}
+              aria-label="끝 시간"
+            />
           </div>
+          {!locked && <p className="hint">숫자 4자리로 입력하세요. 24시간 기준 (밤 9시 = 2100)</p>}
         </div>
 
         <div className="field">
@@ -458,6 +453,7 @@ export default function DispatchShiftFormScreen() {
             inputMode="numeric"
             value={wage === '' ? '' : Number(wage).toLocaleString('ko-KR')}
             onChange={(e) => setWage(e.target.value.replace(/\D/g, ''))}
+            placeholder="일당을 직접 입력하세요"
             disabled={locked}
           />
         </div>

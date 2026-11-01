@@ -147,11 +147,29 @@ export function timeRangeLabel(start, end) {
   return `${short(start)}~${short(end)}`
 }
 
-// 매장별 자주 쓰는 근무 버튼 (보내주신 명세서 기준)
-export const SHIFT_PRESETS = [
-  { key: 'full', label: '종일', start: '09:00', end: '21:00', wage: 135000 },
-  { key: 'half', label: '반일', start: '09:00', end: '14:00', wage: 65000 },
-]
+// 근무시간 직접 입력(치는 중): 숫자만 쳐도 '09' → '09', '090' → '09:0', '0900' → '09:00' (24시간 기준)
+export function formatTimeInput(raw) {
+  const d = String(raw ?? '').replace(/\D/g, '').slice(0, 4)
+  return d.length <= 2 ? d : `${d.slice(0, 2)}:${d.slice(2)}`
+}
+
+// 칸을 벗어날 때 정리: '9' → '09:00', '21' → '21:00', '930' → '09:30'
+export function finishTimeInput(value) {
+  const d = String(value ?? '').replace(/\D/g, '')
+  if (d.length === 0) return ''
+  if (d.length <= 2) return `${d.padStart(2, '0')}:00`
+  if (d.length === 3) return `0${d[0]}:${d.slice(1)}`
+  return `${d.slice(0, 2)}:${d.slice(2, 4)}`
+}
+
+// 00:00 ~ 24:00
+export function isValidTime(t) {
+  const m = /^(\d{2}):(\d{2})$/.exec(String(t ?? ''))
+  if (!m) return false
+  const h = Number(m[1])
+  const min = Number(m[2])
+  return min < 60 && (h < 24 || (h === 24 && min === 0))
+}
 
 // 일용근로소득 원천징수: 일당 15만 원 초과분 × 6% × (1 − 55% 세액공제) = 2.7%.
 // 소득세가 1,000원 미만이면 걷지 않는다(소액부징수). 지방소득세 = 소득세의 10%. 10원 미만 버림.

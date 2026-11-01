@@ -121,7 +121,8 @@ declare
     'store_settlements',        -- 매장운영결산
     'recipes', 'recipe_meta', 'ingredient_mapping', 'menu_prices',  -- 레시피·원가
     'staff_schedules',          -- 직원 근무표
-    'store_business_info'       -- 사업자 정보(세무 출력)
+    'store_business_info',      -- 사업자 정보(세무 출력)
+    'sales_daily'               -- 일매출 (sales.sql)
   ];
 begin
   for t in

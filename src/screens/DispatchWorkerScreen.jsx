@@ -6,7 +6,6 @@ import { useGoBack, useHistoryState } from '../hooks/usePageHistoryState'
 import { dispatchRequest, fetchShifts, WORKER_COLUMNS, workerPayload } from '../lib/dispatchApi'
 import PositionTag from '../components/PositionTag'
 import {
-  hhmm,
   INSURANCE_DAY_LIMIT,
   monthRange,
   POSITIONS,
@@ -79,9 +78,6 @@ export default function DispatchWorkerScreen() {
     setForm({
       name: worker.name,
       isFixed: worker.is_fixed,
-      defaultStart: hhmm(worker.default_start),
-      defaultEnd: hhmm(worker.default_end),
-      defaultWage: worker.default_wage ? String(worker.default_wage) : '',
       defaultPosition: worker.default_position ?? '',
       bank: worker.bank ?? '',
       account: worker.account ?? '',
@@ -106,9 +102,6 @@ export default function DispatchWorkerScreen() {
       ...workerPayload(worker, {
         name: form.name.trim(),
         isFixed: form.isFixed,
-        defaultStart: form.defaultStart || null,
-        defaultEnd: form.defaultEnd || null,
-        defaultWage: form.defaultWage === '' ? null : Number(form.defaultWage),
         defaultPosition: form.defaultPosition || null,
         bank: form.bank,
         account: form.account,
@@ -253,7 +246,7 @@ export default function DispatchWorkerScreen() {
 
       {!editing ? (
         <button type="button" className="btn-secondary" onClick={startEdit}>
-          ✏️ 인력 정보 고치기 (고정 파출·평소 근무·계좌)
+          ✏️ 인력 정보 고치기 (고정 파출·평소 포지션·계좌)
         </button>
       ) : (
         <div className="cost-summary invoice-form">
@@ -264,7 +257,7 @@ export default function DispatchWorkerScreen() {
           </div>
           <label className="toggle-row">
             <input type="checkbox" checked={form.isFixed} onChange={setField('isFixed')} />
-            <span>📌 고정 파출 (고정 파출 화면에 모아서 보여주고 [오늘 출근 +]로 바로 등록)</span>
+            <span>📌 고정 파출 (고정 파출 화면에 모아서 보여주고 [오늘 출근 +]로 빠르게 등록)</span>
           </label>
           <div className="field">
             <label>평소 포지션</label>
@@ -280,23 +273,6 @@ export default function DispatchWorkerScreen() {
                 </button>
               ))}
             </div>
-          </div>
-          <div className="field">
-            <label>평소 근무시간</label>
-            <div className="rrn-row">
-              <input type="time" className="input" value={form.defaultStart} onChange={setField('defaultStart')} />
-              <span>~</span>
-              <input type="time" className="input" value={form.defaultEnd} onChange={setField('defaultEnd')} />
-            </div>
-          </div>
-          <div className="field">
-            <label>평소 일당 (원)</label>
-            <input
-              className="input"
-              inputMode="numeric"
-              value={form.defaultWage === '' ? '' : Number(form.defaultWage).toLocaleString('ko-KR')}
-              onChange={(e) => setForm((prev) => ({ ...prev, defaultWage: e.target.value.replace(/\D/g, '') }))}
-            />
           </div>
           <div className="field">
             <label>계좌</label>
