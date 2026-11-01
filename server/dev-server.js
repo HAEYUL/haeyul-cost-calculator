@@ -7,6 +7,7 @@ import analyzeStaffScheduleHandler from '../api/analyze-staff-schedule.js'
 import askQuestionHandler from '../api/ask-question.js'
 import loginHandler from '../api/login.js'
 import adminHandler from '../api/admin.js'
+import dispatchHandler from '../api/dispatch.js'
 import settlementPinHandler from '../api/settlement-pin.js'
 
 const app = express()
@@ -20,6 +21,7 @@ app.post('/api/analyze-staff-schedule', analyzeStaffScheduleHandler)
 app.post('/api/ask-question', askQuestionHandler)
 app.post('/api/login', loginHandler)
 app.post('/api/admin', adminHandler)
+app.post('/api/dispatch', dispatchHandler)
 app.post('/api/settlement-pin', settlementPinHandler)
 
 const port = process.env.API_PORT || 8787

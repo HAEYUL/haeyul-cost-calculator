@@ -25,6 +25,12 @@ export class HttpError extends Error {
   }
 }
 
+// 서버 비밀값(STORE_AUTH_SECRET). 파출 주민번호 암호화에도 쓰므로 한 번 정하면 바꾸지 않는다.
+export function serverSecret() {
+  assertConfigured()
+  return STORE_AUTH_SECRET
+}
+
 export function isConfigured() {
   return Boolean(SUPABASE_URL && SUPABASE_ANON_KEY && SERVICE_ROLE_KEY && STORE_AUTH_SECRET)
 }
