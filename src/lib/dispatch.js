@@ -189,3 +189,57 @@ export function groupUnpaid(shifts) {
   for (const g of groups.values()) g.shifts.sort((a, b) => a.work_date.localeCompare(b.work_date))
   return [...groups.values()]
 }
+
+// 월간 지급대장 한 줄(근무자별): 근무일, 총지급액, 소득세·지방소득세(일당별로 계산해 합산), 실지급액
+export function buildLedgerRows(shifts) {
+  const map = new Map()
+  for (const s of shifts) {
+    if (!map.has(s.worker_id)) {
+      map.set(s.worker_id, { workerId: s.worker_id, dates: new Set(), total: 0, incomeTax: 0, localTax: 0, unpaid: 0, shifts: [] })
+    }
+    const r = map.get(s.worker_id)
+    const wage = Number(s.wage || 0)
+    const tax = dailyWageTax(wage)
+    r.dates.add(s.work_date)
+    r.total += wage
+    r.incomeTax += tax.incomeTax
+    r.localTax += tax.localTax
+    if (!s.paid_date) r.unpaid += wage
+    r.shifts.push(s)
+  }
+  return [...map.values()].map((r) => ({
+    ...r,
+    days: r.dates.size,
+    net: r.total - r.incomeTax - r.localTax,
+    shifts: r.shifts.sort((a, b) => a.work_date.localeCompare(b.work_date) || String(a.start_time).localeCompare(String(b.start_time))),
+  }))
+}
+
+// 연간 집계(근무자별 1~12월 지급액)
+export function buildYearRows(shifts) {
+  const map = new Map()
+  for (const s of shifts) {
+    if (!map.has(s.worker_id)) map.set(s.worker_id, { workerId: s.worker_id, months: new Array(12).fill(0), dates: new Set(), total: 0 })
+    const r = map.get(s.worker_id)
+    const wage = Number(s.wage || 0)
+    r.months[Number(s.work_date.slice(5, 7)) - 1] += wage
+    r.dates.add(s.work_date)
+    r.total += wage
+  }
+  return [...map.values()].map((r) => ({ ...r, days: r.dates.size }))
+}
+
+// 급여명세서의 송금 칸: 같은 날 송금한 근무끼리 묶는다(연속된 줄만). [{ shifts, paidDate, amount }]
+export function groupByPaidDate(sortedShifts) {
+  const groups = []
+  for (const s of sortedShifts) {
+    const last = groups.at(-1)
+    if (last && s.paid_date && last.paidDate === s.paid_date) {
+      last.shifts.push(s)
+      last.amount += Number(s.wage || 0)
+    } else {
+      groups.push({ shifts: [s], paidDate: s.paid_date ?? null, amount: s.paid_date ? Number(s.wage || 0) : 0 })
+    }
+  }
+  return groups
+}

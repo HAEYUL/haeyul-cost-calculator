@@ -1781,9 +1781,21 @@ button.kpi-card {
     grid-template-columns: repeat(3, minmax(0, 1fr));
     grid-template-areas:
       'stock vendor report'
-      'recipe vendor report'
+      'recipe vendor dispatch'
       'settings settings settings';
     gap: 20px;
+  }
+
+  .menu-group-dispatch {
+    grid-area: dispatch;
+  }
+
+  /* 매니저: 입력 메뉴 3개만 한 줄로 크게 */
+  .menu-list.menu-list-manager {
+    display: flex;
+    max-width: 560px;
+    margin: 0 auto;
+    width: 100%;
   }
 
   .menu-group-stock {
@@ -2314,4 +2326,214 @@ button.kpi-card {
 
 .danger-btn {
   color: #d84343;
+}
+
+/* ---------- 파출 송금 관리 ---------- */
+.dispatch-card-on {
+  border-color: var(--accent);
+}
+
+.pay-check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+}
+
+.pay-check input {
+  width: 20px;
+  height: 20px;
+  accent-color: var(--accent);
+}
+
+.copy-chip {
+  padding: 3px 10px;
+  font-size: 13px;
+  box-shadow: none;
+}
+
+.inline-link {
+  margin: 0;
+  padding: 0 4px;
+  font-size: 14px;
+}
+
+.pay-bar .cost-summary {
+  border-color: var(--accent);
+}
+
+.pay-bar .rrn-row {
+  margin-top: 8px;
+}
+
+.pay-total {
+  font-size: 20px;
+}
+
+/* ---------- 파출 세무 출력 (미리보기 + 인쇄) ---------- */
+.report-actions {
+  display: flex;
+  gap: 10px;
+}
+
+.report-actions .btn-primary,
+.report-actions .btn-secondary {
+  flex: 1;
+}
+
+.report-preview-title {
+  margin-top: 18px;
+  font-weight: 700;
+}
+
+.print-dispatch {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  margin-top: 8px;
+  overflow-x: auto;
+  color: #111;
+  text-align: left;
+}
+
+.print-page {
+  background: #fff;
+  padding: 24px 26px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.15);
+  font-size: 12px;
+}
+
+.print-page.landscape {
+  min-width: 900px;
+}
+
+.print-page.portrait {
+  max-width: 640px;
+}
+
+.print-meta {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  color: #555;
+  margin-bottom: 8px;
+}
+
+.print-doc-title {
+  text-align: center;
+  font-size: 20px;
+  letter-spacing: 4px;
+  margin: 4px 0 2px;
+  color: #111;
+}
+
+.print-doc-sub {
+  text-align: center;
+  margin: 0 0 12px;
+  color: #333;
+}
+
+.print-doc-section {
+  margin: 14px 0 4px;
+  font-weight: 700;
+}
+
+.print-doc-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: 10px;
+  font-size: 12px;
+}
+
+.print-doc-table th,
+.print-doc-table td {
+  border: 1px solid #555;
+  padding: 4px 6px;
+  color: #111;
+}
+
+.print-doc-table th {
+  background: #f1f1f1;
+  font-weight: 700;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.print-doc-table td:first-child {
+  white-space: nowrap;
+}
+
+.print-doc-table .num {
+  text-align: right;
+  white-space: nowrap;
+}
+
+.print-doc-table .center {
+  text-align: center;
+}
+
+.print-doc-table .total-row th {
+  background: #e8e8e8;
+}
+
+.day-grid-table th,
+.day-grid-table td {
+  padding: 3px 2px;
+  font-size: 10px;
+  text-align: center;
+}
+
+.year-table th,
+.year-table td {
+  font-size: 10.5px;
+  padding: 3px 4px;
+}
+
+.print-note {
+  font-size: 11px;
+  color: #444;
+  margin: 6px 0 0;
+}
+
+@page dispatch-portrait {
+  size: A4 portrait;
+  margin: 12mm;
+}
+
+@media print {
+  .print-dispatch,
+  .print-dispatch * {
+    visibility: visible;
+  }
+
+  .no-print,
+  .side-nav {
+    display: none !important;
+  }
+
+  .print-dispatch {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    margin: 0;
+    gap: 0;
+    overflow: visible;
+  }
+
+  .print-dispatch .print-page {
+    box-shadow: none;
+    padding: 0;
+    min-width: 0;
+    max-width: none;
+    break-after: page;
+  }
+
+  .print-dispatch .print-page:last-child {
+    break-after: auto;
+  }
+
+  .print-dispatch .print-page.portrait {
+    page: dispatch-portrait;
+  }
 }

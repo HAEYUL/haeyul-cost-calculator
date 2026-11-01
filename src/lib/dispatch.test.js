@@ -96,3 +96,33 @@ describe('근무 묶기', () => {
     expect(timeRangeLabel('09:30', '14:00')).toBe('09:30~14')
   })
 })
+
+import { buildLedgerRows, buildYearRows, groupByPaidDate } from './dispatch'
+
+describe('세무 출력 집계', () => {
+  const shifts = [
+    { worker_id: 'w1', work_date: '2026-10-09', wage: 135000, paid_date: '2026-10-09' },
+    { worker_id: 'w1', work_date: '2026-10-17', wage: 135000, paid_date: '2026-10-18' },
+    { worker_id: 'w1', work_date: '2026-10-18', wage: 135000, paid_date: '2026-10-18' },
+    { worker_id: 'w1', work_date: '2026-10-31', wage: 200000, paid_date: null },
+    { worker_id: 'w2', work_date: '2026-03-02', wage: 65000, paid_date: '2026-03-02' },
+  ]
+  it('지급대장: 근무일수·합계·세금·실지급액·미송금', () => {
+    const r = buildLedgerRows(shifts).find((x) => x.workerId === 'w1')
+    expect(r).toMatchObject({ days: 4, total: 605000, incomeTax: 1350, localTax: 130, net: 603520, unpaid: 200000 })
+  })
+  it('연간: 월별 칸에 나눠 담는다', () => {
+    const r = buildYearRows(shifts).find((x) => x.workerId === 'w2')
+    expect(r.months[2]).toBe(65000)
+    expect(r.total).toBe(65000)
+  })
+  it('같은 날 송금한 연속 근무를 묶는다 (종이 명세서의 270,000원처럼)', () => {
+    const w1 = buildLedgerRows(shifts).find((x) => x.workerId === 'w1')
+    const groups = groupByPaidDate(w1.shifts)
+    expect(groups.map((g) => [g.paidDate, g.shifts.length, g.amount])).toEqual([
+      ['2026-10-09', 1, 135000],
+      ['2026-10-18', 2, 270000],
+      [null, 1, 0],
+    ])
+  })
+})

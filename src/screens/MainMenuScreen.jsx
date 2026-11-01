@@ -381,7 +381,7 @@ export default function MainMenuScreen() {
         </div>
       )}
 
-      <div className="menu-list">
+      <div className={`menu-list${isAdmin ? '' : ' menu-list-manager'}`}>
         {menuSectionsFor(role).map((section) => (
           <div key={section.title} className={`menu-group menu-group-${section.area}`}>
             <p className="menu-group-title">

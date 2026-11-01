@@ -89,6 +89,16 @@ create table if not exists public.dispatch_shifts (
 create index if not exists dispatch_shifts_store_date_idx on public.dispatch_shifts (store_code, work_date);
 create index if not exists dispatch_shifts_worker_idx on public.dispatch_shifts (worker_id, work_date);
 
+-- 매장 사업자 정보 (세무 출력물의 지불인 칸: 상호·대표·사업자번호·주소)
+create table if not exists public.store_business_info (
+  store_code text primary key references public.stores(code),
+  business_name text,
+  owner_name text,
+  business_no text,
+  address text,
+  updated_at timestamptz not null default now()
+);
+
 -- ---------------------------------------------------------------------
 -- 3) 접근 규칙: store_code가 있는 모든 표
 --    매니저 = 자기 매장만 / 메인 관리자 = 전부 / 관리자 전용 표는 매니저가 아예 못 연다
@@ -102,7 +112,8 @@ declare
     'vendor_opening_balances',  -- 거래처 시작 잔액
     'store_settlements',        -- 매장운영결산
     'recipes', 'recipe_meta', 'ingredient_mapping', 'menu_prices',  -- 레시피·원가
-    'staff_schedules'           -- 직원 근무표
+    'staff_schedules',          -- 직원 근무표
+    'store_business_info'       -- 사업자 정보(세무 출력)
   ];
 begin
   for t in
