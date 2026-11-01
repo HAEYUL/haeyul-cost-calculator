@@ -86,6 +86,14 @@ create table if not exists public.dispatch_shifts (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+-- 포지션(홀/주방): 근무마다 체크하고, 명부에는 평소 포지션을 둔다 (이미 표가 있어도 칸만 추가)
+alter table public.dispatch_workers add column if not exists default_position text;
+alter table public.dispatch_shifts add column if not exists position text;
+alter table public.dispatch_workers drop constraint if exists dispatch_workers_position_check;
+alter table public.dispatch_workers add constraint dispatch_workers_position_check check (default_position in ('hall', 'kitchen'));
+alter table public.dispatch_shifts drop constraint if exists dispatch_shifts_position_check;
+alter table public.dispatch_shifts add constraint dispatch_shifts_position_check check (position in ('hall', 'kitchen'));
+
 create index if not exists dispatch_shifts_store_date_idx on public.dispatch_shifts (store_code, work_date);
 create index if not exists dispatch_shifts_worker_idx on public.dispatch_shifts (worker_id, work_date);
 
@@ -152,7 +160,7 @@ end $$;
 
 -- 인력 명부: 암호화된 주민번호와 중복 확인값은 화면(출입증)으로 읽을 수 없게 한다.
 revoke all on public.dispatch_workers from anon, authenticated;
-grant select (id, store_code, name, rrn_masked, bank, account, is_fixed, default_start, default_end, default_wage, memo, created_at, updated_at)
+grant select (id, store_code, name, rrn_masked, bank, account, is_fixed, default_start, default_end, default_wage, default_position, memo, created_at, updated_at)
   on public.dispatch_workers to authenticated;
 grant select, insert, update, delete on public.dispatch_shifts to authenticated;
 

@@ -9,6 +9,7 @@ import {
   hhmm,
   INSURANCE_DAY_LIMIT,
   monthRange,
+  POSITIONS,
   rrnDigits,
   rrnError,
   SHIFT_PRESETS,
@@ -47,6 +48,7 @@ export default function DispatchShiftFormScreen() {
   const [account, setAccount] = useState('')
   const [editingAccount, setEditingAccount] = useState(false)
   const [memo, setMemo] = useState('')
+  const [position, setPosition] = useState('')
 
   const [monthInfo, setMonthInfo] = useState(null)
   const [saving, setSaving] = useState(false)
@@ -66,6 +68,7 @@ export default function DispatchShiftFormScreen() {
     setAccount(w.account ?? '')
     setEditingAccount(!w.account)
     setDuplicatePrompt(null)
+    if (!editMode && w.default_position) setPosition(w.default_position)
     if (!editMode && w.default_wage) {
       setStart(hhmm(w.default_start) || SHIFT_PRESETS[0].start)
       setEnd(hhmm(w.default_end) || SHIFT_PRESETS[0].end)
@@ -98,6 +101,7 @@ export default function DispatchShiftFormScreen() {
           setBank(data.bank ?? w?.bank ?? '')
           setAccount(data.account ?? w?.account ?? '')
           setMemo(data.memo ?? '')
+          setPosition(data.position ?? '')
         } else {
           const preset = list.find((x) => x.id === searchParams.get('worker'))
           if (preset) applyWorker(preset)
@@ -157,6 +161,7 @@ export default function DispatchShiftFormScreen() {
     if (!date) return setError('근무날짜를 입력하세요.')
     if (!Number.isInteger(wageNum) || wageNum <= 0) return setError('일당을 숫자로 입력하세요.')
     if (!start || !end) return setError('근무시간을 입력하세요.')
+    if (!position) return setError('포지션(홀/주방)을 체크하세요.')
     if (!workerId && !creatingNew) {
       if (!nameInput.trim()) return setError('이름을 입력하세요.')
       return setError('위에서 같은 분을 고르거나 [새로 등록할게요]를 눌러주세요.')
@@ -186,6 +191,7 @@ export default function DispatchShiftFormScreen() {
           defaultStart: start,
           defaultEnd: end,
           defaultWage: wageNum,
+          defaultPosition: position,
         })
         if (!ok) {
           if (status === 409 && body.duplicate) {
@@ -198,10 +204,14 @@ export default function DispatchShiftFormScreen() {
         setWorkers((prev) => [...prev, body.worker])
         setWorkerId(targetId)
         setCreatingNew(false)
-      } else if (worker && ((worker.bank ?? '') !== bank || (worker.account ?? '') !== account)) {
-        // 2) 계좌를 바꿨으면 명부에도 반영
-        const { ok, body } = await dispatchRequest('saveWorker', { storeCode: store.code, ...workerPayload(worker, { bank, account }) })
-        if (!ok) throw new Error(body.error || '계좌를 저장하지 못했어요.')
+      } else if (worker && ((worker.bank ?? '') !== bank || (worker.account ?? '') !== account || !worker.default_position)) {
+        // 2) 계좌를 바꿨거나 평소 포지션이 비어 있으면 명부에도 반영
+        const { ok, body } = await dispatchRequest('saveWorker', {
+          storeCode: store.code,
+          ...workerPayload(worker, { bank, account, defaultPosition: worker.default_position || position }),
+        })
+        if (!ok) throw new Error(body.error || '인력 정보를 저장하지 못했어요.')
+        setWorkers((prev) => prev.map((w) => (w.id === body.worker.id ? body.worker : w)))
       }
 
       // 3) 근무 기록
@@ -212,6 +222,7 @@ export default function DispatchShiftFormScreen() {
         start_time: start,
         end_time: end,
         wage: wageNum,
+        position,
         bank: bank || null,
         account: account || null,
         memo: memo.trim() || null,
@@ -395,6 +406,25 @@ export default function DispatchShiftFormScreen() {
             </div>
           )}
           {creatingNew && <p className="hint">주민번호는 암호화해서 저장하고, 화면에는 앞자리만 보여요.</p>}
+        </div>
+
+        <div className="field">
+          <label>포지션</label>
+          <div className="position-row" role="radiogroup" aria-label="포지션">
+            {POSITIONS.map((p) => (
+              <button
+                key={p.key}
+                type="button"
+                role="radio"
+                aria-checked={position === p.key}
+                className={`position-btn${position === p.key ? ' position-btn-on' : ''}`}
+                onClick={() => setPosition(p.key)}
+                disabled={locked}
+              >
+                <span className="position-check">{position === p.key ? '☑' : '☐'}</span> {p.icon} {p.label}
+              </button>
+            ))}
+          </div>
         </div>
 
         <div className="field">

@@ -126,3 +126,27 @@ describe('세무 출력 집계', () => {
     ])
   })
 })
+
+import { positionLabel, positionsOf, summarizeByPosition } from './dispatch'
+
+describe('포지션(홀/주방)', () => {
+  const shifts = [
+    { position: 'hall', wage: 135000 },
+    { position: 'kitchen', wage: 65000 },
+    { position: 'hall', wage: 65000 },
+    { position: null, wage: 100000 },
+  ]
+  it('포지션별 건수·금액', () => {
+    expect(summarizeByPosition(shifts)).toEqual({
+      hall: { count: 2, total: 200000 },
+      kitchen: { count: 1, total: 65000 },
+      none: { count: 1, total: 100000 },
+    })
+  })
+  it('표시 이름', () => {
+    expect(positionLabel('kitchen')).toBe('주방')
+    expect(positionsOf(shifts)).toBe('홀·주방')
+    expect(positionsOf([{ position: 'hall' }])).toBe('홀')
+    expect(positionsOf([{}])).toBe('-')
+  })
+})

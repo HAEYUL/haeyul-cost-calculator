@@ -106,6 +106,30 @@ export function findSimilarWorkers(input, workers, limit = 5) {
     .slice(0, limit)
 }
 
+// ---------- 포지션 ----------
+export const POSITIONS = [
+  { key: 'hall', label: '홀', icon: '🍽️' },
+  { key: 'kitchen', label: '주방', icon: '🔪' },
+]
+export const positionLabel = (key) => POSITIONS.find((p) => p.key === key)?.label ?? '-'
+
+// 포지션별 합계: { hall: { count, total }, kitchen: {...}, none: {...} }
+export function summarizeByPosition(shifts) {
+  const out = { hall: { count: 0, total: 0 }, kitchen: { count: 0, total: 0 }, none: { count: 0, total: 0 } }
+  for (const s of shifts) {
+    const r = out[s.position] ?? out.none
+    r.count += 1
+    r.total += Number(s.wage || 0)
+  }
+  return out
+}
+
+// 한 사람이 한 달 동안 맡은 포지션: '홀', '주방', '홀·주방'
+export function positionsOf(shifts) {
+  const keys = POSITIONS.map((p) => p.key).filter((k) => shifts.some((s) => s.position === k))
+  return keys.length ? keys.map(positionLabel).join('·') : '-'
+}
+
 // ---------- 시간·금액 ----------
 export const won = (n) => `${Math.round(Number(n) || 0).toLocaleString('ko-KR')}원`
 export const wonPlain = (n) => Math.round(Number(n) || 0).toLocaleString('ko-KR')

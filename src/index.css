@@ -2537,3 +2537,63 @@ button.kpi-card {
     page: dispatch-portrait;
   }
 }
+
+/* ---------- 포지션(홀/주방) ---------- */
+.position-row {
+  display: flex;
+  gap: 10px;
+}
+
+.position-btn {
+  flex: 1;
+  padding: 13px 10px;
+  font-size: 17px;
+  font-weight: 600;
+  border-radius: var(--radius);
+  border: 1.5px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  cursor: pointer;
+  box-shadow: var(--shadow-card);
+}
+
+.position-btn-on {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, var(--surface));
+  color: var(--accent);
+}
+
+.position-btn:disabled {
+  opacity: 0.7;
+  cursor: default;
+}
+
+.position-check {
+  font-size: 19px;
+}
+
+.position-tag {
+  display: inline-block;
+  min-width: 38px;
+  text-align: center;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 1px 8px;
+  border-radius: 999px;
+  vertical-align: middle;
+}
+
+.position-tag-hall {
+  background: #e3f0ff;
+  color: #1e5fae;
+}
+
+.position-tag-kitchen {
+  background: #fdeee0;
+  color: #b4560f;
+}
+
+.position-sum-row {
+  font-size: 14px;
+  color: var(--text-muted);
+}

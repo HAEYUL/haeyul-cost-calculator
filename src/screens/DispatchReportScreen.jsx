@@ -10,6 +10,8 @@ import {
   groupByPaidDate,
   INSURANCE_DAY_LIMIT,
   monthRange,
+  positionLabel,
+  positionsOf,
   shiftMonthKey,
   timeRangeLabel,
   wonPlain,
@@ -103,6 +105,7 @@ export default function DispatchReportScreen() {
       const csv = rowsToCsv(ledger, [
         { label: '이름', value: (r) => nameOf(r.workerId) },
         { label: '주민등록번호', value: (r) => rrnOf(r.workerId) },
+        { label: '포지션', value: (r) => positionsOf(r.shifts) },
         { label: '근무일수', value: 'days' },
         { label: '근무일자', value: (r) => [...r.dates].sort().map((d) => Number(d.slice(8, 10))).join(' ') },
         { label: '총지급액', value: 'total' },
@@ -297,6 +300,7 @@ export default function DispatchReportScreen() {
                   <tr>
                     <th>이름</th>
                     <th>주민등록번호</th>
+                    <th>포지션</th>
                     <th>근무일수</th>
                     <th>총지급액</th>
                     <th>소득세</th>
@@ -313,6 +317,7 @@ export default function DispatchReportScreen() {
                         {r.days >= INSURANCE_DAY_LIMIT && ' ⚠️'}
                       </td>
                       <td>{rrnOf(r.workerId)}</td>
+                      <td className="center">{positionsOf(r.shifts)}</td>
                       <td className="num">{r.days}</td>
                       <td className="num">{wonPlain(r.total)}</td>
                       <td className="num">{wonPlain(r.incomeTax)}</td>
@@ -322,7 +327,7 @@ export default function DispatchReportScreen() {
                     </tr>
                   ))}
                   <tr className="total-row">
-                    <th colSpan={2}>합계 {ledger.length}명</th>
+                    <th colSpan={3}>합계 {ledger.length}명</th>
                     <th className="num">{sum(ledger, 'days')}</th>
                     <th className="num">{wonPlain(sum(ledger, 'total'))}</th>
                     <th className="num">{wonPlain(sum(ledger, 'incomeTax'))}</th>
@@ -399,6 +404,7 @@ export default function DispatchReportScreen() {
                     <thead>
                       <tr>
                         <th>근무일</th>
+                        <th>포지션</th>
                         <th>근무시간</th>
                         <th>일당</th>
                         <th>송금일</th>
@@ -410,6 +416,7 @@ export default function DispatchReportScreen() {
                         g.shifts.map((s, i) => (
                           <tr key={s.id}>
                             <td>{md(s.work_date)}</td>
+                            <td className="center">{s.position ? positionLabel(s.position) : ''}</td>
                             <td>{timeRangeLabel(s.start_time, s.end_time)}</td>
                             <td className="num">{wonPlain(s.wage)}</td>
                             {i === 0 && (
@@ -426,14 +433,14 @@ export default function DispatchReportScreen() {
                         )),
                       )}
                       <tr className="total-row">
-                        <th colSpan={2}>합계 {r.days}일</th>
+                        <th colSpan={3}>합계 {r.days}일</th>
                         <th className="num">{wonPlain(r.total)}</th>
                         <th />
                         <th className="num">{wonPlain(paidTotal)}</th>
                       </tr>
                       {(r.incomeTax > 0 || r.localTax > 0) && (
                         <tr>
-                          <th colSpan={2}>원천징수 (소득세 / 지방소득세)</th>
+                          <th colSpan={3}>원천징수 (소득세 / 지방소득세)</th>
                           <td colSpan={3} className="num">
                             {wonPlain(r.incomeTax)} / {wonPlain(r.localTax)} · 실지급액 {wonPlain(r.net)}
                           </td>

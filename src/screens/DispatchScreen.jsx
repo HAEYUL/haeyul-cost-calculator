@@ -4,11 +4,15 @@ import { useStore } from '../context/StoreContext'
 import { supabase } from '../lib/supabaseClient'
 import { useHistoryState } from '../hooks/usePageHistoryState'
 import { fetchShifts, fetchWorkers } from '../lib/dispatchApi'
+import PositionTag from '../components/PositionTag'
 import {
   INSURANCE_DAY_LIMIT,
   monthRange,
+  positionLabel,
+  POSITIONS,
   shiftMonthKey,
   showMaskedRrn,
+  summarizeByPosition,
   summarizeByWorker,
   timeRangeLabel,
   won,
@@ -37,6 +41,7 @@ export default function DispatchScreen() {
   const [message, setMessage] = useState('')
   const [reloadKey, setReloadKey] = useState(0)
   const [busyWorker, setBusyWorker] = useState(null)
+  const [positionFilter, setPositionFilter] = useHistoryState('dispatchPosition', 'all')
 
   useEffect(() => {
     if (!supabase) return
@@ -59,7 +64,9 @@ export default function DispatchScreen() {
 
   const workerById = useMemo(() => new Map(workers.map((w) => [w.id, w])), [workers])
   const summary = useMemo(() => summarizeByWorker(shifts), [shifts])
-  const monthTotal = shifts.reduce((sum, s) => sum + Number(s.wage || 0), 0)
+  const byPosition = useMemo(() => summarizeByPosition(shifts), [shifts])
+  const visibleShifts = positionFilter === 'all' ? shifts : shifts.filter((s) => s.position === positionFilter)
+  const monthTotal = visibleShifts.reduce((sum, s) => sum + Number(s.wage || 0), 0)
   const fixedWorkers = workers.filter((w) => w.is_fixed)
   const [y, m] = month.split('-')
 
@@ -67,7 +74,7 @@ export default function DispatchScreen() {
   const addToday = async (worker) => {
     setMessage('')
     setError('')
-    if (!worker.default_wage) {
+    if (!worker.default_wage || !worker.default_position) {
       navigate(`/dispatch/new?worker=${worker.id}`)
       return
     }
@@ -84,6 +91,7 @@ export default function DispatchScreen() {
       start_time: worker.default_start,
       end_time: worker.default_end,
       wage: worker.default_wage,
+      position: worker.default_position,
       bank: worker.bank,
       account: worker.account,
     })
@@ -92,7 +100,7 @@ export default function DispatchScreen() {
       setError(err.message)
       return
     }
-    setMessage(`${worker.name}님 오늘 출근을 등록했어요 (${timeRangeLabel(worker.default_start, worker.default_end)} · ${won(worker.default_wage)}).`)
+    setMessage(`${worker.name}님 오늘 출근을 등록했어요 (${positionLabel(worker.default_position)} · ${timeRangeLabel(worker.default_start, worker.default_end)} · ${won(worker.default_wage)}).`)
     if (month !== today.slice(0, 7)) setMonth(today.slice(0, 7))
     else setReloadKey((k) => k + 1)
   }
@@ -142,7 +150,22 @@ export default function DispatchScreen() {
 
       {!loading && tab === 'daily' && (
         <>
-          {shifts.length === 0 ? (
+          <div className="preset-row position-filter">
+            {[{ key: 'all', label: '전체', icon: '' }, ...POSITIONS].map((p) => {
+              const count = p.key === 'all' ? shifts.length : byPosition[p.key].count
+              return (
+                <button
+                  key={p.key}
+                  type="button"
+                  className={positionFilter === p.key ? 'chip chip-active' : 'chip'}
+                  onClick={() => setPositionFilter(p.key)}
+                >
+                  {p.icon} {p.label} {count}
+                </button>
+              )
+            })}
+          </div>
+          {visibleShifts.length === 0 ? (
             <p className="hint">이 달에 등록된 근무가 없어요.</p>
           ) : (
             <div className="ledger-table-wrap">
@@ -151,18 +174,22 @@ export default function DispatchScreen() {
                   <tr>
                     <th>날짜</th>
                     <th>이름</th>
+                    <th>포지션</th>
                     <th>시간</th>
                     <th className="num">일당</th>
                     <th className="num">송금</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {shifts.map((s) => (
+                  {visibleShifts.map((s) => (
                     <tr key={s.id} className="clickable" onClick={() => navigate(`/dispatch/edit/${s.id}`)}>
                       <td>{dayLabel(s.work_date)}</td>
                       <td>
                         {workerById.get(s.worker_id)?.name ?? '-'}
                         {s.paid_date && !isAdmin && ' 🔒'}
+                      </td>
+                      <td>
+                        <PositionTag value={s.position} />
                       </td>
                       <td>{timeRangeLabel(s.start_time, s.end_time)}</td>
                       <td className="num">{wonPlain(s.wage)}</td>
@@ -177,11 +204,32 @@ export default function DispatchScreen() {
           )}
           <div className="cost-summary">
             <div className="cost-summary-row">
-              <span>{Number(m)}월 합계</span>
+              <span>
+                {Number(m)}월 합계{positionFilter !== 'all' && ` (${positionLabel(positionFilter)})`}
+              </span>
               <strong>
-                {shifts.length}건 · {won(monthTotal)}
+                {visibleShifts.length}건 · {won(monthTotal)}
               </strong>
             </div>
+            {positionFilter === 'all' &&
+              POSITIONS.map((p) => (
+                <div key={p.key} className="cost-summary-row position-sum-row">
+                  <span>
+                    {p.icon} {p.label}
+                  </span>
+                  <span>
+                    {byPosition[p.key].count}건 · {won(byPosition[p.key].total)}
+                  </span>
+                </div>
+              ))}
+            {positionFilter === 'all' && byPosition.none.count > 0 && (
+              <div className="cost-summary-row position-sum-row">
+                <span>포지션 미입력</span>
+                <span>
+                  {byPosition.none.count}건 · {won(byPosition.none.total)}
+                </span>
+              </div>
+            )}
             {!isAdmin && <p className="hint">🔒 송금완료된 근무는 메인 관리자만 고칠 수 있어요.</p>}
           </div>
         </>
@@ -201,7 +249,8 @@ export default function DispatchScreen() {
                   {r && r.days >= INSURANCE_DAY_LIMIT && <span className="tag-warn">{INSURANCE_DAY_LIMIT}일 이상</span>}
                 </div>
                 <p className="hint">
-                  평소 {w.default_wage ? `${timeRangeLabel(w.default_start, w.default_end)} · ${won(w.default_wage)}` : '근무시간·일당 미설정'}
+                  평소 {w.default_position && <PositionTag value={w.default_position} />}{' '}
+                  {w.default_wage ? `${timeRangeLabel(w.default_start, w.default_end)} · ${won(w.default_wage)}` : '근무시간·일당 미설정'}
                 </p>
                 <div className="cost-summary-row">
                   <span>{Number(m)}월 근무</span>
@@ -246,7 +295,7 @@ export default function DispatchScreen() {
               >
                 <div className="cost-summary-row">
                   <strong>
-                    {w.name} {w.is_fixed && <span className="tag">고정</span>}
+                    {w.name} {w.is_fixed && <span className="tag">고정</span>} {w.default_position && <PositionTag value={w.default_position} />}
                   </strong>
                   <span>{r ? `${Number(m)}월 ${r.days}일` : ''}</span>
                 </div>

@@ -3,10 +3,10 @@ import { apiFetch } from './apiFetch'
 
 // 인력 명부에서 화면이 읽을 수 있는 칸(암호화된 주민번호는 읽을 수 없다)
 export const WORKER_COLUMNS =
-  'id, store_code, name, rrn_masked, bank, account, is_fixed, default_start, default_end, default_wage, memo, created_at'
+  'id, store_code, name, rrn_masked, bank, account, is_fixed, default_start, default_end, default_wage, default_position, memo, created_at'
 
 export const SHIFT_COLUMNS =
-  'id, store_code, worker_id, work_date, start_time, end_time, wage, bank, account, memo, paid_date, paid_marked_at, created_at'
+  'id, store_code, worker_id, work_date, start_time, end_time, wage, position, bank, account, memo, paid_date, paid_marked_at, created_at'
 
 export async function fetchWorkers(storeCodes) {
   const codes = Array.isArray(storeCodes) ? storeCodes : [storeCodes]
@@ -57,6 +57,7 @@ export function workerPayload(worker, overrides = {}) {
     defaultStart: worker?.default_start ? String(worker.default_start).slice(0, 5) : null,
     defaultEnd: worker?.default_end ? String(worker.default_end).slice(0, 5) : null,
     defaultWage: worker?.default_wage ?? null,
+    defaultPosition: worker?.default_position ?? null,
     memo: worker?.memo ?? '',
     ...overrides,
   }

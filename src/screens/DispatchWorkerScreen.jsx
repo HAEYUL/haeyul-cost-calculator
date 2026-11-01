@@ -4,10 +4,13 @@ import { useStore } from '../context/StoreContext'
 import { supabase } from '../lib/supabaseClient'
 import { useGoBack, useHistoryState } from '../hooks/usePageHistoryState'
 import { dispatchRequest, fetchShifts, WORKER_COLUMNS, workerPayload } from '../lib/dispatchApi'
+import PositionTag from '../components/PositionTag'
 import {
   hhmm,
   INSURANCE_DAY_LIMIT,
   monthRange,
+  POSITIONS,
+  positionsOf,
   rrnDigits,
   rrnError,
   shiftMonthKey,
@@ -79,6 +82,7 @@ export default function DispatchWorkerScreen() {
       defaultStart: hhmm(worker.default_start),
       defaultEnd: hhmm(worker.default_end),
       defaultWage: worker.default_wage ? String(worker.default_wage) : '',
+      defaultPosition: worker.default_position ?? '',
       bank: worker.bank ?? '',
       account: worker.account ?? '',
       memo: worker.memo ?? '',
@@ -105,6 +109,7 @@ export default function DispatchWorkerScreen() {
         defaultStart: form.defaultStart || null,
         defaultEnd: form.defaultEnd || null,
         defaultWage: form.defaultWage === '' ? null : Number(form.defaultWage),
+        defaultPosition: form.defaultPosition || null,
         bank: form.bank,
         account: form.account,
         memo: form.memo,
@@ -155,7 +160,8 @@ export default function DispatchWorkerScreen() {
           ← 파출 관리
         </button>
         <h1>
-          {worker.name} {worker.is_fixed && <span className="tag">고정</span>}
+          {worker.name} {worker.is_fixed && <span className="tag">고정</span>}{' '}
+          {worker.default_position && <PositionTag value={worker.default_position} />}
         </h1>
         <p className="subtitle">
           {showMaskedRrn(worker.rrn_masked)} · {[worker.bank, worker.account].filter(Boolean).join(' ') || '계좌 없음'}
@@ -193,6 +199,7 @@ export default function DispatchWorkerScreen() {
                 <thead>
                   <tr>
                     <th>날짜</th>
+                    <th>포지션</th>
                     <th>근무시간</th>
                     <th className="num">일당</th>
                     <th className="num">송금</th>
@@ -202,6 +209,9 @@ export default function DispatchWorkerScreen() {
                   {shifts.map((s) => (
                     <tr key={s.id} className="clickable" onClick={() => navigate(`/dispatch/edit/${s.id}`)}>
                       <td>{dayLabel(s.work_date)}</td>
+                      <td>
+                        <PositionTag value={s.position} />
+                      </td>
                       <td>{timeRangeLabel(s.start_time, s.end_time)}</td>
                       <td className="num">{wonPlain(s.wage)}</td>
                       <td className={`num ${s.paid_date ? 'paid-text' : 'pending-text'}`}>
@@ -220,6 +230,10 @@ export default function DispatchWorkerScreen() {
                 <strong>
                   {summary.days}일 · {won(summary.total)}
                 </strong>
+              </div>
+              <div className="cost-summary-row">
+                <span>포지션</span>
+                <span>{positionsOf(shifts)}</span>
               </div>
               <div className="cost-summary-row">
                 <span>송금 완료</span>
@@ -252,6 +266,21 @@ export default function DispatchWorkerScreen() {
             <input type="checkbox" checked={form.isFixed} onChange={setField('isFixed')} />
             <span>📌 고정 파출 (고정 파출 화면에 모아서 보여주고 [오늘 출근 +]로 바로 등록)</span>
           </label>
+          <div className="field">
+            <label>평소 포지션</label>
+            <div className="position-row">
+              {POSITIONS.map((p) => (
+                <button
+                  key={p.key}
+                  type="button"
+                  className={`position-btn${form.defaultPosition === p.key ? ' position-btn-on' : ''}`}
+                  onClick={() => setForm((prev) => ({ ...prev, defaultPosition: p.key }))}
+                >
+                  <span className="position-check">{form.defaultPosition === p.key ? '☑' : '☐'}</span> {p.icon} {p.label}
+                </button>
+              ))}
+            </div>
+          </div>
           <div className="field">
             <label>평소 근무시간</label>
             <div className="rrn-row">

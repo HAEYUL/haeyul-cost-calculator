@@ -9,7 +9,7 @@ import { formatRrn, rrnDigits, rrnError, rrnMaskedPart } from '../src/lib/dispat
 //   'revealRrn'   세무 출력용 주민번호 전체 (메인 관리자만)
 
 const PUBLIC_COLUMNS =
-  'id, store_code, name, rrn_masked, bank, account, is_fixed, default_start, default_end, default_wage, memo, created_at, updated_at'
+  'id, store_code, name, rrn_masked, bank, account, is_fixed, default_start, default_end, default_wage, default_position, memo, created_at, updated_at'
 
 const cleanText = (v, max = 60) => (typeof v === 'string' ? v.trim().slice(0, max) : '')
 const cleanTime = (v) => (typeof v === 'string' && /^\d{2}:\d{2}$/.test(v) ? v : null)
@@ -57,6 +57,7 @@ export default async function handler(req, res) {
         default_start: cleanTime(body.defaultStart),
         default_end: cleanTime(body.defaultEnd),
         default_wage: cleanWage(body.defaultWage),
+        default_position: ['hall', 'kitchen'].includes(body.defaultPosition) ? body.defaultPosition : null,
         memo: cleanText(body.memo, 200) || null,
         updated_at: new Date().toISOString(),
       }

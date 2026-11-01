@@ -4,7 +4,8 @@ import { useStore } from '../context/StoreContext'
 import { supabase } from '../lib/supabaseClient'
 import { useHistoryState } from '../hooks/usePageHistoryState'
 import { fetchShifts, fetchWorkers, SHIFT_COLUMNS } from '../lib/dispatchApi'
-import { groupUnpaid, monthRange, shiftMonthKey, showMaskedRrn, timeRangeLabel, won, wonPlain } from '../lib/dispatch'
+import { groupUnpaid, monthRange, positionLabel, shiftMonthKey, showMaskedRrn, timeRangeLabel, won, wonPlain } from '../lib/dispatch'
+import PositionTag from '../components/PositionTag'
 import { currentMonth, todayStr } from '../lib/vendorLedger'
 
 const dayLabel = (d) => `${Number(d.slice(5, 7))}/${Number(d.slice(8, 10))}`
@@ -235,7 +236,7 @@ export default function DispatchPaymentsScreen() {
                     </button>
                   </p>
                   <p className="hint">
-                    {g.shifts.map((s) => `${dayLabel(s.work_date)} ${timeRangeLabel(s.start_time, s.end_time)}`).join(', ')}{' '}
+                    {g.shifts.map((s) => `${dayLabel(s.work_date)} ${s.position ? positionLabel(s.position) + ' ' : ''}${timeRangeLabel(s.start_time, s.end_time)}`).join(', ')}{' '}
                     <button type="button" className="link-btn inline-link" onClick={() => toggleExpand(g.key)}>
                       {open ? '접기' : '날짜별로 고르기'}
                     </button>
@@ -250,6 +251,9 @@ export default function DispatchPaymentsScreen() {
                                 <input type="checkbox" checked={selected.has(s.id)} onChange={(e) => toggle([s.id], e.target.checked)} />
                                 <span>{dayLabel(s.work_date)}</span>
                               </label>
+                            </td>
+                            <td>
+                              <PositionTag value={s.position} />
                             </td>
                             <td>{timeRangeLabel(s.start_time, s.end_time)}</td>
                             <td className="num">{wonPlain(s.wage)}</td>
