@@ -144,7 +144,8 @@ function findItemMismatches(items) {
 }
 
 export default function InvoiceScreen() {
-  const { store } = useStore()
+  // 매니저는 결제·원가 자료를 열 수 없어서, 결제 체크·잔액 대조·원가율 경고는 메인 관리자에게만 보인다.
+  const { store, isAdmin } = useStore()
   const navigate = useNavigate()
   const location = useLocation()
   const { batchId } = useParams()
@@ -218,7 +219,7 @@ export default function InvoiceScreen() {
   // "바로 결제 완료"를 미리 체크해 둔다. 15일·말일에 몰아서 결제하는 거래처는 체크하지 않는다.
   useEffect(() => {
     if (editMode) return
-    if (!store || !supabase || !vendorId || vendorId === 'new') {
+    if (!store || !supabase || !vendorId || vendorId === 'new' || !isAdmin) {
       setPaidInFull(false)
       setPaidInFullSuggested(false)
       return
@@ -245,12 +246,12 @@ export default function InvoiceScreen() {
     return () => {
       cancelled = true
     }
-  }, [store, vendorId, editMode])
+  }, [store, vendorId, editMode, isAdmin])
 
   // 거래처+입고일이 정해지면, 그 거래처가 이 날짜보다 전에 마지막으로 저장한 명세표의
   // 현잔액을 불러온다. "이번 명세표의 전잔액"이 그 값과 이어지는지 대조하기 위함이다.
   useEffect(() => {
-    if (!store || !supabase || !vendorId || vendorId === 'new' || !date) {
+    if (!store || !supabase || !vendorId || vendorId === 'new' || !date || !isAdmin) {
       setPreviousBatchBalance(null)
       return
     }
@@ -287,7 +288,7 @@ export default function InvoiceScreen() {
     return () => {
       cancelled = true
     }
-  }, [store, vendorId, date, editMode, batchId])
+  }, [store, vendorId, date, editMode, batchId, isAdmin])
 
   // 수정 모드: 기존 명세표와 품목을 불러와 입력 폼에 채워 넣는다.
   useEffect(() => {
@@ -514,7 +515,7 @@ export default function InvoiceScreen() {
       }))
 
       // 수정 전 명세표에 짝지어진 결제(바로 결제 완료·[결제완료])를 미리 찾아둔다.
-      const linkedPayment = originalBatch ? await findLinkedPayment({ storeCode: store.code, batch: originalBatch }) : null
+      const linkedPayment = originalBatch && isAdmin ? await findLinkedPayment({ storeCode: store.code, batch: originalBatch }) : null
 
       // 새 품목을 먼저 넣고, 명세표를 고친 뒤, 예전 품목을 지운다. 중간에 인터넷이 끊겨도 품목이 사라지지 않는다.
       const { data: insertedRows, error: insertEditErr } = await supabase.from('invoices').insert(editRows).select('id')
@@ -579,7 +580,7 @@ export default function InvoiceScreen() {
         navigate(-1)
         return
       }
-      navigate(`/vendors/${resolvedVendorId}`)
+      navigate(isAdmin ? `/vendors/${resolvedVendorId}` : '/invoices')
       return
     }
 
@@ -765,7 +766,7 @@ export default function InvoiceScreen() {
     // 단가가 오른 품목이 레시피에 쓰이고 있으면, 그 메뉴의 원가율이 얼마나 됐는지 바로 확인해서
     // 마진이 낮아진(원가율이 높아진) 메뉴를 저장 직후에 알려준다.
     let marginWarnings = []
-    if (changes.length > 0) {
+    if (changes.length > 0 && isAdmin) {
       const [recipesRes, mappingRes, pricesRes, allInvoicesRes] = await Promise.all([
         supabase.from('recipes').select('menu_name, ingredient_name, amount_g').eq('store_code', store.code),
         supabase
@@ -955,14 +956,16 @@ export default function InvoiceScreen() {
                 : `${store.name} · 거래명세표 사진을 올리면 자동으로 읽어드려요`}
             </p>
           </div>
-          <div className="page-actions">
-            <button type="button" className="action-btn" onClick={() => navigate('/price-alerts')}>
-              🔔 단가 변동 알림함
-            </button>
-            <button type="button" className="action-btn" onClick={() => navigate('/vendors')}>
-              🏪 거래처 관리
-            </button>
-          </div>
+          {isAdmin && (
+            <div className="page-actions">
+              <button type="button" className="action-btn" onClick={() => navigate('/price-alerts')}>
+                🔔 단가 변동 알림함
+              </button>
+              <button type="button" className="action-btn" onClick={() => navigate('/vendors')}>
+                🏪 거래처 관리
+              </button>
+            </div>
+          )}
         </div>
       </div>
 
@@ -1184,7 +1187,7 @@ export default function InvoiceScreen() {
               )}
             </div>
 
-            {!editMode && (
+            {!editMode && isAdmin && (
               <div className="field">
                 <label className="toggle-row">
                   <input type="checkbox" checked={paidInFull} onChange={(e) => setPaidInFull(e.target.checked)} />
@@ -1443,7 +1446,7 @@ export default function InvoiceScreen() {
         )}
       </div>
 
-      {!editMode && <InvoiceHistory storeCode={store.code} refreshKey={historyKey} />}
+      {!editMode && <InvoiceHistory storeCode={store.code} refreshKey={historyKey} showPayments={isAdmin} />}
     </div>
   )
 }

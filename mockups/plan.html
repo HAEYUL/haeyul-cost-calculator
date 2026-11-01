@@ -1,0 +1,55 @@
+<!DOCTYPE html><html lang="ko"><head><meta charset="utf-8"><link rel="stylesheet" href="common.css">
+<style>
+.box{background:#fff;border:2px solid var(--border);border-radius:16px;padding:14px 16px;box-shadow:var(--shadow)}
+.flow{display:flex;gap:18px;align-items:stretch}
+.arrow{align-self:center;font-size:28px;color:var(--muted)}
+.lane{display:flex;flex-direction:column;gap:12px;flex:1}
+.k{font-weight:800;font-size:16px;margin-bottom:6px}
+.pill{display:inline-block;padding:2px 10px;border-radius:99px;font-size:12px;font-weight:700}
+.p-m{background:#e6f4ea;color:#1f7a3f}.p-a{background:var(--accent);color:#fff}
+table.t th,table.t td{border:1px solid #ddd;padding:7px 8px;font-size:13px;text-align:center}
+table.t th{background:#f6f3f9}
+table.t td:first-child{text-align:left;font-weight:600}
+.y{color:var(--ok);font-weight:800}.n{color:#bbb}
+</style></head><body style="width:1340px">
+<p class="page-title">🔐 구현 방식: 로그인 2종류 + 권한 분리</p>
+<p class="page-sub">앱은 하나 그대로 두고, 들어오는 비밀번호에 따라 "매니저 출입증"과 "관리자 출입증"을 다르게 발급합니다. 화면만 숨기는 게 아니라 DB(서버)에서도 막아요.</p>
+
+<div class="flow">
+ <div class="box" style="width:250px">
+  <div class="k">첫 화면</div>
+  <div class="menu-btn" style="padding:10px;font-size:15px">해율만두전골</div>
+  <div class="menu-btn" style="padding:10px;font-size:15px">곤드레밥집</div>
+  <div class="menu-btn" style="padding:10px;font-size:15px">정담명가 남원추어탕</div>
+  <div class="menu-btn" style="padding:10px;font-size:15px">정담카페</div>
+  <div class="menu-btn" style="padding:10px;font-size:15px;border-color:var(--accent);color:var(--accent)">🔑 메인 관리자</div>
+ </div>
+ <div class="arrow">➜</div>
+ <div class="lane">
+  <div class="box"><span class="pill p-m">매니저</span>
+   <div class="k" style="margin-top:6px">매장 버튼 + 지금 쓰는 매장 비밀번호 4자리 (그대로)</div>
+   <div style="font-size:14px">→ <b>그 매장 1곳</b>의 매니저 출입증 발급<br>→ 메뉴: 거래명세표 등록 · 실재고 조사 · 파출 관리 <b>3개만</b><br>→ 송금 여부, 결제, 미수금, 결산, 원가는 <b>보이지도, 읽히지도 않음</b></div></div>
+  <div class="box" style="border-color:var(--accent)"><span class="pill p-a">메인 관리자</span>
+   <div class="k" style="margin-top:6px">🔑 메인 관리자 + 관리자 비밀번호 (새로 만듦, 6자리 이상)</div>
+   <div style="font-size:14px">→ <b>4개 매장 전체</b> 관리자 출입증 한 번에 발급<br>→ 위쪽 탭으로 매장 전환 (다시 로그인 없음) · 지금 쓰는 메뉴 전부 그대로<br>→ 송금완료 체크, 세무 출력, 주민번호 전체 보기는 <b>관리자만</b><br>→ 관리자로 들어오면 결산 비밀번호도 다시 묻지 않음</div></div>
+ </div>
+</div>
+
+<p class="page-title" style="font-size:20px;margin-top:26px">무엇을 볼 수 있나요</p>
+<table class="t" style="width:100%;background:#fff;border-collapse:collapse">
+<tr><th style="width:34%">자료</th><th>매니저 (자기 매장만)</th><th>메인 관리자 (4개 매장)</th><th style="width:34%">막는 방법</th></tr>
+<tr><td>🧾 거래명세표 입력</td><td class="y">입력·수정</td><td class="y">전체</td><td style="text-align:left">관리자가 확정하면 매니저 수정 잠금</td></tr>
+<tr><td>📦 실재고 조사</td><td class="y">입력·수정</td><td class="y">전체</td><td style="text-align:left">재고 금액·원가는 매니저 화면에 표시 안 함</td></tr>
+<tr><td>👷 파출 근무 (날짜·이름·주민번호·시간·일당·계좌)</td><td class="y">입력·수정</td><td class="y">전체</td><td style="text-align:left">주민번호 암호화, 매니저는 가려서 표시</td></tr>
+<tr><td>💸 파출 송금완료 기록</td><td class="n">✕ 안 보임</td><td class="y">체크·취소</td><td style="text-align:left"><b>별도 표에 저장</b> → 매니저 출입증으로는 DB에서 아예 못 읽음</td></tr>
+<tr><td>🤝 거래처 결제 · 미수금 · 잔액</td><td class="n">✕</td><td class="y">전체</td><td style="text-align:left">DB 권한 = 관리자 전용</td></tr>
+<tr><td>📊 매장운영결산 · 🍲 레시피·원가 · 리포트</td><td class="n">✕</td><td class="y">전체</td><td style="text-align:left">DB 권한 = 관리자 전용</td></tr>
+<tr><td>🖨️ 세무 출력 (주민번호 전체)</td><td class="n">✕</td><td class="y">출력</td><td style="text-align:left">서버에서 관리자 확인 후에만 복호화</td></tr>
+</table>
+
+<div class="row" style="margin-top:22px">
+ <div class="box" style="flex:1"><div class="k">🔒 안전장치</div><div style="font-size:14px">· 관리자 비밀번호 5회 틀리면 5분 잠금 (지금 매장 비밀번호와 같은 방식)<br>· 관리자 비밀번호는 처음 한 번만 설정: <b>해율 매장 결산 비밀번호로 본인 확인</b> 후 설정<br>· 송금완료 체크·취소 시 날짜와 시각 기록, 수정 이력 보관</div></div>
+ <div class="box" style="flex:1"><div class="k">♻️ 기존 자료·비밀번호</div><div style="font-size:14px">· 매장 비밀번호 4자리는 <b>그대로</b> (매니저용으로 사용)<br>· 지금까지 입력한 장부는 <b>전혀 바뀌지 않음</b><br>· 문제가 생기면 바로 원래대로 되돌리는 SQL을 함께 준비</div></div>
+ <div class="box" style="flex:1"><div class="k">🛠️ 만드는 순서</div><div style="font-size:14px">1) 관리자 로그인 + 4개 매장 전환<br>2) 매니저 메뉴 3개로 제한 + DB 권한 분리<br>3) 파출 관리 (매니저 입력)<br>4) 송금 관리 · 세무 출력 (관리자)</div></div>
+</div>
+</body></html>

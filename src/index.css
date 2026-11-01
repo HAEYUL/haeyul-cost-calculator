@@ -1781,9 +1781,21 @@ button.kpi-card {
     grid-template-columns: repeat(3, minmax(0, 1fr));
     grid-template-areas:
       'stock vendor report'
-      'recipe vendor report'
+      'recipe vendor dispatch'
       'settings settings settings';
     gap: 20px;
+  }
+
+  .menu-group-dispatch {
+    grid-area: dispatch;
+  }
+
+  /* 매니저: 입력 메뉴 3개만 한 줄로 크게 */
+  .menu-list.menu-list-manager {
+    display: flex;
+    max-width: 560px;
+    margin: 0 auto;
+    width: 100%;
   }
 
   .menu-group-stock {
@@ -1971,4 +1983,617 @@ button.kpi-card {
     left: auto;
     right: 0;
   }
+}
+
+/* ---------- 매니저 / 메인 관리자 ---------- */
+.admin-login-btn {
+  margin-top: 22px;
+  border-color: var(--accent);
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.role-badge {
+  align-self: center;
+  font-size: 15px;
+  font-weight: 700;
+  padding: 4px 14px;
+  border-radius: 999px;
+  margin-bottom: 10px;
+}
+
+.role-badge-admin {
+  background: var(--accent);
+  color: var(--accent-text);
+}
+
+.store-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: center;
+  margin-bottom: 20px;
+}
+
+.manager-hint {
+  text-align: center;
+  margin: -20px 0 20px;
+  font-size: 14px;
+}
+
+.admin-overview {
+  text-align: left;
+  margin-bottom: 20px;
+}
+
+.admin-overview .menu-group-title {
+  margin-bottom: 10px;
+}
+
+.admin-overview-grid,
+.admin-overview-totals {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 10px;
+}
+
+.admin-overview-totals {
+  margin-top: 10px;
+}
+
+.admin-overview-card {
+  display: block;
+  width: 100%;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  margin: 0;
+}
+
+.admin-overview-card .hint {
+  margin: 4px 0 0;
+  font-size: 13px;
+}
+
+.admin-overview-name {
+  display: block;
+  font-size: 17px;
+  margin-bottom: 4px;
+}
+
+.admin-current-store {
+  text-align: left;
+  margin: 4px 0 12px;
+}
+
+.side-nav-store-select {
+  width: 100%;
+  margin: 6px 0 2px;
+}
+
+@media (min-width: 900px) {
+  .admin-overview-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .admin-overview-totals {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (min-width: 1280px) {
+  .admin-overview-grid {
+    grid-template-columns: repeat(4, 1fr);
+  }
+}
+
+/* ---------- 실재고 조사 ---------- */
+.stock-count-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 8px;
+  text-align: left;
+}
+
+.stock-count-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  background: var(--surface);
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-card);
+}
+
+.stock-count-name {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.stock-count-name strong {
+  overflow-wrap: anywhere;
+}
+
+.stock-count-name .hint {
+  font-size: 13px;
+}
+
+.stock-count-input {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 130px;
+  flex-shrink: 0;
+}
+
+.stock-count-input .input {
+  padding: 8px 10px;
+  text-align: right;
+}
+
+.sticky-save {
+  position: sticky;
+  bottom: 0;
+  padding: 10px 0 14px;
+  background: linear-gradient(to top, var(--bg) 70%, transparent);
+}
+
+/* ---------- 파출 관리 ---------- */
+.dispatch-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 15px;
+  text-align: left;
+}
+
+.dispatch-table th,
+.dispatch-table td {
+  padding: 9px 10px;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+
+.dispatch-table th {
+  font-size: 13px;
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+.dispatch-table .num {
+  text-align: right;
+}
+
+.dispatch-table tr.clickable {
+  cursor: pointer;
+}
+
+.dispatch-table tr.clickable:hover td {
+  background: color-mix(in srgb, var(--accent) 6%, transparent);
+}
+
+.dispatch-table tr.selected td {
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+}
+
+.paid-text {
+  color: #2f9e5c;
+  font-weight: 600;
+}
+
+.pending-text {
+  color: #d9822b;
+  font-weight: 600;
+}
+
+.tag,
+.tag-warn {
+  display: inline-block;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 1px 8px;
+  border-radius: 999px;
+  vertical-align: middle;
+  background: color-mix(in srgb, var(--accent) 15%, transparent);
+  color: var(--accent);
+}
+
+.tag-warn {
+  background: #ffeedd;
+  color: #b65f12;
+}
+
+.dispatch-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.dispatch-card {
+  margin-top: 0;
+}
+
+.dispatch-card .hint {
+  margin: 2px 0 6px;
+  font-size: 14px;
+}
+
+.dispatch-card-name {
+  font-size: 19px;
+}
+
+.dispatch-days {
+  margin: 4px 0;
+  font-size: 13px;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+}
+
+.dispatch-card-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.dispatch-card-actions .btn-primary,
+.dispatch-card-actions .btn-secondary {
+  margin-top: 6px;
+  padding: 11px;
+  font-size: 15px;
+}
+
+.dispatch-worker-row {
+  display: block;
+  width: 100%;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+
+.dispatch-picked {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.dispatch-picked .link-btn {
+  margin: 0;
+  padding: 0 4px;
+}
+
+.similar-box {
+  margin-top: 8px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1.5px solid #f0b46b;
+  background: #fff7ec;
+  color: #2b2832;
+}
+
+.similar-title {
+  margin: 0 0 6px;
+  font-size: 14px;
+  font-weight: 700;
+  color: #b65f12;
+}
+
+.similar-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 7px 9px;
+  margin-top: 6px;
+  border-radius: 8px;
+  background: #fff;
+  border: 1px solid #e3d9e8;
+}
+
+.similar-row .hint {
+  font-size: 13px;
+  color: #635d70;
+}
+
+.similar-row .chip {
+  flex-shrink: 0;
+  padding: 6px 12px;
+  font-size: 14px;
+}
+
+.similar-new {
+  margin-top: 8px;
+  text-align: right;
+}
+
+.rrn-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.rrn-row .input {
+  flex: 1;
+  min-width: 0;
+}
+
+.rrn-row .bank-input {
+  flex: 0.7;
+}
+
+.danger-btn {
+  color: #d84343;
+}
+
+/* ---------- 파출 송금 관리 ---------- */
+.dispatch-card-on {
+  border-color: var(--accent);
+}
+
+.pay-check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+}
+
+.pay-check input {
+  width: 20px;
+  height: 20px;
+  accent-color: var(--accent);
+}
+
+.copy-chip {
+  padding: 3px 10px;
+  font-size: 13px;
+  box-shadow: none;
+}
+
+.inline-link {
+  margin: 0;
+  padding: 0 4px;
+  font-size: 14px;
+}
+
+.pay-bar .cost-summary {
+  border-color: var(--accent);
+}
+
+.pay-bar .rrn-row {
+  margin-top: 8px;
+}
+
+.pay-total {
+  font-size: 20px;
+}
+
+/* ---------- 파출 세무 출력 (미리보기 + 인쇄) ---------- */
+.report-actions {
+  display: flex;
+  gap: 10px;
+}
+
+.report-actions .btn-primary,
+.report-actions .btn-secondary {
+  flex: 1;
+}
+
+.report-preview-title {
+  margin-top: 18px;
+  font-weight: 700;
+}
+
+.print-dispatch {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  margin-top: 8px;
+  overflow-x: auto;
+  color: #111;
+  text-align: left;
+}
+
+.print-page {
+  background: #fff;
+  padding: 24px 26px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.15);
+  font-size: 12px;
+}
+
+.print-page.landscape {
+  min-width: 900px;
+}
+
+.print-page.portrait {
+  max-width: 640px;
+}
+
+.print-meta {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  color: #555;
+  margin-bottom: 8px;
+}
+
+.print-doc-title {
+  text-align: center;
+  font-size: 20px;
+  letter-spacing: 4px;
+  margin: 4px 0 2px;
+  color: #111;
+}
+
+.print-doc-sub {
+  text-align: center;
+  margin: 0 0 12px;
+  color: #333;
+}
+
+.print-doc-section {
+  margin: 14px 0 4px;
+  font-weight: 700;
+}
+
+.print-doc-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: 10px;
+  font-size: 12px;
+}
+
+.print-doc-table th,
+.print-doc-table td {
+  border: 1px solid #555;
+  padding: 4px 6px;
+  color: #111;
+}
+
+.print-doc-table th {
+  background: #f1f1f1;
+  font-weight: 700;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.print-doc-table td:first-child {
+  white-space: nowrap;
+}
+
+.print-doc-table .num {
+  text-align: right;
+  white-space: nowrap;
+}
+
+.print-doc-table .center {
+  text-align: center;
+}
+
+.print-doc-table .total-row th {
+  background: #e8e8e8;
+}
+
+.day-grid-table th,
+.day-grid-table td {
+  padding: 3px 2px;
+  font-size: 10px;
+  text-align: center;
+}
+
+.year-table th,
+.year-table td {
+  font-size: 10.5px;
+  padding: 3px 4px;
+}
+
+.print-note {
+  font-size: 11px;
+  color: #444;
+  margin: 6px 0 0;
+}
+
+@page dispatch-portrait {
+  size: A4 portrait;
+  margin: 12mm;
+}
+
+@media print {
+  .print-dispatch,
+  .print-dispatch * {
+    visibility: visible;
+  }
+
+  .no-print,
+  .side-nav {
+    display: none !important;
+  }
+
+  .print-dispatch {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    margin: 0;
+    gap: 0;
+    overflow: visible;
+  }
+
+  .print-dispatch .print-page {
+    box-shadow: none;
+    padding: 0;
+    min-width: 0;
+    max-width: none;
+    break-after: page;
+  }
+
+  .print-dispatch .print-page:last-child {
+    break-after: auto;
+  }
+
+  .print-dispatch .print-page.portrait {
+    page: dispatch-portrait;
+  }
+}
+
+/* ---------- 포지션(홀/주방) ---------- */
+.position-row {
+  display: flex;
+  gap: 10px;
+}
+
+.position-btn {
+  flex: 1;
+  padding: 13px 10px;
+  font-size: 17px;
+  font-weight: 600;
+  border-radius: var(--radius);
+  border: 1.5px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  cursor: pointer;
+  box-shadow: var(--shadow-card);
+}
+
+.position-btn-on {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, var(--surface));
+  color: var(--accent);
+}
+
+.position-btn:disabled {
+  opacity: 0.7;
+  cursor: default;
+}
+
+.position-check {
+  font-size: 19px;
+}
+
+.position-tag {
+  display: inline-block;
+  min-width: 38px;
+  text-align: center;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 1px 8px;
+  border-radius: 999px;
+  vertical-align: middle;
+}
+
+.position-tag-hall {
+  background: #e3f0ff;
+  color: #1e5fae;
+}
+
+.position-tag-kitchen {
+  background: #fdeee0;
+  color: #b4560f;
+}
+
+.position-sum-row {
+  font-size: 14px;
+  color: var(--text-muted);
 }

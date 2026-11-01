@@ -1,0 +1,135 @@
+<!DOCTYPE html><html lang="ko"><head><meta charset="utf-8"><link rel="stylesheet" href="common.css"></head><body>
+<p class="page-title">📱 매니저 화면 (입력 전용)</p>
+<p class="page-sub">매장 비밀번호로 들어온 매니저에게 보이는 화면입니다. 결제·잔액·결산·원가 메뉴는 보이지 않아요. (예시 이름과 번호는 모두 가상입니다)</p>
+<div class="row">
+
+<!-- 1 메인 -->
+<div class="col"><div class="cap">① 매니저 메인 메뉴<small>입력 메뉴 3개만 보입니다</small></div>
+<div class="frame">
+ <div class="top"><span>← 로그아웃</span><span class="role">매니저</span></div>
+ <div class="badge-store">곤드레밥집</div>
+ <p class="sub" style="text-align:center">오늘 10월 31일(토)</p>
+ <div class="card" style="font-size:13px">
+  <b>오늘 할 일</b>
+  <div class="sum"><span>🧾 거래명세표</span><span class="ok">2건 입력 완료</span></div>
+  <div class="sum"><span>👷 파출 근무</span><span class="pend">1명 입력 대기</span></div>
+  <div class="sum"><span>📦 실재고 조사</span><span class="muted">다음: 11/2(월)</span></div>
+ </div>
+ <div class="menu-btn"><span class="ic">🧾</span><div>거래명세표 등록<small>사진 찍으면 자동으로 읽어요</small></div></div>
+ <div class="menu-btn"><span class="ic">📦</span><div>실재고 조사<small>남은 수량만 입력</small></div></div>
+ <div class="menu-btn"><span class="ic">👷</span><div>파출 관리<small>근무 등록 · 고정 파출 보기</small></div></div>
+ <div class="note" style="text-align:center">결제·미수금·결산 화면은 관리자만 볼 수 있어요</div>
+</div></div>
+
+<!-- 2 등록: 처음 -->
+<div class="col"><div class="cap">② 파출 근무 등록<small>이름을 치면 비슷한 이름을 바로 보여줘요</small></div>
+<div class="frame">
+ <div class="top"><span class="back">← 파출 관리</span><span class="role">매니저</span></div>
+ <h1>파출 근무 등록</h1><p class="sub">곤드레밥집</p>
+ <div class="field"><label>근무날짜</label><div class="input">2026-10-31 (토)</div></div>
+ <div class="field"><label>이름</label><div class="input focus">박순지<span class="ph">|</span></div>
+  <div class="warn"><b>⚠️ 비슷한 이름이 이미 있어요</b> — 같은 분이면 눌러주세요
+   <div class="sug"><div><span class="nm">박순자</span> <span class="tag">고정</span><div class="meta">650312-2****** · 기업은행 …5678 · 10월 12일 근무</div></div><span class="mini">이 분이에요</span></div>
+   <div class="sug"><div><span class="nm">박순희</span><div class="meta">710905-2****** · 농협 …2207 · 9월 3일 근무</div></div><span class="mini">이 분이에요</span></div>
+   <div style="text-align:right;margin-top:6px"><span class="mini sec">아니요, 새로 등록할게요</span></div>
+  </div></div>
+ <div class="field"><label>주민등록번호</label><div class="two"><div class="input"><span class="ph">앞 6자리</span></div><div class="input"><span class="ph">뒤 7자리</span></div></div></div>
+ <div class="field"><label>근무시간</label>
+  <div class="chips"><span class="chip on">종일 09~21</span><span class="chip">반일 09~14</span><span class="chip">직접 입력</span></div>
+  <div class="two"><div class="input">09:00</div><div class="input">21:00</div></div></div>
+ <div class="field"><label>일당</label><div class="input">135,000 원</div></div>
+ <div class="field"><label>계좌번호</label><div class="two"><div class="input" style="flex:.7">은행 ▾</div><div class="input"><span class="ph">계좌번호</span></div></div></div>
+ <div class="btn">저장</div>
+</div></div>
+
+<!-- 3 등록: 기존 -->
+<div class="col"><div class="cap">③ 두 번째부터는 이름만 고르면 끝<small>주민번호·계좌 자동 입력, 번호는 가려서 표시</small></div>
+<div class="frame">
+ <div class="top"><span class="back">← 파출 관리</span><span class="role">매니저</span></div>
+ <h1>파출 근무 등록</h1><p class="sub">곤드레밥집</p>
+ <div class="field"><label>근무날짜</label><div class="input">2026-10-31 (토)</div></div>
+ <div class="field"><label>이름</label><div class="input">박순자 <span class="tag">고정</span> <span class="muted" style="float:right">변경</span></div></div>
+ <div class="field"><label>주민등록번호</label><div class="input">650312-2****** <span class="lock" style="float:right">🔒 자동</span></div></div>
+ <div class="field"><label>근무시간</label>
+  <div class="chips"><span class="chip on">종일 09~21</span><span class="chip">반일 09~14</span><span class="chip">직접 입력</span></div>
+  <div class="two"><div class="input">09:00</div><div class="input">21:00</div></div></div>
+ <div class="field"><label>일당</label><div class="input">135,000 원</div></div>
+ <div class="field"><label>계좌번호</label><div class="input">기업은행 010-****-5678 <span class="muted" style="float:right">바꾸기</span></div></div>
+ <div class="card" style="font-size:13px;margin-top:10px"><b>박순자님 10월</b>
+  <div class="sum"><span>근무</span><span>11일 · 1,135,000원</span></div>
+  <div class="sum"><span>이번 등록 후</span><b>12일 · 1,270,000원</b></div>
+  <div class="note">⚠️ 이번 달 8일 이상 근무 중이에요 (관리자에게 자동 알림)</div></div>
+ <div class="btn">저장</div>
+</div></div>
+
+<!-- 4 파출 관리 메인 -->
+<div class="col"><div class="cap">④ 파출 관리: 이번 달 목록<small>날짜별 목록 · 송금된 건은 잠금</small></div>
+<div class="frame">
+ <div class="top"><span class="back">← 메뉴</span><span class="role">매니저</span></div>
+ <h1>👷 파출 관리</h1><p class="sub">곤드레밥집 · ◀ 2026년 10월 ▶</p>
+ <div class="tabs"><span class="tab on">날짜별</span><span class="tab">📌 고정 파출</span><span class="tab">인력 명부</span></div>
+ <div class="btn" style="margin:0 0 10px">+ 근무 등록</div>
+ <div class="card" style="padding:8px 10px">
+ <table><tr><th>날짜</th><th>이름</th><th>시간</th><th class="r">일당</th><th class="r">상태</th></tr>
+ <tr><td>10/31</td><td>박순자</td><td>09~21</td><td class="r">135,000</td><td class="r pend">대기</td></tr>
+ <tr><td>10/31</td><td>이정민</td><td>09~14</td><td class="r">65,000</td><td class="r pend">대기</td></tr>
+ <tr><td>10/29</td><td>박순자</td><td>09~14</td><td class="r">65,000</td><td class="r pend">대기</td></tr>
+ <tr><td>10/28</td><td>박순자</td><td>09~14</td><td class="r">65,000</td><td class="r pend">대기</td></tr>
+ <tr><td>10/25</td><td>박순자</td><td>09~21</td><td class="r">135,000</td><td class="r ok">송금✔</td></tr>
+ <tr><td>10/25</td><td>최영호</td><td>09~21</td><td class="r">135,000</td><td class="r ok">송금✔</td></tr>
+ <tr><td>10/24</td><td>박순자</td><td>09~21</td><td class="r">135,000</td><td class="r ok">송금✔</td></tr>
+ <tr><td colspan="5" class="muted" style="text-align:center">… 더 보기</td></tr>
+ </table></div>
+ <div class="card"><div class="sum"><span>10월 합계</span><b>22건 · 2,200,000원</b></div>
+ <div class="note">🔒 '송금✔' 건은 관리자 확인이 끝나 수정할 수 없어요. '대기' 건은 눌러서 고칠 수 있어요.</div></div>
+</div></div>
+
+<!-- 5 고정 파출 -->
+<div class="col"><div class="cap">⑤ 고정 파출 한 페이지<small>전원 모아보기 + 한 번에 출근 등록</small></div>
+<div class="frame">
+ <div class="top"><span class="back">← 메뉴</span><span class="role">매니저</span></div>
+ <h1>👷 파출 관리</h1><p class="sub">곤드레밥집 · ◀ 2026년 10월 ▶</p>
+ <div class="tabs"><span class="tab">날짜별</span><span class="tab on">📌 고정 파출</span><span class="tab">인력 명부</span></div>
+ <div class="card"><div class="sum"><span class="big">박순자</span><span class="tag w">8일 이상</span></div>
+  <div class="muted" style="font-size:13px">평소 종일 09~21 · 135,000원</div>
+  <div class="sum"><span>10월 근무</span><b>12일 · 1,270,000원</b></div>
+  <div style="font-size:12px;letter-spacing:1px;margin:4px 0">9 11 12 17 18 21 23 24 25 28 29 31</div>
+  <div class="two"><div class="btn sm" style="margin-top:4px">오늘 출근 +</div><div class="btn sec sm" style="margin-top:4px">상세 보기</div></div></div>
+ <div class="card"><div class="sum"><span class="big">이정민</span></div>
+  <div class="muted" style="font-size:13px">평소 반일 09~14 · 65,000원</div>
+  <div class="sum"><span>10월 근무</span><b>6일 · 390,000원</b></div>
+  <div style="font-size:12px;letter-spacing:1px;margin:4px 0">3 10 17 24 30 31</div>
+  <div class="two"><div class="btn sm" style="margin-top:4px">오늘 출근 +</div><div class="btn sec sm" style="margin-top:4px">상세 보기</div></div></div>
+ <div class="card"><div class="sum"><span class="big">최영호</span></div>
+  <div class="muted" style="font-size:13px">평소 종일 09~21 · 135,000원</div>
+  <div class="sum"><span>10월 근무</span><b>4일 · 540,000원</b></div>
+  <div class="two"><div class="btn sm" style="margin-top:4px">오늘 출근 +</div><div class="btn sec sm" style="margin-top:4px">상세 보기</div></div></div>
+ <div class="note">인력 명부에서 '고정 파출'을 켠 분만 이곳에 나와요.</div>
+</div></div>
+
+<!-- 6 개인 페이지 -->
+<div class="col"><div class="cap">⑥ 고정 파출 개인 페이지<small>종이 명세서와 같은 모양으로 한 달을 한눈에</small></div>
+<div class="frame">
+ <div class="top"><span class="back">← 고정 파출</span><span class="role">매니저</span></div>
+ <h1>박순자 <span class="tag">고정</span></h1><p class="sub">650312-2****** · 기업은행 …5678 · ◀ 10월 ▶</p>
+ <div class="card" style="padding:8px 10px">
+ <table><tr><th>날짜</th><th>근무시간</th><th class="r">일당</th><th class="r">송금</th></tr>
+ <tr><td>10/9</td><td>09~21</td><td class="r">135,000</td><td class="r ok">✔</td></tr>
+ <tr><td>10/11</td><td>09~21</td><td class="r">135,000</td><td class="r ok">✔</td></tr>
+ <tr><td>10/12</td><td>09~14</td><td class="r">65,000</td><td class="r ok">✔</td></tr>
+ <tr><td>10/17</td><td>09~21</td><td class="r">135,000</td><td class="r ok">✔</td></tr>
+ <tr><td>10/18</td><td>09~21</td><td class="r">135,000</td><td class="r ok">✔</td></tr>
+ <tr><td>10/21</td><td>09~14</td><td class="r">65,000</td><td class="r ok">✔</td></tr>
+ <tr><td>10/23</td><td>09~14</td><td class="r">65,000</td><td class="r ok">✔</td></tr>
+ <tr><td>10/24</td><td>09~21</td><td class="r">135,000</td><td class="r ok">✔</td></tr>
+ <tr><td>10/25</td><td>09~21</td><td class="r">135,000</td><td class="r ok">✔</td></tr>
+ <tr><td>10/28</td><td>09~14</td><td class="r">65,000</td><td class="r pend">대기</td></tr>
+ <tr><td>10/29</td><td>09~14</td><td class="r">65,000</td><td class="r pend">대기</td></tr>
+ <tr><td>10/31</td><td>09~21</td><td class="r">135,000</td><td class="r pend">대기</td></tr>
+ </table></div>
+ <div class="card"><div class="sum"><span>합계</span><b>12일 · 1,270,000원</b></div>
+  <div class="sum"><span>송금 완료</span><span class="ok">1,005,000원</span></div>
+  <div class="sum"><span>송금 대기</span><span class="pend">265,000원</span></div></div>
+</div></div>
+
+</div></body></html>

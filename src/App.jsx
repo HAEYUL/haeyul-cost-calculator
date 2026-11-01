@@ -32,6 +32,13 @@ import RecipeDetailScreen from './screens/RecipeDetailScreen'
 import MatchingScreen from './screens/MatchingScreen'
 import CostScreen from './screens/CostScreen'
 import CostDetailScreen from './screens/CostDetailScreen'
+import AdminPinScreen from './screens/AdminPinScreen'
+import StockCountScreen from './screens/StockCountScreen'
+import DispatchScreen from './screens/DispatchScreen'
+import DispatchShiftFormScreen from './screens/DispatchShiftFormScreen'
+import DispatchWorkerScreen from './screens/DispatchWorkerScreen'
+import DispatchPaymentsScreen from './screens/DispatchPaymentsScreen'
+import DispatchReportScreen from './screens/DispatchReportScreen'
 
 export default function App() {
   return (
@@ -62,6 +69,14 @@ export default function App() {
             <Route path="/feedback" element={<FeedbackScreen />} />
             <Route path="/ask" element={<AskScreen />} />
             <Route path="/change-pin" element={<ChangeStorePinScreen />} />
+            <Route path="/admin-pin" element={<AdminPinScreen />} />
+            <Route path="/stock-count" element={<StockCountScreen />} />
+            <Route path="/dispatch" element={<DispatchScreen />} />
+            <Route path="/dispatch/new" element={<DispatchShiftFormScreen />} />
+            <Route path="/dispatch/edit/:shiftId" element={<DispatchShiftFormScreen />} />
+            <Route path="/dispatch/workers/:workerId" element={<DispatchWorkerScreen />} />
+            <Route path="/dispatch-payments" element={<DispatchPaymentsScreen />} />
+            <Route path="/dispatch-report" element={<DispatchReportScreen />} />
             <Route path="/inventory" element={<InventoryScreen />} />
             <Route path="/inventory/:itemName/:unit" element={<InventoryDetailScreen />} />
             <Route path="/price-trend" element={<PriceTrendScreen />} />

@@ -60,3 +60,41 @@ describe('verifyPinWithLock', () => {
     await expect(verifyPinWithLock(admin, 'haeyul', '5678', 'settlement_')).resolves.toBeUndefined()
   })
 })
+
+describe('출입증 종류 (roleOf)', () => {
+  it('role이 admin이면 메인 관리자', async () => {
+    const { roleOf } = await import('./_storeAuth.js')
+    expect(roleOf({ role: 'admin' })).toBe('admin')
+  })
+  it('매장 코드만 있는 예전 출입증과 매니저 출입증은 매니저', async () => {
+    const { roleOf } = await import('./_storeAuth.js')
+    expect(roleOf({ store_code: 'haeyul' })).toBe('manager')
+    expect(roleOf({ store_code: 'haeyul', role: 'manager' })).toBe('manager')
+  })
+  it('아무것도 없으면 로그인 안 된 것', async () => {
+    const { roleOf } = await import('./_storeAuth.js')
+    expect(roleOf({})).toBeNull()
+    expect(roleOf(undefined)).toBeNull()
+  })
+})
+
+describe('관리자 비밀번호', () => {
+  it('숫자 6~12자리만 받는다', async () => {
+    const { isAdminPin } = await import('./_storeAuth.js')
+    expect(isAdminPin('123456')).toBe(true)
+    expect(isAdminPin('123456789012')).toBe(true)
+    expect(isAdminPin('12345')).toBe(false)
+    expect(isAdminPin('1234567890123')).toBe(false)
+    expect(isAdminPin('12345a')).toBe(false)
+  })
+  it('아직 설정 안 됐으면 notSet으로 알려준다', async () => {
+    const { verifyAdminPinWithLock } = await import('./_storeAuth.js')
+    const { admin } = fakeAdmin({ pin_hash: null, failed_attempts: 0, locked_until: null })
+    await expect(verifyAdminPinWithLock(admin, '123456')).rejects.toMatchObject({ status: 409, extra: { notSet: true } })
+  })
+  it('잠겨 있으면 비밀번호와 상관없이 거절한다', async () => {
+    const { verifyAdminPinWithLock } = await import('./_storeAuth.js')
+    const { admin } = fakeAdmin({ pin_hash: 'x', failed_attempts: 0, locked_until: new Date(Date.now() + 60000).toISOString() })
+    await expect(verifyAdminPinWithLock(admin, '123456')).rejects.toMatchObject({ status: 423 })
+  })
+})

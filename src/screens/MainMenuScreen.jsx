@@ -8,7 +8,8 @@ import { UNIT_LABELS } from '../lib/units'
 import { stockKey } from '../lib/stockKey'
 import { rowDateStr } from '../lib/rowDateStr'
 import { groupByVendor, makeLedger } from '../lib/vendorLedger'
-import { MENU_SECTIONS } from '../data/menuSections'
+import { menuSectionsFor } from '../data/menuSections'
+import AdminOverview from '../components/AdminOverview'
 
 const MARGIN_WARNING_RATIO = 40
 
@@ -30,7 +31,7 @@ function monthBounds() {
 }
 
 export default function MainMenuScreen() {
-  const { store, setStore } = useStore()
+  const { store, stores, role, isAdmin, setStore, logout } = useStore()
   const navigate = useNavigate()
 
   const [loading, setLoading] = useState(false)
@@ -45,12 +46,9 @@ export default function MainMenuScreen() {
   const [signatures, setSignatures] = useState({})
   const [dismissals, setDismissals] = useState(new Map())
 
+  // 알림 카드(미지급금·재고·원가)는 메인 관리자만 본다. 매니저는 결제·원가 자료를 열 수 없다.
   useEffect(() => {
-    if (!store) navigate('/', { replace: true })
-  }, [store, navigate])
-
-  useEffect(() => {
-    if (!store || !supabase) return
+    if (!store || !supabase || !isAdmin) return
     setLoading(true)
     setError('')
     Promise.all([
@@ -210,7 +208,7 @@ export default function MainMenuScreen() {
       setDismissals(new Map((dismissalsRes.data ?? []).map((d) => [d.card_key, d.signature])))
       setLoading(false)
     })
-  }, [store])
+  }, [store, isAdmin])
 
   const handleDismiss = async (e, cardKey) => {
     e.stopPropagation()
@@ -236,17 +234,56 @@ export default function MainMenuScreen() {
         <button
           type="button"
           className="link-btn menu-change-store"
-          onClick={() => {
-            setStore(null)
+          onClick={async () => {
+            await logout()
             navigate('/')
           }}
         >
-          ← 매장 변경
+          ← 로그아웃
         </button>
-        <div className="store-badge">{store.name}</div>
+        {isAdmin ? (
+          <>
+            <div className="role-badge role-badge-admin">🔑 메인 관리자</div>
+            <div className="store-tabs" role="tablist" aria-label="보는 매장">
+              {stores.map((s) => (
+                <button
+                  key={s.code}
+                  type="button"
+                  role="tab"
+                  aria-selected={s.code === store.code}
+                  className={`chip${s.code === store.code ? ' chip-active' : ''}`}
+                  onClick={() => setStore(s)}
+                >
+                  {s.name}
+                </button>
+              ))}
+            </div>
+          </>
+        ) : (
+          <>
+            <div className="store-badge">{store.name}</div>
+            <p className="hint manager-hint">매니저 화면이에요. 거래명세표·실재고·파출을 입력할 수 있어요.</p>
+          </>
+        )}
       </div>
 
-      {!loading && !error && supabase && (
+      {isAdmin && supabase && (
+        <AdminOverview
+          stores={stores}
+          onOpenStore={(s) => {
+            setStore(s)
+            window.scrollTo({ top: 0, behavior: 'smooth' })
+          }}
+        />
+      )}
+
+      {isAdmin && (
+        <p className="menu-group-title admin-current-store">
+          🏪 {store.name}
+        </p>
+      )}
+
+      {isAdmin && !loading && !error && supabase && (
         <div className="dashboard">
           {!isDismissed('balance') && (
             <div className="cost-summary dashboard-card" onClick={() => navigate('/vendors')}>
@@ -344,8 +381,8 @@ export default function MainMenuScreen() {
         </div>
       )}
 
-      <div className="menu-list">
-        {MENU_SECTIONS.map((section) => (
+      <div className={`menu-list${isAdmin ? '' : ' menu-list-manager'}`}>
+        {menuSectionsFor(role).map((section) => (
           <div key={section.title} className={`menu-group menu-group-${section.area}`}>
             <p className="menu-group-title">
               <span aria-hidden="true">{section.icon}</span> {section.title}
