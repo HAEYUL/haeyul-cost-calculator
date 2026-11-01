@@ -107,10 +107,11 @@ function SettlementRows({ row }) {
 }
 
 export default function SettlementScreen() {
-  const { store } = useStore()
+  const { store, isAdmin } = useStore()
   const navigate = useNavigate()
 
   // ---- 이 화면 전용 비밀번호(잠금) ----
+  // 메인 관리자로 들어오면 이미 관리자 비밀번호를 확인했으므로 다시 묻지 않는다.
   const [unlocked, setUnlocked] = useState(false)
   const [authLoading, setAuthLoading] = useState(true)
   const [auth, setAuth] = useState(null)
@@ -159,6 +160,11 @@ export default function SettlementScreen() {
 
   useEffect(() => {
     if (!store) return
+    if (isAdmin) {
+      setUnlocked(true)
+      setAuthLoading(false)
+      return
+    }
     setUnlocked(sessionStorage.getItem(unlockedStorageKey(store.code)) === '1')
     if (!supabase) {
       setAuthLoading(false)
@@ -175,7 +181,7 @@ export default function SettlementScreen() {
       })
       .catch(() => setPinError('인터넷 연결을 확인해주세요.'))
       .finally(() => setAuthLoading(false))
-  }, [store])
+  }, [store, isAdmin])
 
   const lockedUntilMs = auth?.lockedUntil ? new Date(auth.lockedUntil).getTime() : null
   const isLocked = lockedUntilMs != null && lockedUntilMs > now
@@ -802,13 +808,15 @@ export default function SettlementScreen() {
         </>
       )}
 
-      <p style={{ marginTop: 24 }}>
-        <button type="button" className="link-btn" onClick={() => setShowChangePin((v) => !v)}>
-          {showChangePin ? '비밀번호 변경 닫기' : '이 화면 비밀번호 변경'}
-        </button>
-      </p>
+      {!isAdmin && (
+        <p style={{ marginTop: 24 }}>
+          <button type="button" className="link-btn" onClick={() => setShowChangePin((v) => !v)}>
+            {showChangePin ? '비밀번호 변경 닫기' : '이 화면 비밀번호 변경'}
+          </button>
+        </p>
+      )}
 
-      {showChangePin && (
+      {!isAdmin && showChangePin && (
         <div className="cost-summary" style={{ textAlign: 'left' }}>
           <div className="field">
             <label htmlFor="changeCurrentPin">현재 비밀번호</label>

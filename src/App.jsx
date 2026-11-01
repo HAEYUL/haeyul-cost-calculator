@@ -32,6 +32,7 @@ import RecipeDetailScreen from './screens/RecipeDetailScreen'
 import MatchingScreen from './screens/MatchingScreen'
 import CostScreen from './screens/CostScreen'
 import CostDetailScreen from './screens/CostDetailScreen'
+import AdminPinScreen from './screens/AdminPinScreen'
 
 export default function App() {
   return (
@@ -62,6 +63,7 @@ export default function App() {
             <Route path="/feedback" element={<FeedbackScreen />} />
             <Route path="/ask" element={<AskScreen />} />
             <Route path="/change-pin" element={<ChangeStorePinScreen />} />
+            <Route path="/admin-pin" element={<AdminPinScreen />} />
             <Route path="/inventory" element={<InventoryScreen />} />
             <Route path="/inventory/:itemName/:unit" element={<InventoryDetailScreen />} />
             <Route path="/price-trend" element={<PriceTrendScreen />} />

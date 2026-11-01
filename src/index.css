@@ -1972,3 +1972,105 @@ button.kpi-card {
     right: 0;
   }
 }
+
+/* ---------- 매니저 / 메인 관리자 ---------- */
+.admin-login-btn {
+  margin-top: 22px;
+  border-color: var(--accent);
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.role-badge {
+  align-self: center;
+  font-size: 15px;
+  font-weight: 700;
+  padding: 4px 14px;
+  border-radius: 999px;
+  margin-bottom: 10px;
+}
+
+.role-badge-admin {
+  background: var(--accent);
+  color: var(--accent-text);
+}
+
+.store-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: center;
+  margin-bottom: 20px;
+}
+
+.manager-hint {
+  text-align: center;
+  margin: -20px 0 20px;
+  font-size: 14px;
+}
+
+.admin-overview {
+  text-align: left;
+  margin-bottom: 20px;
+}
+
+.admin-overview .menu-group-title {
+  margin-bottom: 10px;
+}
+
+.admin-overview-grid,
+.admin-overview-totals {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 10px;
+}
+
+.admin-overview-totals {
+  margin-top: 10px;
+}
+
+.admin-overview-card {
+  display: block;
+  width: 100%;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  margin: 0;
+}
+
+.admin-overview-card .hint {
+  margin: 4px 0 0;
+  font-size: 13px;
+}
+
+.admin-overview-name {
+  display: block;
+  font-size: 17px;
+  margin-bottom: 4px;
+}
+
+.admin-current-store {
+  text-align: left;
+  margin: 4px 0 12px;
+}
+
+.side-nav-store-select {
+  width: 100%;
+  margin: 6px 0 2px;
+}
+
+@media (min-width: 900px) {
+  .admin-overview-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .admin-overview-totals {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (min-width: 1280px) {
+  .admin-overview-grid {
+    grid-template-columns: repeat(4, 1fr);
+  }
+}
