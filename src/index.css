@@ -2074,3 +2074,58 @@ button.kpi-card {
     grid-template-columns: repeat(4, 1fr);
   }
 }
+
+/* ---------- 실재고 조사 ---------- */
+.stock-count-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 8px;
+  text-align: left;
+}
+
+.stock-count-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  background: var(--surface);
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-card);
+}
+
+.stock-count-name {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.stock-count-name strong {
+  overflow-wrap: anywhere;
+}
+
+.stock-count-name .hint {
+  font-size: 13px;
+}
+
+.stock-count-input {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 130px;
+  flex-shrink: 0;
+}
+
+.stock-count-input .input {
+  padding: 8px 10px;
+  text-align: right;
+}
+
+.sticky-save {
+  position: sticky;
+  bottom: 0;
+  padding: 10px 0 14px;
+  background: linear-gradient(to top, var(--bg) 70%, transparent);
+}

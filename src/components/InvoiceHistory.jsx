@@ -18,7 +18,8 @@ function rowDateValue(row) {
   return new Date(row.invoice_date ?? row.created_at).getTime()
 }
 
-export default function InvoiceHistory({ storeCode, refreshKey }) {
+// showPayments: 결제됨 표시와 [결제완료] 버튼 (메인 관리자만). 매니저는 결제 자료를 열 수 없다.
+export default function InvoiceHistory({ storeCode, refreshKey, showPayments = true }) {
   const navigate = useNavigate()
   const [batches, setBatches] = useState([])
   const [legacyRows, setLegacyRows] = useState([])
@@ -63,7 +64,7 @@ export default function InvoiceHistory({ storeCode, refreshKey }) {
 
   // 결제 기록은 [결제완료]를 누를 때마다 다시 불러와야 해서, 명세표 목록과 따로 불러온다.
   useEffect(() => {
-    if (!supabase) return
+    if (!supabase || !showPayments) return
     supabase
       .from('vendor_payments')
       .select('vendor_id, amount, paid_date')
@@ -75,7 +76,7 @@ export default function InvoiceHistory({ storeCode, refreshKey }) {
         }
         setPayments(data ?? [])
       })
-  }, [storeCode, refreshKey, paymentsKey])
+  }, [storeCode, refreshKey, paymentsKey, showPayments])
 
   const handlePay = async () => {
     if (!payTarget) return
@@ -165,7 +166,7 @@ export default function InvoiceHistory({ storeCode, refreshKey }) {
                 <span className="history-vendor">{row.vendors?.name ?? '거래처 미지정'}</span>
                 <div className="history-row-main-end">
                   <span>{Math.round(Number(row.total_amount)).toLocaleString()}원</span>
-                  {paidIds.has(row.id) ? (
+                  {!showPayments ? null : paidIds.has(row.id) ? (
                     <span className="paid-badge">✓ 결제됨</span>
                   ) : (
                     row.vendors?.id &&
