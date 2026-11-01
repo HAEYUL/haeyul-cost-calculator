@@ -1,0 +1,158 @@
+<!DOCTYPE html><html lang="ko"><head><meta charset="utf-8"><link rel="stylesheet" href="common.css">
+<style>
+.pc{width:1240px;border:8px solid #222;border-radius:14px;background:var(--bg);display:flex;min-height:640px;box-shadow:0 10px 30px rgba(0,0,0,.18);overflow:hidden}
+.side{width:230px;background:#fff;border-right:1.5px solid var(--border);padding:14px 12px;font-size:14px}
+.side .st{font-weight:800;font-size:15px}
+.side .grp{font-size:12px;color:var(--muted);font-weight:700;margin:12px 0 4px}
+.side .lk{padding:6px 8px;border-radius:8px}
+.side .lk.on{background:#f1e4ff;color:#7a22c9;font-weight:700}
+.new{outline:3px dashed #ff8a00;outline-offset:3px;border-radius:10px}
+.newtag{display:inline-block;background:#ff8a00;color:#fff;font-size:11px;font-weight:800;padding:1px 8px;border-radius:99px;margin-left:6px;vertical-align:middle}
+.main{flex:1;padding:18px 22px}
+.stabs{display:flex;gap:6px;margin-bottom:14px}
+.stab{padding:8px 16px;border-radius:10px;background:rgba(255,255,255,.55);font-weight:700;font-size:14px}
+.stab.on{background:var(--accent);color:#fff}
+.g4{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
+.g4 .card{margin:0}
+.kv{display:flex;justify-content:space-between;font-size:13px;padding:2px 0}
+.hd{font-weight:800;font-size:16px;margin-bottom:6px}
+.legend{font-size:13px;color:#b35c00;font-weight:700;margin:4px 0 10px}
+</style></head><body style="width:1300px">
+<p class="page-title">🖥️ 메인 관리자 페이지에서 바뀌는 부분</p>
+<p class="legend">🟧 주황 점선 = 새로 생기거나 바뀌는 곳 · 나머지는 지금 화면 그대로 (예시 이름·번호는 가상)</p>
+
+<div class="row">
+ <div class="col"><div class="cap">① 첫 화면<small>매장 버튼은 그대로(매니저용) · 아래에 관리자 버튼 추가</small></div>
+ <div class="frame" style="width:300px">
+  <h1 style="text-align:center;margin-top:18px">매장 선택</h1><p class="sub" style="text-align:center">매장을 선택하세요</p>
+  <div class="menu-btn" style="justify-content:center">해율만두전골</div>
+  <div class="menu-btn" style="justify-content:center">곤드레밥집</div>
+  <div class="menu-btn" style="justify-content:center">정담명가 남원추어탕</div>
+  <div class="menu-btn" style="justify-content:center">정담카페</div>
+  <div class="new" style="margin-top:18px"><div class="menu-btn" style="justify-content:center;border-color:var(--accent);color:var(--accent);margin:0">🔑 메인 관리자 로그인</div></div>
+  <div class="note" style="text-align:center">매장 버튼 = 매니저 (비밀번호 지금과 같음)</div>
+ </div></div>
+ <div class="col"><div class="cap">② 관리자 로그인<small>비밀번호 한 번 → 4개 매장 모두 열림</small></div>
+ <div class="frame new" style="width:300px">
+  <div class="back">← 매장 선택</div>
+  <h1 style="text-align:center;margin-top:18px">🔑 메인 관리자</h1><p class="sub" style="text-align:center">관리자 비밀번호를 입력하세요</p>
+  <div class="input" style="text-align:center;letter-spacing:8px;font-size:20px">●●●●●●</div>
+  <div class="btn">들어가기</div>
+  <div class="card" style="margin-top:14px;font-size:13px">✔ 해율만두전골 · 곤드레밥집 · 남원추어탕 · 정담카페<br>4개 매장을 다시 로그인 없이 오가며 볼 수 있어요.</div>
+  <div class="note" style="text-align:center">5회 틀리면 5분 잠금</div>
+ </div></div>
+ <div class="col"><div class="cap">③ 휴대폰에서 본 관리자 메인<small>위쪽 매장 탭 + 확인할 일 · 메뉴는 그대로</small></div>
+ <div class="frame" style="width:330px">
+  <div class="top"><span>← 로그아웃</span><span class="role admin">메인 관리자</span></div>
+  <div class="tabs new" style="margin-top:8px"><span class="tab on">전체</span><span class="tab">해율</span><span class="tab">곤드레</span><span class="tab">남원</span><span class="tab">카페</span></div>
+  <div class="card new" style="font-size:13px"><b>🔔 확인할 일 (4개 매장)</b>
+   <div class="sum"><span>💸 파출비 송금 대기</span><span class="pend">4명 · 735,000원</span></div>
+   <div class="sum"><span>⚠️ 8일 이상 근무</span><span class="pend">1명</span></div>
+   <div class="sum"><span>🧾 오늘 명세표</span><span>6건 · 2,184,300원</span></div></div>
+  <div style="font-weight:800;margin:8px 0 6px">입고·재고 / 거래처·정산 / 레시피·원가 / 리포트 / 설정</div>
+  <div class="note" style="margin:-6px 0 8px">↑ 지금 메뉴 그대로 (매장 탭에서 고른 매장 기준)</div>
+  <div class="new"><div style="font-weight:800;margin:4px 0 6px">👷 인력 · 파출</div>
+  <div class="menu-btn" style="padding:12px;margin-bottom:8px"><span class="ic">💸</span><div>파출비 송금 관리</div></div>
+  <div class="menu-btn" style="padding:12px;margin-bottom:8px"><span class="ic">📋</span><div>파출 내역 · 인력 명부</div></div>
+  <div class="menu-btn" style="padding:12px;margin:0"><span class="ic">🖨️</span><div>파출 세무 출력</div></div></div>
+ </div></div>
+</div>
+
+<div class="cap" style="width:auto;margin-top:30px">④ PC에서 본 관리자 메인: '전체' 탭 = 4개 매장 한눈에<small>왼쪽 메뉴판 위에 매장 전환 · 기존 메뉴판은 그대로</small></div>
+<div class="pc">
+ <div class="side">
+  <div class="new" style="padding:6px"><div class="st">🔑 메인 관리자</div>
+   <select style="width:100%;margin-top:6px;padding:6px;border-radius:8px;border:1.5px solid var(--border);font-size:14px"><option>전체 매장 ▾</option></select>
+   <div class="note" style="margin-top:4px">해율 · 곤드레 · 남원 · 카페</div></div>
+  <div class="lk on" style="margin-top:10px">🏠 메인 메뉴</div>
+  <div class="grp">입고 · 재고</div><div class="lk">🧾 입고 입력</div><div class="lk">📦 재고 관리</div>
+  <div class="grp">거래처 · 정산</div><div class="lk">🏪 거래처 관리</div><div class="lk">💳 거래처별 결제액</div><div class="lk">📥 거래처 물품 입고액</div><div class="lk">📊 매장운영결산</div>
+  <div class="grp">레시피 · 원가 / 리포트 / 설정</div><div class="lk muted">… (지금 그대로)</div>
+  <div class="new" style="padding:4px;margin-top:8px"><div class="grp" style="margin-top:2px">인력 · 파출<span class="newtag">NEW</span></div><div class="lk">💸 파출비 송금 관리</div><div class="lk">📋 파출 내역 · 인력 명부</div><div class="lk">🖨️ 파출 세무 출력</div></div>
+ </div>
+ <div class="main">
+  <div class="stabs new" style="padding:4px"><span class="stab on">전체</span><span class="stab">해율만두전골</span><span class="stab">곤드레밥집</span><span class="stab">정담명가 남원추어탕</span><span class="stab">정담카페</span></div>
+  <div class="hd">📋 4개 매장 현황 · 2026년 11월 1일(일) <span class="newtag">NEW</span></div>
+  <div class="g4 new" style="padding:4px">
+   <div class="card"><div class="hd">해율만두전골</div>
+    <div class="kv"><span>🧾 오늘 명세표</span><b>3건 · 1,021,500</b></div>
+    <div class="kv"><span>💸 파출 송금 대기</span><b class="pend">1명 · 270,000</b></div>
+    <div class="kv"><span>🤝 거래처 미지급</span><b>8,412,000</b></div>
+    <div class="kv"><span>📦 재고조사</span><span class="ok">10/27 완료</span></div></div>
+   <div class="card"><div class="hd">곤드레밥집</div>
+    <div class="kv"><span>🧾 오늘 명세표</span><b>2건 · 812,400</b></div>
+    <div class="kv"><span>💸 파출 송금 대기</span><b class="pend">2명 · 395,000</b></div>
+    <div class="kv"><span>🤝 거래처 미지급</span><b>4,950,300</b></div>
+    <div class="kv"><span>📦 재고조사</span><span class="ok">10/27 완료</span></div></div>
+   <div class="card"><div class="hd">정담명가 남원추어탕</div>
+    <div class="kv"><span>🧾 오늘 명세표</span><b>1건 · 350,400</b></div>
+    <div class="kv"><span>💸 파출 송금 대기</span><b class="pend">1명 · 70,000</b></div>
+    <div class="kv"><span>🤝 거래처 미지급</span><b>5,203,800</b></div>
+    <div class="kv"><span>📦 재고조사</span><span class="pend">미입력</span></div></div>
+   <div class="card"><div class="hd">정담카페</div>
+    <div class="kv"><span>🧾 오늘 명세표</span><b>0건</b></div>
+    <div class="kv"><span>💸 파출 송금 대기</span><b>없음</b></div>
+    <div class="kv"><span>🤝 거래처 미지급</span><b>612,000</b></div>
+    <div class="kv"><span>📦 재고조사</span><span class="ok">10/27 완료</span></div></div>
+  </div>
+  <div class="row" style="gap:12px;margin-top:12px">
+   <div class="card new" style="flex:1"><div class="hd">💸 파출비 송금 대기 합계</div><div class="big">4명 · 735,000원</div><div class="btn sm" style="width:200px">송금 관리로 가기 →</div></div>
+   <div class="card new" style="flex:1"><div class="hd">🤝 거래처 미지급 합계 (4개 매장)</div><div class="big">19,178,100원</div><div class="note">매장 탭을 누르면 그 매장의 거래처 관리 화면으로 이동</div></div>
+   <div class="card new" style="flex:1"><div class="hd">📅 신고 기한</div><div style="font-size:14px">근로내용확인신고 <b>11/15</b><br>일용근로소득 지급명세서 <b>11/30</b></div><div class="btn sec sm" style="width:200px">10월 세무 출력 →</div></div>
+  </div>
+ </div>
+</div>
+
+<div class="cap" style="width:auto;margin-top:30px">⑤ PC 파출비 송금 관리: 4개 매장을 한 화면에서 · 관리자만 보임<small>매장별로 묶어서 표시 → 송금은 사장님이 은행에서 직접 → 앱에서 체크</small></div>
+<div class="pc new" style="min-height:0">
+ <div class="side"><div class="st">🔑 메인 관리자</div><div class="note">전체 매장 ▾</div><div class="grp">인력 · 파출</div><div class="lk on">💸 파출비 송금 관리</div><div class="lk">📋 파출 내역 · 인력 명부</div><div class="lk">🖨️ 파출 세무 출력</div></div>
+ <div class="main">
+  <div class="row" style="justify-content:space-between;align-items:center;gap:8px"><div class="hd" style="font-size:20px">💸 파출비 송금 관리</div>
+   <div class="tabs" style="width:320px;margin:0"><span class="tab on">송금 대기</span><span class="tab">송금 완료 내역</span></div></div>
+  <div class="stabs" style="margin-top:8px"><span class="stab on">전체</span><span class="stab">해율</span><span class="stab">곤드레</span><span class="stab">남원</span><span class="stab">카페</span></div>
+  <div class="card" style="padding:8px 12px">
+  <table>
+   <tr><th style="width:30px"><span class="cb on"></span></th><th>매장</th><th>이름</th><th>주민번호</th><th>은행 · 계좌</th><th>근무일</th><th class="r">금액</th><th></th></tr>
+   <tr><td><span class="cb on"></span></td><td>해율</td><td><b>강미영</b> <span class="tag">고정</span></td><td>681104-2******</td><td>신한 110-***-***882 <span class="mini sec">복사</span></td><td>10/30 종일, 10/31 종일</td><td class="r"><b>270,000</b></td><td class="muted">▾</td></tr>
+   <tr><td><span class="cb on"></span></td><td>곤드레</td><td><b>박순자</b> <span class="tag">고정</span> <span class="tag w">8일↑</span></td><td>650312-2******</td><td>기업 010-1234-5678 <span class="mini sec">복사</span></td><td>10/28 반일, 10/29 반일, 10/31 종일</td><td class="r"><b>265,000</b></td><td class="muted">▾</td></tr>
+   <tr><td><span class="cb on"></span></td><td>곤드레</td><td><b>이정민</b> <span class="tag">고정</span></td><td>880517-1******</td><td>국민 ***-**-***4471 <span class="mini sec">복사</span></td><td>10/30 반일, 10/31 반일</td><td class="r"><b>130,000</b></td><td class="muted">▾</td></tr>
+   <tr><td><span class="cb"></span></td><td>남원</td><td><b>김미숙</b></td><td>700221-2******</td><td>농협 ***-****-0912 <span class="mini sec">복사</span></td><td>10/31 반일</td><td class="r"><b>70,000</b></td><td class="muted">▾</td></tr>
+  </table></div>
+  <div class="card" style="background:#f6efff;display:flex;align-items:center;gap:16px">
+   <div style="flex:1"><b>선택 3명 · 7건</b> <span class="big" style="margin-left:10px">665,000원</span><div class="note" style="margin:0">은행에서 직접 송금하신 뒤 체크하세요. 송금일과 시각이 기록돼요.</div></div>
+   <div class="field" style="margin:0;width:170px"><label>송금일</label><div class="input">2026-11-01</div></div>
+   <div class="btn" style="width:220px;margin:0">✔ 송금완료 체크</div></div>
+  <div class="note">▾ 를 누르면 날짜별로 일부만 체크할 수 있어요 · '송금 완료 내역'에서 잘못 누른 체크를 취소할 수 있어요</div>
+ </div>
+</div>
+
+<div class="row" style="margin-top:30px">
+ <div class="col"><div class="cap">⑥ 참고: 매니저 화면에서는 송금 표시가 사라짐<small>매니저는 송금 여부를 알 수 없어요</small></div>
+ <div class="frame new" style="width:380px">
+  <div class="top"><span class="back">← 메뉴</span><span class="role">매니저</span></div>
+  <h1>👷 파출 관리</h1><p class="sub">곤드레밥집 · ◀ 2026년 10월 ▶</p>
+  <div class="card" style="padding:8px 10px">
+  <table><tr><th>날짜</th><th>이름</th><th>시간</th><th class="r">일당</th></tr>
+  <tr><td>10/31</td><td>박순자</td><td>09~21</td><td class="r">135,000</td></tr>
+  <tr><td>10/31</td><td>이정민</td><td>09~14</td><td class="r">65,000</td></tr>
+  <tr><td>10/29</td><td>박순자</td><td>09~14</td><td class="r">65,000</td></tr>
+  <tr><td>10/25</td><td>박순자 🔒</td><td>09~21</td><td class="r">135,000</td></tr>
+  <tr><td>10/25</td><td>최영호 🔒</td><td>09~21</td><td class="r">135,000</td></tr></table></div>
+  <div class="note">🔒 = 관리자가 확정한 내역이라 수정할 수 없어요. (고칠 게 있으면 관리자에게 요청)<br>※ '송금완료/대기' 칸은 관리자 화면에만 있어요.</div>
+ </div></div>
+ <div class="col"><div class="cap">⑦ 송금 완료 내역 (관리자)<small>언제, 얼마를 보냈는지 · 잘못 누른 체크 취소</small></div>
+ <div class="frame new" style="width:380px">
+  <div class="top"><span class="back">← 메뉴</span><span class="role admin">메인 관리자</span></div>
+  <h1>💸 송금 완료 내역</h1><p class="sub">전체 매장 · 2026년 10월</p>
+  <div class="card" style="padding:8px 10px">
+  <table><tr><th>송금일</th><th>매장</th><th>이름</th><th class="r">금액</th><th></th></tr>
+  <tr><td>10/25</td><td>곤드레</td><td>박순자</td><td class="r">270,000</td><td><span class="mini sec">취소</span></td></tr>
+  <tr><td>10/25</td><td>곤드레</td><td>최영호</td><td class="r">135,000</td><td><span class="mini sec">취소</span></td></tr>
+  <tr><td>10/24</td><td>해율</td><td>강미영</td><td class="r">405,000</td><td><span class="mini sec">취소</span></td></tr>
+  <tr><td>10/23</td><td>곤드레</td><td>박순자</td><td class="r">65,000</td><td><span class="mini sec">취소</span></td></tr>
+  <tr><td>10/21</td><td>남원</td><td>김미숙</td><td class="r">140,000</td><td><span class="mini sec">취소</span></td></tr></table></div>
+  <div class="card"><div class="sum"><span>10월 송금 합계</span><b>5,840,000원</b></div>
+   <div class="sum"><span>해율 · 곤드레 · 남원 · 카페</span><span class="muted">2.1M · 2.6M · 1.1M · 0</span></div></div>
+ </div></div>
+</div>
+</body></html>
