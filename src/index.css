@@ -2686,3 +2686,7 @@ button.kpi-card {
   padding: 12px 14px;
   font-size: 17px;
 }
+
+.time-input {
+  letter-spacing: 0.05em;
+}

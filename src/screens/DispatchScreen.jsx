@@ -18,7 +18,7 @@ import {
   won,
   wonPlain,
 } from '../lib/dispatch'
-import { currentMonth, todayStr } from '../lib/vendorLedger'
+import { currentMonth } from '../lib/vendorLedger'
 
 const TABS = [
   { key: 'daily', label: '날짜별' },
@@ -38,9 +38,6 @@ export default function DispatchScreen() {
   const [shifts, setShifts] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
-  const [message, setMessage] = useState('')
-  const [reloadKey, setReloadKey] = useState(0)
-  const [busyWorker, setBusyWorker] = useState(null)
   const [positionFilter, setPositionFilter] = useHistoryState('dispatchPosition', 'all')
 
   useEffect(() => {
@@ -60,7 +57,7 @@ export default function DispatchScreen() {
     return () => {
       cancelled = true
     }
-  }, [store, month, reloadKey])
+  }, [store, month])
 
   const workerById = useMemo(() => new Map(workers.map((w) => [w.id, w])), [workers])
   const summary = useMemo(() => summarizeByWorker(shifts), [shifts])
@@ -70,40 +67,8 @@ export default function DispatchScreen() {
   const fixedWorkers = workers.filter((w) => w.is_fixed)
   const [y, m] = month.split('-')
 
-  // 고정 파출 [오늘 출근 +]: 평소 근무시간·일당으로 바로 등록 (평소 값이 없으면 등록 화면으로)
-  const addToday = async (worker) => {
-    setMessage('')
-    setError('')
-    if (!worker.default_wage || !worker.default_position) {
-      navigate(`/dispatch/new?worker=${worker.id}`)
-      return
-    }
-    const today = todayStr()
-    if (shifts.some((s) => s.worker_id === worker.id && s.work_date === today)) {
-      setError(`${worker.name}님은 오늘 이미 등록돼 있어요.`)
-      return
-    }
-    setBusyWorker(worker.id)
-    const { error: err } = await supabase.from('dispatch_shifts').insert({
-      store_code: store.code,
-      worker_id: worker.id,
-      work_date: today,
-      start_time: worker.default_start,
-      end_time: worker.default_end,
-      wage: worker.default_wage,
-      position: worker.default_position,
-      bank: worker.bank,
-      account: worker.account,
-    })
-    setBusyWorker(null)
-    if (err) {
-      setError(err.message)
-      return
-    }
-    setMessage(`${worker.name}님 오늘 출근을 등록했어요 (${positionLabel(worker.default_position)} · ${timeRangeLabel(worker.default_start, worker.default_end)} · ${won(worker.default_wage)}).`)
-    if (month !== today.slice(0, 7)) setMonth(today.slice(0, 7))
-    else setReloadKey((k) => k + 1)
-  }
+  // 고정 파출 [오늘 출근 +]: 이름·오늘 날짜·평소 포지션만 채운 등록 화면으로 (근무시간·일당은 직접 입력)
+  const addToday = (worker) => navigate(`/dispatch/new?worker=${worker.id}`)
 
   return (
     <div className="screen screen-wide dispatch-screen">
@@ -146,7 +111,6 @@ export default function DispatchScreen() {
 
       {loading && <p className="hint">불러오는 중...</p>}
       {error && <p className="error-text">{error}</p>}
-      {message && <p className="success-text">{message}</p>}
 
       {!loading && tab === 'daily' && (
         <>
@@ -249,8 +213,7 @@ export default function DispatchScreen() {
                   {r && r.days >= INSURANCE_DAY_LIMIT && <span className="tag-warn">{INSURANCE_DAY_LIMIT}일 이상</span>}
                 </div>
                 <p className="hint">
-                  평소 {w.default_position && <PositionTag value={w.default_position} />}{' '}
-                  {w.default_wage ? `${timeRangeLabel(w.default_start, w.default_end)} · ${won(w.default_wage)}` : '근무시간·일당 미설정'}
+                  평소 포지션 {w.default_position ? <PositionTag value={w.default_position} /> : '미설정'}
                 </p>
                 <div className="cost-summary-row">
                   <span>{Number(m)}월 근무</span>
@@ -268,8 +231,8 @@ export default function DispatchScreen() {
                   </>
                 )}
                 <div className="dispatch-card-actions">
-                  <button type="button" className="btn-primary" disabled={busyWorker === w.id} onClick={() => addToday(w)}>
-                    {busyWorker === w.id ? '등록 중...' : '오늘 출근 +'}
+                  <button type="button" className="btn-primary" onClick={() => addToday(w)}>
+                    오늘 출근 +
                   </button>
                   <button type="button" className="btn-secondary" onClick={() => navigate(`/dispatch/workers/${w.id}?month=${month}`)}>
                     상세 보기

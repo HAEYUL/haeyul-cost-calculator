@@ -127,7 +127,34 @@ describe('세무 출력 집계', () => {
   })
 })
 
-import { positionLabel, positionsOf, summarizeByPosition } from './dispatch'
+import { finishTimeInput, formatTimeInput, isValidTime, positionLabel, positionsOf, summarizeByPosition } from './dispatch'
+
+describe('근무시간 직접 입력', () => {
+  it('숫자만 쳐도 시:분으로', () => {
+    expect(formatTimeInput('0900')).toBe('09:00')
+    expect(formatTimeInput('2100')).toBe('21:00')
+    expect(formatTimeInput('090')).toBe('09:0')
+    expect(formatTimeInput('9')).toBe('9')
+  })
+  it('한 글자씩 쳐도 깨지지 않는다', () => {
+    let v = ''
+    for (const ch of '0900') v = formatTimeInput(v + ch)
+    expect(v).toBe('09:00')
+  })
+  it('칸을 벗어나면 정리', () => {
+    expect(finishTimeInput('9')).toBe('09:00')
+    expect(finishTimeInput('21')).toBe('21:00')
+    expect(finishTimeInput('93:0')).toBe('09:30')
+    expect(finishTimeInput('')).toBe('')
+  })
+  it('올바른 시각만 통과', () => {
+    expect(isValidTime('09:00')).toBe(true)
+    expect(isValidTime('24:00')).toBe(true)
+    expect(isValidTime('25:00')).toBe(false)
+    expect(isValidTime('09:60')).toBe(false)
+    expect(isValidTime('9:00')).toBe(false)
+  })
+})
 
 describe('포지션(홀/주방)', () => {
   const shifts = [
