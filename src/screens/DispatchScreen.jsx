@@ -142,6 +142,7 @@ export default function DispatchScreen() {
                     <th>시간</th>
                     <th className="num">일당</th>
                     <th className="num">송금</th>
+                    <th />
                   </tr>
                 </thead>
                 <tbody>
@@ -159,6 +160,22 @@ export default function DispatchScreen() {
                       <td className="num">{wonPlain(s.wage)}</td>
                       <td className={`num ${s.paid_date ? 'paid-text' : 'pending-text'}`}>
                         {s.paid_date ? `완료 ${dayLabel(s.paid_date)}` : '대기'}
+                      </td>
+                      <td className="num">
+                        {s.paid_date && !isAdmin ? (
+                          <span className="hint">🔒</span>
+                        ) : (
+                          <button
+                            type="button"
+                            className="chip edit-chip"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              navigate(`/dispatch/edit/${s.id}`)
+                            }}
+                          >
+                            수정
+                          </button>
+                        )}
                       </td>
                     </tr>
                   ))}
@@ -250,12 +267,7 @@ export default function DispatchScreen() {
           {workers.map((w) => {
             const r = summary.get(w.id)
             return (
-              <button
-                type="button"
-                key={w.id}
-                className="cost-summary dispatch-card dispatch-worker-row"
-                onClick={() => navigate(`/dispatch/workers/${w.id}?month=${month}`)}
-              >
+              <div key={w.id} className="cost-summary dispatch-card">
                 <div className="cost-summary-row">
                   <strong>
                     {w.name} {w.is_fixed && <span className="tag">고정</span>} {w.default_position && <PositionTag value={w.default_position} />}
@@ -265,7 +277,15 @@ export default function DispatchScreen() {
                 <p className="hint">
                   {showMaskedRrn(w.rrn_masked)} · {[w.bank, w.account].filter(Boolean).join(' ') || '계좌 없음'}
                 </p>
-              </button>
+                <div className="dispatch-card-actions">
+                  <button type="button" className="btn-secondary" onClick={() => navigate(`/dispatch/workers/${w.id}?month=${month}`)}>
+                    근무 내역
+                  </button>
+                  <button type="button" className="btn-secondary" onClick={() => navigate(`/dispatch/workers/${w.id}?month=${month}&edit=1`)}>
+                    ✏️ 정보 수정
+                  </button>
+                </div>
+              </div>
             )
           })}
         </div>

@@ -2690,3 +2690,30 @@ button.kpi-card {
 .time-input {
   letter-spacing: 0.05em;
 }
+
+/* ---------- 근무시간 고르기 · 수정 버튼 ---------- */
+.time-range {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.time-select {
+  flex: 1;
+  display: flex;
+  gap: 6px;
+  min-width: 0;
+}
+
+.time-select .select {
+  flex: 1;
+  min-width: 0;
+  padding: 12px 10px;
+  font-size: 17px;
+}
+
+.edit-chip {
+  padding: 4px 12px;
+  font-size: 13px;
+  box-shadow: none;
+}

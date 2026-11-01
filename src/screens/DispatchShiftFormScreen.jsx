@@ -3,11 +3,10 @@ import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useStore } from '../context/StoreContext'
 import { supabase } from '../lib/supabaseClient'
 import { useGoBack } from '../hooks/usePageHistoryState'
+import TimeSelect from '../components/TimeSelect'
 import { dispatchRequest, fetchShifts, fetchWorkers, SHIFT_COLUMNS, workerPayload } from '../lib/dispatchApi'
 import {
   findSimilarWorkers,
-  finishTimeInput,
-  formatTimeInput,
   hhmm,
   INSURANCE_DAY_LIMIT,
   isValidTime,
@@ -152,7 +151,8 @@ export default function DispatchShiftFormScreen() {
     if (locked) return
     const wageNum = Number(String(wage).replace(/,/g, ''))
     if (!date) return setError('근무날짜를 입력하세요.')
-    if (!isValidTime(start) || !isValidTime(end)) return setError('근무시간을 4자리 숫자로 입력하세요. 예: 0900 ~ 2100')
+    if (!isValidTime(start) || !isValidTime(end)) return setError('근무시간(시작·끝)을 골라주세요.')
+    if (end <= start) return setError('끝 시간이 시작 시간보다 늦어야 해요.')
     if (wage === '' || !Number.isInteger(wageNum) || wageNum <= 0) return setError('일당을 입력하세요.')
     if (!position) return setError('포지션(홀/주방)을 체크하세요.')
     if (!workerId && !creatingNew) {
@@ -419,30 +419,12 @@ export default function DispatchShiftFormScreen() {
 
         <div className="field">
           <label>근무시간</label>
-          <div className="rrn-row">
-            <input
-              className="input time-input"
-              inputMode="numeric"
-              value={start}
-              onChange={(e) => setStart(formatTimeInput(e.target.value))}
-              onBlur={() => setStart((v) => finishTimeInput(v))}
-              placeholder="시작 (예: 0900)"
-              disabled={locked}
-              aria-label="시작 시간"
-            />
+          <div className="time-range">
+            <TimeSelect value={start} onChange={setStart} disabled={locked} label="시작" />
             <span>~</span>
-            <input
-              className="input time-input"
-              inputMode="numeric"
-              value={end}
-              onChange={(e) => setEnd(formatTimeInput(e.target.value))}
-              onBlur={() => setEnd((v) => finishTimeInput(v))}
-              placeholder="끝 (예: 2100)"
-              disabled={locked}
-              aria-label="끝 시간"
-            />
+            <TimeSelect value={end} onChange={setEnd} disabled={locked} label="끝" />
           </div>
-          {!locked && <p className="hint">숫자 4자리로 입력하세요. 24시간 기준 (밤 9시 = 2100)</p>}
+          {!locked && <p className="hint">시(09~21시)를 고르면 분은 00분으로 정해져요. 30분이면 분을 바꿔주세요.</p>}
         </div>
 
         <div className="field">
@@ -528,6 +510,15 @@ export default function DispatchShiftFormScreen() {
         {worker && (
           <button type="button" className="link-btn" onClick={() => navigate(`/dispatch/workers/${worker.id}?month=${date.slice(0, 7)}`)}>
             {worker.name}님 한 달 내역 보기 →
+          </button>
+        )}
+        {worker && (
+          <button
+            type="button"
+            className="link-btn"
+            onClick={() => navigate(`/dispatch/workers/${worker.id}?month=${date.slice(0, 7)}&edit=1`)}
+          >
+            ✏️ {worker.name}님 이름·주민번호·계좌 수정 →
           </button>
         )}
       </div>
