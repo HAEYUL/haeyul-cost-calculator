@@ -105,3 +105,16 @@ describe('매출 구분(POS)', () => {
     expect(m.get('gondre|2026-11-02').total_amount).toBe(1350000)
   })
 })
+
+import { nextReportDeadline, eyebrowDate } from './storeSummary'
+
+describe('메인 화면 날짜 표시', () => {
+  it('신고 기한: 15일 전이면 이번 달, 지나면 다음 달', () => {
+    expect(nextReportDeadline('2026-11-02')).toBe('11월 15일까지')
+    expect(nextReportDeadline('2026-11-20')).toBe('12월 15일까지')
+    expect(nextReportDeadline('2026-12-20')).toBe('1월 15일까지')
+  })
+  it('영문 날짜', () => {
+    expect(eyebrowDate(new Date(2026, 10, 2))).toBe('TODAY · 2026.11.02 MON')
+  })
+})

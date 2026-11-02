@@ -3,6 +3,8 @@ import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
 import { useStore } from '../context/StoreContext'
 import { useInstallPrompt } from '../lib/useInstallPrompt'
+import Icon from '../components/Icon'
+import { STORE_INFO, storeColor } from '../data/stores'
 
 const MAX_ATTEMPTS = 5
 const LOCK_MINUTES = 5
@@ -175,7 +177,7 @@ export default function StoreSelectScreen() {
 
   if (prompt?.kind === 'store') {
     return (
-      <div className="screen">
+      <div className="screen login-screen login-prompt">
         <button type="button" className="link-btn" onClick={closePrompt}>
           ← 매장 선택
         </button>
@@ -212,11 +214,11 @@ export default function StoreSelectScreen() {
   if (prompt?.kind === 'admin') {
     const settingUp = adminHasPin === false
     return (
-      <div className="screen">
+      <div className="screen login-screen login-prompt">
         <button type="button" className="link-btn" onClick={closePrompt}>
           ← 매장 선택
         </button>
-        <h1>🔑 메인 관리자</h1>
+        <h1>메인 관리자</h1>
         {adminHasPin == null && !error && <p className="subtitle">확인 중...</p>}
         {adminHasPin != null && (
           <>
@@ -275,19 +277,33 @@ export default function StoreSelectScreen() {
   }
 
   return (
-    <div className="screen">
-      <h1>매장 선택</h1>
-      <p className="subtitle">매장을 선택하세요</p>
+    <div className="screen login-screen">
+      <div className="login-brand">
+        <div className="brand-mark">해</div>
+        <h1>해율 경영관리</h1>
+        <p>HAEYUL · MANAGEMENT</p>
+      </div>
+      <p className="login-label">매장을 선택하세요 (매니저)</p>
       <div className="store-list">
         {stores.map((s) => (
           <button key={s.code} className="store-btn" onClick={() => openPrompt({ kind: 'store', store: s })}>
-            {s.name}
+            <span className="store-swatch" style={{ background: storeColor(s.code) }} />
+            <span>
+              {s.name}
+              <small>{STORE_INFO[s.code] ?? ''}</small>
+            </span>
+            <Icon name="chev" />
           </button>
         ))}
       </div>
 
       <button type="button" className="store-btn admin-login-btn" onClick={() => openPrompt({ kind: 'admin' })}>
-        🔑 메인 관리자 로그인
+        <span className="store-swatch" />
+        <span>
+          메인 관리자 로그인
+          <small>4개 매장 전체 · 관리자 비밀번호</small>
+        </span>
+        <Icon name="key" />
       </button>
 
       {!isStandalone && (
