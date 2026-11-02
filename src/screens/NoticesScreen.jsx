@@ -1,16 +1,18 @@
 import { useEffect, useMemo, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useStore } from '../context/StoreContext'
 import { supabase } from '../lib/supabaseClient'
 import { useHistoryState } from '../hooks/usePageHistoryState'
 import { fetchNotices } from '../lib/notices'
-import NoticeCard from '../components/NoticeCard'
+import NoticeRow from '../components/NoticeRow'
 
 // 전달사항: 메인 관리자는 매장을 골라 보내고(여러 매장 한 번에) 확인·답장을 본다. 매니저는 자기 매장 것을 보고 확인·답장한다.
 export default function NoticesScreen() {
   const { store, stores, isAdmin } = useStore()
   const navigate = useNavigate()
-  const [filter, setFilter] = useHistoryState('noticeFilter', 'all')
+  const [searchParams] = useSearchParams()
+  // 매니저: 새 전달사항(확인 전) / 지난 전달사항(확인한 것). 관리자: 전체·미확인·답장·매장별
+  const [filter, setFilter] = useHistoryState('noticeFilter', () => (searchParams.get('tab') === 'past' ? 'past' : isAdmin ? 'all' : 'new'))
   const [notices, setNotices] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -66,16 +68,10 @@ export default function NoticesScreen() {
     reload()
   }
 
-  const remove = async (notice) => {
-    if (!window.confirm('이 전달사항을 지울까요?')) return
-    const { error: err } = await supabase.from('store_notices').delete().eq('id', notice.id)
-    if (err) return setError(err.message)
-    reload()
-  }
-
   const visible = notices.filter((n) => {
     if (isAdmin && filter.startsWith('store:')) return n.store_code === filter.slice(6)
-    if (filter === 'pending') return !n.confirmed_at
+    if (filter === 'pending' || filter === 'new') return !n.confirmed_at
+    if (filter === 'past') return Boolean(n.confirmed_at)
     if (filter === 'replied') return Boolean(n.reply)
     return true
   })
@@ -128,11 +124,17 @@ export default function NoticesScreen() {
       {message && <p className="success-text">{message}</p>}
 
       <div className="preset-row" style={{ marginTop: 14 }}>
-        {[
-          ['all', `전체 ${notices.length}`],
-          ['pending', `미확인 ${pendingCount}`],
-          ['replied', `답장 ${repliedCount}`],
-        ].map(([key, label]) => (
+        {(isAdmin
+          ? [
+              ['all', `전체 ${notices.length}`],
+              ['pending', `미확인 ${pendingCount}`],
+              ['replied', `답장 ${repliedCount}`],
+            ]
+          : [
+              ['new', `새 전달사항 ${pendingCount}`],
+              ['past', `지난 전달사항 ${notices.length - pendingCount}`],
+            ]
+        ).map(([key, label]) => (
           <button key={key} type="button" className={filter === key ? 'chip chip-active' : 'chip'} onClick={() => setFilter(key)}>
             {label}
           </button>
@@ -152,19 +154,12 @@ export default function NoticesScreen() {
 
       {loading && <p className="hint">불러오는 중...</p>}
       {!loading && !error && visible.length === 0 && <p className="hint">전달사항이 없어요.</p>}
-      <div className="dispatch-cards">
+      <div className="notice-list">
         {visible.map((n) => (
-          <NoticeCard
-            key={n.id}
-            notice={n}
-            storeName={isAdmin ? storeName(n.store_code) : null}
-            isAdmin={isAdmin}
-            onChanged={reload}
-            onDelete={isAdmin ? remove : null}
-          />
+          <NoticeRow key={n.id} notice={n} storeName={isAdmin ? storeName(n.store_code) : null} />
         ))}
       </div>
-      <p className="hint">최근 90일 전달사항이 보여요.</p>
+      <p className="hint">제목을 누르면 전체 내용이 보여요. 최근 90일 전달사항이 보여요.</p>
     </div>
   )
 }

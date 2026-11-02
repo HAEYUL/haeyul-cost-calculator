@@ -230,7 +230,7 @@ export default function MainMenuScreen() {
   if (!store) return null
 
   return (
-    <div className="screen screen-menu">
+    <div className={`screen screen-menu${isAdmin ? '' : ' screen-menu-manager'}`}>
       <div className="menu-topbar">
         <button
           type="button"
@@ -263,7 +263,7 @@ export default function MainMenuScreen() {
         ) : (
           <>
             <div className="store-badge">{store.name}</div>
-            <p className="hint manager-hint">매니저 화면이에요. 입고·실재고·거래처·단가·파출을 볼 수 있어요.</p>
+            <span className="role-badge role-badge-manager">매니저</span>
           </>
         )}
       </div>
