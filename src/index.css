@@ -3035,3 +3035,48 @@ button.kpi-card {
   background: #d84343;
   color: #fff;
 }
+
+/* ---------- 일매출: 매출 구분(층별) ---------- */
+.sales-channel-block {
+  margin-top: 10px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: color-mix(in srgb, var(--accent) 4%, transparent);
+}
+
+.sales-channel-title {
+  margin: 0 0 6px;
+  font-weight: 700;
+}
+
+.sales-form-total {
+  margin: 10px 0 4px;
+  padding: 8px 2px;
+  border-top: 2px solid var(--border);
+}
+
+.channel-breakdown {
+  display: block;
+  font-size: 11px;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.cons-table .sub-col {
+  color: var(--text-muted);
+}
+
+.cons-table .sub-row td {
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.channel-toggle {
+  border-bottom: none;
+  padding: 6px 0;
+}
+
+.channel-summary {
+  margin-top: 4px;
+}

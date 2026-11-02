@@ -81,3 +81,27 @@ describe('결산 비율', () => {
     expect(formatPercent(settlementPercent('ingredient_cost', { revenue: 0, ingredient_cost: 0 }, 0))).toBe('-')
   })
 })
+
+import { combineByStoreDate } from './salesSummary'
+import { channelLabel, channelsFor, hasChannels } from '../data/salesChannels'
+
+describe('매출 구분(POS)', () => {
+  it('해율만두전골은 1층 매장 / 2,3층 매장, 다른 매장은 하나', () => {
+    expect(channelsFor('haeyul').map((c) => c.label)).toEqual(['1층 매장', '2,3층 매장'])
+    expect(hasChannels('gondre')).toBe(false)
+    expect(channelsFor('gondre').map((c) => c.code)).toEqual(['main'])
+    expect(channelLabel('haeyul', '23f')).toBe('2,3층 매장')
+  })
+  it('같은 날 두 POS를 합친다 (매출·객수 모두)', () => {
+    const m = combineByStoreDate([
+      { store_code: 'haeyul', sale_date: '2026-11-02', channel: '1f', total_amount: 820000, card_amount: 760000, guest_count: 64 },
+      { store_code: 'haeyul', sale_date: '2026-11-02', channel: '23f', total_amount: 2350000, card_amount: 2180000, guest_count: 118 },
+      { store_code: 'gondre', sale_date: '2026-11-02', channel: 'main', total_amount: 1350000, guest_count: 96 },
+    ])
+    const h = m.get('haeyul|2026-11-02')
+    expect(h.total_amount).toBe(3170000)
+    expect(h.guest_count).toBe(182)
+    expect(h.channels.get('1f').total_amount).toBe(820000)
+    expect(m.get('gondre|2026-11-02').total_amount).toBe(1350000)
+  })
+})

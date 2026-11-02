@@ -109,3 +109,18 @@ export function settlementPercent(field, totals, grandRevenue) {
 }
 
 export const formatPercent = (p) => (p == null ? '-' : `${p.toFixed(1)}%`)
+
+// 같은 매장·날짜의 구분(POS)별 줄을 하나로 합친다: Map('store|date' → { 합계값들, channels: Map(code → row) })
+export function combineByStoreDate(rows) {
+  const map = new Map()
+  for (const r of rows) {
+    const key = `${r.store_code}|${r.sale_date}`
+    if (!map.has(key)) {
+      map.set(key, { store_code: r.store_code, sale_date: r.sale_date, total_amount: 0, card_amount: 0, cash_amount: 0, other_amount: 0, guest_count: 0, channels: new Map() })
+    }
+    const c = map.get(key)
+    for (const k of ['total_amount', 'card_amount', 'cash_amount', 'other_amount', 'guest_count']) c[k] += Number(r[k] || 0)
+    c.channels.set(r.channel ?? 'main', r)
+  }
+  return map
+}
