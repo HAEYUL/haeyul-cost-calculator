@@ -2,6 +2,7 @@ import { Link, Navigate, Outlet, useLocation, useNavigate } from 'react-router-d
 import { useStore } from '../context/StoreContext'
 import { activeMenuPath, isPathAllowed, menuSectionsFor } from '../data/menuSections'
 import StoreSwitcher from './StoreSwitcher'
+import ErrorBoundary from './ErrorBoundary'
 
 // 매장에 들어온 뒤의 모든 화면을 감싼다. PC(넓은 화면)에서는 왼쪽에 메뉴판을 띄워 어느 화면에서든
 // 바로 다른 메뉴로 갈 수 있게 하고, 휴대폰에서는 메뉴판을 숨겨 지금처럼 한 줄 화면으로 보인다.
@@ -59,7 +60,9 @@ export default function AppLayout() {
         ))}
       </aside>
       <div className="app-main">
-        <Outlet key={isAdmin ? store.code : undefined} />
+        <ErrorBoundary resetKey={pathname}>
+          <Outlet key={isAdmin ? store.code : undefined} />
+        </ErrorBoundary>
       </div>
     </div>
   )

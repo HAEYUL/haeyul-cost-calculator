@@ -70,6 +70,15 @@ export default function DispatchPaymentsScreen() {
     }
   }, [storeCodes, tab, doneMonth, reloadKey])
 
+  // 탭을 바꾸면 이전 탭 자료를 비우고 새로 불러온다.
+  const switchTab = (next) => {
+    if (next === tab) return
+    setShifts([])
+    setLoading(true)
+    setMessage('')
+    setTab(next)
+  }
+
   const workerById = useMemo(() => new Map(workers.map((w) => [w.id, w])), [workers])
   const visibleShifts = storeFilter === 'all' ? shifts : shifts.filter((s) => s.store_code === storeFilter)
   const groups = useMemo(() => {
@@ -133,6 +142,8 @@ export default function DispatchPaymentsScreen() {
     if (tab !== 'done') return []
     const map = new Map()
     for (const s of visibleShifts) {
+      // 탭을 막 바꾼 순간에는 아직 '송금 대기' 자료가 남아 있을 수 있어, 송금일이 있는 것만 묶는다.
+      if (!s.paid_date) continue
       const key = `${s.paid_date}|${s.store_code}|${s.worker_id}`
       if (!map.has(key)) map.set(key, { key, paidDate: s.paid_date, storeCode: s.store_code, workerId: s.worker_id, shifts: [], total: 0 })
       const g = map.get(key)
@@ -176,10 +187,10 @@ export default function DispatchPaymentsScreen() {
       </div>
 
       <div className="preset-row">
-        <button type="button" className={tab === 'pending' ? 'chip chip-active' : 'chip'} onClick={() => setTab('pending')}>
+        <button type="button" className={tab === 'pending' ? 'chip chip-active' : 'chip'} onClick={() => switchTab('pending')}>
           송금 대기
         </button>
-        <button type="button" className={tab === 'done' ? 'chip chip-active' : 'chip'} onClick={() => setTab('done')}>
+        <button type="button" className={tab === 'done' ? 'chip chip-active' : 'chip'} onClick={() => switchTab('done')}>
           송금 완료 내역
         </button>
       </div>
