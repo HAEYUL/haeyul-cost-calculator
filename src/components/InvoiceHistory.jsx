@@ -18,7 +18,7 @@ function rowDateValue(row) {
   return new Date(row.invoice_date ?? row.created_at).getTime()
 }
 
-// canRecordPayments: [결제완료] 버튼 (메인 관리자만). 결제됨 표시는 매니저도 본다.
+// canRecordPayments: [결제완료](즉시 결제 나중에 처리) 버튼. 매니저도 쓸 수 있다(DB가 같은 날·같은 금액 명세표일 때만 허용).
 export default function InvoiceHistory({ storeCode, refreshKey, canRecordPayments = true }) {
   const navigate = useNavigate()
   const [batches, setBatches] = useState([])

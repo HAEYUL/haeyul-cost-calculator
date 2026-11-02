@@ -194,6 +194,22 @@ begin
   end loop;
 end $$;
 
+-- 매니저도 입고 입력의 "바로 결제 완료"(즉시 결제)는 남길 수 있다: 같은 거래처·날짜·금액의 명세표가 있을 때만
+drop policy if exists "manager instant payment" on public.vendor_payments;
+create policy "manager instant payment" on public.vendor_payments for insert to authenticated
+  with check (
+    store_code = public.auth_store_code()
+    and memo in ('즉시 결제(자동)', '즉시 결제(나중에 처리)')
+    and paid_date is not null
+    and exists (
+      select 1 from public.invoice_batches b
+      where b.store_code = vendor_payments.store_code
+        and b.vendor_id = vendor_payments.vendor_id
+        and b.invoice_date = vendor_payments.paid_date
+        and round(b.total_amount) = round(vendor_payments.amount)
+    )
+  );
+
 -- 인력 명부: 암호화된 주민번호와 중복 확인값은 화면(출입증)으로 읽을 수 없게 한다.
 revoke all on public.dispatch_workers from anon, authenticated;
 grant select (id, store_code, name, rrn_masked, bank, account, is_fixed, default_start, default_end, default_wage, default_position, default_source_id, memo, created_at, updated_at)

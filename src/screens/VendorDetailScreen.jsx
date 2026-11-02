@@ -841,7 +841,7 @@ export default function VendorDetailScreen() {
                     {paidIds.has(batch.id) ? (
                       <span className="paid-badge">✓ 결제됨</span>
                     ) : (
-                      isAdmin && canRecordBatchPayment(batch) && (
+                      canRecordBatchPayment(batch) && (
                         <button type="button" className="link-btn" onClick={() => setPayBatchTarget(batch)}>
                           결제완료
                         </button>
