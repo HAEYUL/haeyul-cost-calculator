@@ -3,7 +3,8 @@ import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
 import { UNIT_LABELS } from '../lib/units'
 import { rowDateStr } from '../lib/rowDateStr'
-import { canRecordBatchPayment, paidBatchIds, recordBatchPayment } from '../lib/batchPayment'
+import { canRecordBatchPayment, matchPaymentsToBatches, recordBatchPayment } from '../lib/batchPayment'
+import { deleteInvoiceBatch } from '../lib/deleteInvoiceBatch'
 import { useHistoryState } from '../hooks/usePageHistoryState'
 
 function todayStr() {
@@ -18,7 +19,7 @@ function rowDateValue(row) {
   return new Date(row.invoice_date ?? row.created_at).getTime()
 }
 
-// canRecordPayments: [결제완료] 버튼 (메인 관리자만). 결제됨 표시는 매니저도 본다.
+// canRecordPayments: [결제완료](즉시 결제 나중에 처리) 버튼. 매니저도 쓸 수 있다(DB가 같은 날·같은 금액 명세표일 때만 허용).
 export default function InvoiceHistory({ storeCode, refreshKey, canRecordPayments = true }) {
   const navigate = useNavigate()
   const [batches, setBatches] = useState([])
@@ -26,6 +27,10 @@ export default function InvoiceHistory({ storeCode, refreshKey, canRecordPayment
   const [payments, setPayments] = useState([])
   const [payTarget, setPayTarget] = useState(null)
   const [paying, setPaying] = useState(false)
+  const [deleteTarget, setDeleteTarget] = useState(null)
+  const [deleteLinkedPayment, setDeleteLinkedPayment] = useState(true)
+  const [deleting, setDeleting] = useState(false)
+  const [dataKey, setDataKey] = useState(0)
   const [paymentsKey, setPaymentsKey] = useState(0)
   const [selectedVendor, setSelectedVendor] = useHistoryState('historyVendor', 'all')
   const [dateFrom, setDateFrom] = useHistoryState('historyDateFrom', () => todayStr())
@@ -40,7 +45,7 @@ export default function InvoiceHistory({ storeCode, refreshKey, canRecordPayment
     Promise.all([
       supabase
         .from('invoice_batches')
-        .select('id, invoice_date, total_amount, created_at, vendors(id, name), invoices(id, item_name, quantity, unit_price, unit, amount)')
+        .select('id, vendor_id, invoice_date, total_amount, created_at, photo_path, vendors(id, name), invoices(id, item_name, quantity, unit_price, unit, amount)')
         .eq('store_code', storeCode)
         .order('created_at', { ascending: false }),
       supabase
@@ -60,14 +65,14 @@ export default function InvoiceHistory({ storeCode, refreshKey, canRecordPayment
       setLegacyRows(legacyRes.data ?? [])
       setLoading(false)
     })
-  }, [storeCode, refreshKey])
+  }, [storeCode, refreshKey, dataKey])
 
   // 결제 기록은 [결제완료]를 누를 때마다 다시 불러와야 해서, 명세표 목록과 따로 불러온다.
   useEffect(() => {
     if (!supabase) return
     supabase
       .from('vendor_payments')
-      .select('vendor_id, amount, paid_date')
+      .select('id, vendor_id, amount, paid_date')
       .eq('store_code', storeCode)
       .then(({ data, error: err }) => {
         if (err) {
@@ -76,7 +81,7 @@ export default function InvoiceHistory({ storeCode, refreshKey, canRecordPayment
         }
         setPayments(data ?? [])
       })
-  }, [storeCode, refreshKey, paymentsKey])
+  }, [storeCode, refreshKey, paymentsKey, dataKey])
 
   const handlePay = async () => {
     if (!payTarget) return
@@ -99,6 +104,25 @@ export default function InvoiceHistory({ storeCode, refreshKey, canRecordPayment
   // 기간·거래처 필터는 이 화면의 방문 기록에 남아 있어, 수정 화면에서 저장·취소하고 돌아오면 그대로 보인다.
   const openEdit = (batchId) => navigate(`/invoices/edit/${batchId}`)
 
+  const handleDelete = async () => {
+    if (!deleteTarget) return
+    setDeleting(true)
+    setError('')
+    const linked = linkedPaymentByBatch.get(deleteTarget.id)
+    const { error: err, warning } = await deleteInvoiceBatch({
+      batch: deleteTarget,
+      linkedPaymentId: linked && deleteLinkedPayment ? linked.id : null,
+    })
+    setDeleting(false)
+    if (err) {
+      setError(err.message)
+      return
+    }
+    if (warning) setError(warning)
+    setDeleteTarget(null)
+    setDataKey((k) => k + 1)
+  }
+
   if (!supabase) {
     return <p className="hint">Supabase가 설정되지 않아 저장된 내역을 볼 수 없습니다.</p>
   }
@@ -106,7 +130,9 @@ export default function InvoiceHistory({ storeCode, refreshKey, canRecordPayment
   const vendorNames = [
     ...new Set([...batches.map((b) => b.vendors?.name).filter(Boolean), ...legacyRows.map((r) => r.vendor)]),
   ]
-  const paidIds = paidBatchIds(batches, payments)
+  // 명세표마다 짝지어진 결제(바로 결제 완료·[결제완료]로 생긴 것)
+  const linkedPaymentByBatch = matchPaymentsToBatches(batches, payments)
+  const paidIds = new Set(linkedPaymentByBatch.keys())
   const inVendor = (name) => selectedVendor === 'all' || name === selectedVendor
   const inRange = (row) => {
     const d = rowDateStr(row)
@@ -180,12 +206,51 @@ export default function InvoiceHistory({ storeCode, refreshKey, canRecordPayment
                   <button type="button" className="link-btn" onClick={() => openEdit(row.id)}>
                     수정
                   </button>
+                  <button
+                    type="button"
+                    className="icon-btn"
+                    aria-label="명세표 삭제"
+                    onClick={() => {
+                      setDeleteTarget(row)
+                      setDeleteLinkedPayment(true)
+                    }}
+                  >
+                    ✕
+                  </button>
                 </div>
               </div>
               <div className="history-row-sub">
                 {row.invoice_date && <span>{row.invoice_date}</span>}
                 <span>품목 {row.invoices?.length ?? 0}개</span>
               </div>
+              {deleteTarget?.id === row.id && (
+                <div className="price-alert-box price-alert-box-danger">
+                  <p className="price-alert-title">이 명세표를 삭제할까요?</p>
+                  <p className="hint">
+                    {row.vendors?.name ?? '거래처 미지정'} · {row.invoice_date ?? '날짜 미입력'} ·{' '}
+                    {Math.round(Number(row.total_amount)).toLocaleString()}원 · 품목 {row.invoices?.length ?? 0}개가 함께 지워지고, 되돌릴 수 없어요.
+                  </p>
+                  {linkedPaymentByBatch.has(row.id) && (
+                    <label className="toggle-row">
+                      <input
+                        type="checkbox"
+                        checked={deleteLinkedPayment}
+                        onChange={(e) => setDeleteLinkedPayment(e.target.checked)}
+                        disabled={deleting}
+                      />
+                      <span>같이 생긴 결제 기록({Math.round(Number(linkedPaymentByBatch.get(row.id).amount)).toLocaleString()}원)도 삭제 (안 지우면 미지급이 마이너스로 남아요)</span>
+                    </label>
+                  )}
+                  <div className="invoice-form">
+                    <button type="button" className="btn-secondary" onClick={() => setDeleteTarget(null)} disabled={deleting}>
+                      취소
+                    </button>
+                    <button type="button" className="btn-primary btn-danger" onClick={handleDelete} disabled={deleting}>
+                      {deleting ? '삭제 중...' : '삭제'}
+                    </button>
+                  </div>
+                </div>
+              )}
               {payTarget?.id === row.id && (
                 <div className="price-alert-box">
                   <p className="price-alert-title">

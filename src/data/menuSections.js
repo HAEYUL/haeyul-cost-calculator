@@ -99,8 +99,8 @@ export const MANAGER_MENU_SECTIONS = [
   },
 ]
 
-// 매니저 메뉴 안에 있어도 메인 관리자만 쓰는 하위 화면 (장부 시작 설정·일괄 결제·부가세 점검)
-const ADMIN_ONLY_SUBPATHS = ['/vendors/ledger-setup', '/vendors/bulk-payment', '/vendors/vat-check']
+// 매니저 메뉴 안에 있어도 메인 관리자만 쓰는 하위 화면 (장부 시작 설정·부가세 점검)
+const ADMIN_ONLY_SUBPATHS = ['/vendors/ledger-setup', '/vendors/vat-check']
 
 export function menuSectionsFor(role) {
   return role === 'admin' ? MENU_SECTIONS : MANAGER_MENU_SECTIONS

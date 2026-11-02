@@ -29,7 +29,7 @@ const fmt = (n) => Math.round(Number(n)).toLocaleString()
 const isPreLedgerPayment = (p) => Boolean(p.paid_date) && p.paid_date < LEDGER_START
 
 export default function VendorDetailScreen() {
-  // 매니저도 장부·결제 내역을 똑같이 보지만, 결제 입력·시작 잔액·삭제는 메인 관리자만 한다.
+  // 매니저도 장부를 보고 결제를 입력·삭제한다. 장부 시작 잔액·부가세 별도 설정은 메인 관리자만.
   const { store, isAdmin } = useStore()
   const navigate = useNavigate()
   const location = useLocation()
@@ -317,7 +317,7 @@ export default function VendorDetailScreen() {
       return
     }
 
-    if (isPreLedgerPayment(deletePaymentTarget) && ledger.hasOpening && adjustOpeningOnDelete) {
+    if (isAdmin && isPreLedgerPayment(deletePaymentTarget) && ledger.hasOpening && adjustOpeningOnDelete) {
       const balance = ledger.opening + Number(deletePaymentTarget.amount)
       const { error: openingErr } = await supabase.from('vendor_opening_balances').upsert(
         { store_code: store.code, vendor_id: vendorId, as_of_date: LEDGER_START, balance },
@@ -506,7 +506,7 @@ export default function VendorDetailScreen() {
                       {issue.fromDate} ~ {issue.toDate} 사이에 {fmt(gap)}원 결제를 빠뜨린 것 같아요. 실제 결제일을 고르고
                       등록하세요.
                     </p>
-                    {isAdmin && (<div className="invoice-form">
+                    {(<div className="invoice-form">
                       <input
                         type="date"
                         className="input"
@@ -642,7 +642,7 @@ export default function VendorDetailScreen() {
             </table>
           </div>
 
-          {isAdmin && (
+          {(
             <>
           <h2 id="payment" className="section-title">결제 입력</h2>
           <p className="hint">결제할 때마다 입력해 주세요. 장부의 미지급금은 입력한 결제로만 줄어요.</p>
@@ -732,8 +732,8 @@ export default function VendorDetailScreen() {
             {payments.map((p) => (
               <li key={p.id} className="history-row">
                 <div className="history-row-main">
-                  {p.paid_date || !isAdmin ? (
-                    <span className="history-item">{p.paid_date ?? '날짜 없음'}</span>
+                  {p.paid_date ? (
+                    <span className="history-item">{p.paid_date}</span>
                   ) : (
                     <span className="history-item" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                       <input
@@ -757,7 +757,7 @@ export default function VendorDetailScreen() {
                   )}
                   <div className="history-row-main-end">
                     <span>{Math.round(Number(p.amount)).toLocaleString()}원</span>
-                    {isAdmin && <button
+                    {<button
                       type="button"
                       className="icon-btn"
                       aria-label="결제 기록 삭제"
@@ -787,7 +787,7 @@ export default function VendorDetailScreen() {
                             {LEDGER_START} 이전 결제라 장부 시작 잔액({fmt(ledger.opening)}원)에 이미 포함돼 있어요. 결제만
                             지우면 미지급금이 그대로예요.
                           </p>
-                          <label className="toggle-row">
+                          {isAdmin && <label className="toggle-row">
                             <input
                               type="checkbox"
                               checked={adjustOpeningOnDelete}
@@ -798,7 +798,8 @@ export default function VendorDetailScreen() {
                               시작 잔액도 {fmt(p.amount)}원 늘리기 ({fmt(ledger.opening)}원 →{' '}
                               {fmt(ledger.opening + Number(p.amount))}원, 미지급으로 다시 잡혀요)
                             </span>
-                          </label>
+                          </label>}
+                          {!isAdmin && <p className="hint">시작 잔액은 메인 관리자가 맞춰야 해요.</p>}
                         </>
                       ) : (
                         <p className="hint">
@@ -841,7 +842,7 @@ export default function VendorDetailScreen() {
                     {paidIds.has(batch.id) ? (
                       <span className="paid-badge">✓ 결제됨</span>
                     ) : (
-                      isAdmin && canRecordBatchPayment(batch) && (
+                      canRecordBatchPayment(batch) && (
                         <button type="button" className="link-btn" onClick={() => setPayBatchTarget(batch)}>
                           결제완료
                         </button>
@@ -856,7 +857,7 @@ export default function VendorDetailScreen() {
                     >
                       수정
                     </button>
-                    {isAdmin && <button
+                    {<button
                       type="button"
                       className="icon-btn"
                       aria-label="명세표 삭제"

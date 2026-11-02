@@ -144,7 +144,8 @@ function findItemMismatches(items) {
 }
 
 export default function InvoiceScreen() {
-  // 매니저는 결제 내역을 볼 수 있지만 결제 기록(바로 결제 완료)은 남기지 않고, 원가 자료는 열 수 없어 원가율 경고는 관리자만 본다.
+  // 매니저도 "바로 결제 완료"(즉시 결제)는 남길 수 있다(DB가 같은 거래처·날짜·금액 명세표일 때만 허용).
+  // 원가 자료는 매니저가 열 수 없어 원가율 경고는 관리자만 본다.
   const { store, isAdmin } = useStore()
   const navigate = useNavigate()
   const location = useLocation()
@@ -219,7 +220,7 @@ export default function InvoiceScreen() {
   // "바로 결제 완료"를 미리 체크해 둔다. 15일·말일에 몰아서 결제하는 거래처는 체크하지 않는다.
   useEffect(() => {
     if (editMode) return
-    if (!store || !supabase || !vendorId || vendorId === 'new' || !isAdmin) {
+    if (!store || !supabase || !vendorId || vendorId === 'new') {
       setPaidInFull(false)
       setPaidInFullSuggested(false)
       return
@@ -246,7 +247,7 @@ export default function InvoiceScreen() {
     return () => {
       cancelled = true
     }
-  }, [store, vendorId, editMode, isAdmin])
+  }, [store, vendorId, editMode])
 
   // 거래처+입고일이 정해지면, 그 거래처가 이 날짜보다 전에 마지막으로 저장한 명세표의
   // 현잔액을 불러온다. "이번 명세표의 전잔액"이 그 값과 이어지는지 대조하기 위함이다.
@@ -515,7 +516,7 @@ export default function InvoiceScreen() {
       }))
 
       // 수정 전 명세표에 짝지어진 결제(바로 결제 완료·[결제완료])를 미리 찾아둔다.
-      const linkedPayment = originalBatch && isAdmin ? await findLinkedPayment({ storeCode: store.code, batch: originalBatch }) : null
+      const linkedPayment = originalBatch ? await findLinkedPayment({ storeCode: store.code, batch: originalBatch }) : null
 
       // 새 품목을 먼저 넣고, 명세표를 고친 뒤, 예전 품목을 지운다. 중간에 인터넷이 끊겨도 품목이 사라지지 않는다.
       const { data: insertedRows, error: insertEditErr } = await supabase.from('invoices').insert(editRows).select('id')
@@ -1187,7 +1188,7 @@ export default function InvoiceScreen() {
               )}
             </div>
 
-            {!editMode && isAdmin && (
+            {!editMode && (
               <div className="field">
                 <label className="toggle-row">
                   <input type="checkbox" checked={paidInFull} onChange={(e) => setPaidInFull(e.target.checked)} />
@@ -1446,7 +1447,7 @@ export default function InvoiceScreen() {
         )}
       </div>
 
-      {!editMode && <InvoiceHistory storeCode={store.code} refreshKey={historyKey} canRecordPayments={isAdmin} />}
+      {!editMode && <InvoiceHistory storeCode={store.code} refreshKey={historyKey} />}
     </div>
   )
 }
