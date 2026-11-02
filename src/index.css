@@ -2958,3 +2958,8 @@ button.kpi-card {
   color: #d9822b;
   font-weight: 600;
 }
+
+/* 파출 관리: [+ 근무 등록] 버튼과 홀/주방 걸러 보기 사이 간격 */
+.position-filter {
+  margin-top: 14px;
+}
