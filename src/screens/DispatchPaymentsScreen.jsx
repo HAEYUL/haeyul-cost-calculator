@@ -3,8 +3,8 @@ import { useNavigate } from 'react-router-dom'
 import { useStore } from '../context/StoreContext'
 import { supabase } from '../lib/supabaseClient'
 import { useHistoryState } from '../hooks/usePageHistoryState'
-import { fetchShifts, fetchWorkers, SHIFT_COLUMNS } from '../lib/dispatchApi'
-import { groupUnpaid, monthRange, positionLabel, shiftMonthKey, showMaskedRrn, timeRangeLabel, won, wonPlain } from '../lib/dispatch'
+import { fetchShifts, fetchSources, fetchWorkers, SHIFT_COLUMNS } from '../lib/dispatchApi'
+import { groupUnpaid, monthRange, positionLabel, shiftMonthKey, showMaskedRrn, sourcesOf, timeRangeLabel, won, wonPlain } from '../lib/dispatch'
 import PositionTag from '../components/PositionTag'
 import { currentMonth, todayStr } from '../lib/vendorLedger'
 
@@ -29,6 +29,7 @@ export default function DispatchPaymentsScreen() {
   const [paidDate, setPaidDate] = useState(todayStr())
   const [saving, setSaving] = useState(false)
   const [cancelTarget, setCancelTarget] = useState(null)
+  const [sources, setSources] = useState([])
 
   const storeCodes = useMemo(() => stores.map((s) => s.code), [stores])
   const storeName = (code) => stores.find((s) => s.code === code)?.name ?? code
@@ -53,8 +54,9 @@ export default function DispatchPaymentsScreen() {
             if (err) throw err
             return data ?? []
           })()
-    Promise.all([fetchWorkers(storeCodes), load])
-      .then(([w, s]) => {
+    Promise.all([fetchWorkers(storeCodes), load, fetchSources().catch(() => [])])
+      .then(([w, s, src]) => {
+        if (!cancelled) setSources(src)
         if (cancelled) return
         setWorkers(w)
         setShifts(s)
@@ -67,6 +69,15 @@ export default function DispatchPaymentsScreen() {
       cancelled = true
     }
   }, [storeCodes, tab, doneMonth, reloadKey])
+
+  // 탭을 바꾸면 이전 탭 자료를 비우고 새로 불러온다.
+  const switchTab = (next) => {
+    if (next === tab) return
+    setShifts([])
+    setLoading(true)
+    setMessage('')
+    setTab(next)
+  }
 
   const workerById = useMemo(() => new Map(workers.map((w) => [w.id, w])), [workers])
   const visibleShifts = storeFilter === 'all' ? shifts : shifts.filter((s) => s.store_code === storeFilter)
@@ -131,6 +142,8 @@ export default function DispatchPaymentsScreen() {
     if (tab !== 'done') return []
     const map = new Map()
     for (const s of visibleShifts) {
+      // 탭을 막 바꾼 순간에는 아직 '송금 대기' 자료가 남아 있을 수 있어, 송금일이 있는 것만 묶는다.
+      if (!s.paid_date) continue
       const key = `${s.paid_date}|${s.store_code}|${s.worker_id}`
       if (!map.has(key)) map.set(key, { key, paidDate: s.paid_date, storeCode: s.store_code, workerId: s.worker_id, shifts: [], total: 0 })
       const g = map.get(key)
@@ -174,10 +187,10 @@ export default function DispatchPaymentsScreen() {
       </div>
 
       <div className="preset-row">
-        <button type="button" className={tab === 'pending' ? 'chip chip-active' : 'chip'} onClick={() => setTab('pending')}>
+        <button type="button" className={tab === 'pending' ? 'chip chip-active' : 'chip'} onClick={() => switchTab('pending')}>
           송금 대기
         </button>
-        <button type="button" className={tab === 'done' ? 'chip chip-active' : 'chip'} onClick={() => setTab('done')}>
+        <button type="button" className={tab === 'done' ? 'chip chip-active' : 'chip'} onClick={() => switchTab('done')}>
           송금 완료 내역
         </button>
       </div>
@@ -230,6 +243,9 @@ export default function DispatchPaymentsScreen() {
                     <strong>{won(g.total)}</strong>
                   </div>
                   <p className="hint">
+                    {sourcesOf(g.shifts, new Map(sources.map((src) => [src.id, src]))) !== '-' && (
+                      <span className="tag">{sourcesOf(g.shifts, new Map(sources.map((src) => [src.id, src])))}</span>
+                    )}{' '}
                     {showMaskedRrn(w?.rrn_masked)} · {[last.bank ?? w?.bank, last.account ?? w?.account].filter(Boolean).join(' ') || '계좌 없음'}{' '}
                     <button type="button" className="chip copy-chip" onClick={() => copyAccount(w, last)}>
                       계좌 복사

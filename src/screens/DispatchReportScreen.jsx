@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { useStore } from '../context/StoreContext'
 import { supabase } from '../lib/supabaseClient'
 import { useHistoryState } from '../hooks/usePageHistoryState'
-import { dispatchRequest, fetchShifts, fetchWorkers } from '../lib/dispatchApi'
+import { dispatchRequest, fetchShifts, fetchSources, fetchWorkers } from '../lib/dispatchApi'
 import {
   buildLedgerRows,
   buildYearRows,
@@ -12,6 +12,7 @@ import {
   monthRange,
   positionLabel,
   positionsOf,
+  sourcesOf,
   shiftMonthKey,
   timeRangeLabel,
   wonPlain,
@@ -36,6 +37,7 @@ export default function DispatchReportScreen() {
   const [workers, setWorkers] = useState([])
   const [shifts, setShifts] = useState([])
   const [rrns, setRrns] = useState({})
+  const [sourceById, setSourceById] = useState(new Map())
   const [biz, setBiz] = useState(EMPTY_BIZ)
   const [bizOpen, setBizOpen] = useState(false)
   const [bizSaving, setBizSaving] = useState(false)
@@ -53,12 +55,14 @@ export default function DispatchReportScreen() {
     setError('')
     ;(async () => {
       try {
-        const [w, s, bizRes] = await Promise.all([
+        const [w, s, bizRes, src] = await Promise.all([
           fetchWorkers(store.code),
           fetchShifts({ storeCodes: store.code, start: range.start, end: range.end }),
           supabase.from('store_business_info').select('business_name, owner_name, business_no, address').eq('store_code', store.code).maybeSingle(),
+          fetchSources().catch(() => []),
         ])
         if (cancelled) return
+        setSourceById(new Map(src.map((x) => [x.id, x])))
         setWorkers(w)
         setShifts(s)
         setBiz(bizRes.data ? { ...EMPTY_BIZ, ...bizRes.data } : { ...EMPTY_BIZ, business_name: store.name })
@@ -106,6 +110,7 @@ export default function DispatchReportScreen() {
         { label: '이름', value: (r) => nameOf(r.workerId) },
         { label: '주민등록번호', value: (r) => rrnOf(r.workerId) },
         { label: '포지션', value: (r) => positionsOf(r.shifts) },
+        { label: '경로', value: (r) => sourcesOf(r.shifts, sourceById) },
         { label: '근무일수', value: 'days' },
         { label: '근무일자', value: (r) => [...r.dates].sort().map((d) => Number(d.slice(8, 10))).join(' ') },
         { label: '총지급액', value: 'total' },
@@ -301,6 +306,7 @@ export default function DispatchReportScreen() {
                     <th>이름</th>
                     <th>주민등록번호</th>
                     <th>포지션</th>
+                    <th>경로</th>
                     <th>근무일수</th>
                     <th>총지급액</th>
                     <th>소득세</th>
@@ -318,6 +324,7 @@ export default function DispatchReportScreen() {
                       </td>
                       <td>{rrnOf(r.workerId)}</td>
                       <td className="center">{positionsOf(r.shifts)}</td>
+                      <td className="center">{sourcesOf(r.shifts, sourceById)}</td>
                       <td className="num">{r.days}</td>
                       <td className="num">{wonPlain(r.total)}</td>
                       <td className="num">{wonPlain(r.incomeTax)}</td>
@@ -327,7 +334,7 @@ export default function DispatchReportScreen() {
                     </tr>
                   ))}
                   <tr className="total-row">
-                    <th colSpan={3}>합계 {ledger.length}명</th>
+                    <th colSpan={4}>합계 {ledger.length}명</th>
                     <th className="num">{sum(ledger, 'days')}</th>
                     <th className="num">{wonPlain(sum(ledger, 'total'))}</th>
                     <th className="num">{wonPlain(sum(ledger, 'incomeTax'))}</th>
