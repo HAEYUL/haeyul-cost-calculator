@@ -1,10 +1,11 @@
-import { useEffect, useMemo, useState } from 'react'
+import { Fragment, useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useStore } from '../context/StoreContext'
 import { supabase } from '../lib/supabaseClient'
 import { useHistoryState } from '../hooks/usePageHistoryState'
 import {
   aggregate,
+  combineByStoreDate,
   formatPercent,
   missingSettlementMonths,
   monthKeyOf,
@@ -15,6 +16,7 @@ import {
   shortPeriodLabel,
 } from '../lib/salesSummary'
 import { downloadCsv, rowsToCsv } from '../lib/csvExport'
+import { channelsFor, hasChannels, MAIN_CHANNEL } from '../data/salesChannels'
 import { currentMonth, todayStr } from '../lib/vendorLedger'
 import { monthRange, shiftMonthKey } from '../lib/dispatch'
 
@@ -109,7 +111,8 @@ function RangePicker({ from, to, setRange, group, setGroup }) {
 }
 
 // 매장 × 기간 표 (선택한 항목 하나)
-function PeriodMatrix({ result, stores, field, fieldLabel, onOpenStore }) {
+// childRows: Map(매장 코드 → [{ key, name, r }]) — 매장 줄 아래에 구분(POS)별 줄을 덧붙인다.
+function PeriodMatrix({ result, stores, field, fieldLabel, onOpenStore, childRows }) {
   const { periods, byStore, grand } = result
   return (
     <div className="ledger-table-wrap">
@@ -128,8 +131,10 @@ function PeriodMatrix({ result, stores, field, fieldLabel, onOpenStore }) {
         <tbody>
           {stores.map((s) => {
             const r = byStore.get(s.code)
+            const children = childRows?.get(s.code) ?? []
             return (
-              <tr key={s.code}>
+              <Fragment key={s.code}>
+              <tr>
                 <td>
                   {onOpenStore ? (
                     <button type="button" className="link-btn inline-link" onClick={() => onOpenStore(s)}>
@@ -146,6 +151,18 @@ function PeriodMatrix({ result, stores, field, fieldLabel, onOpenStore }) {
                 ))}
                 <td className={`num strong${r.totals[field] < 0 ? ' minus' : ''}`}>{num(r.totals[field])}</td>
               </tr>
+              {children.map((c) => (
+                <tr key={c.key} className="sub-row">
+                  <td>└ {c.name}</td>
+                  {periods.map((p) => (
+                    <td key={p} className="num">
+                      {num(c.r.byPeriod.get(p)[field])}
+                    </td>
+                  ))}
+                  <td className="num">{num(c.r.totals[field])}</td>
+                </tr>
+              ))}
+              </Fragment>
             )
           })}
           <tr className="total-row">
@@ -340,9 +357,24 @@ function SettlementTab() {
 }
 
 // ---------- 일매출 ----------
-const EMPTY_FORM = { total: '', card: '', cash: '', other: '', guests: '', memo: '' }
+// 매장에 POS가 여러 대면(해율만두전골: 1층 매장 / 2,3층 매장) 구분별로 입력하고, 매장 매출은 합산해서 보여준다.
+const EMPTY_PART = { total: '', card: '', cash: '', other: '', guests: '' }
 const digits = (v) => String(v ?? '').replace(/\D/g, '')
 const fmtInput = (v) => (v === '' ? '' : Number(v).toLocaleString('ko-KR'))
+const partFromRow = (r) =>
+  r
+    ? {
+        total: String(r.total_amount ?? ''),
+        card: r.card_amount == null ? '' : String(r.card_amount),
+        cash: r.cash_amount == null ? '' : String(r.cash_amount),
+        other: r.other_amount == null ? '' : String(r.other_amount),
+        guests: r.guest_count == null ? '' : String(r.guest_count),
+      }
+    : { ...EMPTY_PART }
+const partSum = (p) => ['card', 'cash', 'other'].reduce((sum, k) => sum + Number(p[k] || 0), 0)
+const partTotal = (p) => (p.total === '' ? partSum(p) : Number(p.total))
+const partEmpty = (p) => Object.values(p).every((v) => v === '')
+const perGuest = (amount, guests) => (guests ? num(amount / guests) : '-')
 
 function DailySalesTab() {
   const { stores } = useStore()
@@ -350,6 +382,7 @@ function DailySalesTab() {
   const [month, setMonth] = useHistoryState('salesMonth', () => currentMonth())
   const [range, setRange] = useHistoryState('salesRange', () => ({ from: `${thisYear()}-01`, to: currentMonth() }))
   const [field, setField] = useHistoryState('salesField', 'total_amount')
+  const [showChannels, setShowChannels] = useHistoryState('salesShowChannels', false)
   const [rows, setRows] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -359,7 +392,8 @@ function DailySalesTab() {
   const [formOpen, setFormOpen] = useState(false)
   const [formDate, setFormDate] = useState(todayStr())
   const [formStore, setFormStore] = useState(stores[0]?.code)
-  const [form, setForm] = useState(EMPTY_FORM)
+  const [parts, setParts] = useState({})
+  const [memo, setMemo] = useState('')
   const [saving, setSaving] = useState(false)
 
   const storeCodes = useMemo(() => stores.map((s) => s.code), [stores])
@@ -375,7 +409,7 @@ function DailySalesTab() {
     const end = monthRange(to).end
     supabase
       .from('sales_daily')
-      .select('store_code, sale_date, total_amount, card_amount, cash_amount, other_amount, guest_count, memo, source')
+      .select('store_code, sale_date, channel, total_amount, card_amount, cash_amount, other_amount, guest_count, memo, source')
       .in('store_code', storeCodes)
       .gte('sale_date', start)
       .lt('sale_date', end)
@@ -383,10 +417,11 @@ function DailySalesTab() {
       .then(({ data, error: err }) => {
         if (cancelled) return
         if (err) {
-          setError(/sales_daily/.test(err.message) ? '일매출 표가 아직 없어요. Supabase에서 supabase/sales.sql을 실행해주세요.' : err.message)
+          if (/channel/.test(err.message)) setError('일매출 구분 칸이 아직 없어요. Supabase에서 supabase/sales-channels.sql을 실행해주세요.')
+          else setError(/sales_daily/.test(err.message) ? '일매출 표가 아직 없어요. Supabase에서 supabase/sales.sql을 실행해주세요.' : err.message)
         } else {
           setError('')
-          setRows((data ?? []).map((r) => ({ ...r, key: r.sale_date })))
+          setRows((data ?? []).map((r) => ({ ...r, channel: r.channel ?? MAIN_CHANNEL, key: r.sale_date })))
         }
         setLoading(false)
       })
@@ -396,104 +431,140 @@ function DailySalesTab() {
   }, [storeCodes, from, to, reloadKey])
 
   const result = useMemo(() => aggregate(rows, { from, to, group, fields: SALES_FIELDS, storeCodes }), [rows, from, to, group, storeCodes])
-  const byStoreDate = useMemo(() => new Map(rows.map((r) => [`${r.store_code}|${r.sale_date}`, r])), [rows])
+  const combined = useMemo(() => combineByStoreDate(rows), [rows])
+  // 구분이 있는 매장의 구분별 합계 (월별/년별 표의 └ 줄, 객단가)
+  const channelResult = useMemo(() => {
+    const multi = stores.filter((s) => hasChannels(s.code))
+    if (multi.length === 0) return null
+    const codes = multi.flatMap((s) => channelsFor(s.code).map((c) => `${s.code}:${c.code}`))
+    const mapped = rows.filter((r) => hasChannels(r.store_code)).map((r) => ({ ...r, store_code: `${r.store_code}:${r.channel}` }))
+    return aggregate(mapped, { from, to, group, fields: SALES_FIELDS, storeCodes: codes })
+  }, [rows, stores, from, to, group])
+  const childRows = useMemo(() => {
+    if (!channelResult) return null
+    const m = new Map()
+    for (const s of stores) {
+      if (!hasChannels(s.code)) continue
+      m.set(
+        s.code,
+        channelsFor(s.code).map((c) => ({ key: `${s.code}:${c.code}`, name: c.label, r: channelResult.byStore.get(`${s.code}:${c.code}`) })),
+      )
+    }
+    return m
+  }, [channelResult, stores])
   const fieldLabel = SALES_FIELDS.find(([k]) => k === field)?.[1] ?? ''
 
-  // 입력 칸: 고른 매장·날짜에 이미 있는 값을 불러온다
+  // 입력 칸: 고른 매장·날짜의 구분별 값을 불러온다
   const loadForm = (storeCode, date) => {
-    const r = byStoreDate.get(`${storeCode}|${date}`)
+    const c = combined.get(`${storeCode}|${date}`)
+    const next = {}
+    for (const ch of channelsFor(storeCode)) next[ch.code] = partFromRow(c?.channels.get(ch.code))
     setFormStore(storeCode)
     setFormDate(date)
-    setForm(
-      r
-        ? {
-            total: String(r.total_amount ?? ''),
-            card: r.card_amount == null ? '' : String(r.card_amount),
-            cash: r.cash_amount == null ? '' : String(r.cash_amount),
-            other: r.other_amount == null ? '' : String(r.other_amount),
-            guests: r.guest_count == null ? '' : String(r.guest_count),
-            memo: r.memo ?? '',
-          }
-        : EMPTY_FORM,
-    )
+    setParts(next)
+    setMemo([...(c?.channels.values() ?? [])].map((r) => r.memo).find(Boolean) ?? '')
     setFormOpen(true)
     setMessage('')
   }
 
-  const existing = byStoreDate.get(`${formStore}|${formDate}`)
-  const partsSum = ['card', 'cash', 'other'].reduce((sum, k) => sum + Number(form[k] || 0), 0)
+  const formChannels = channelsFor(formStore)
+  const existing = combined.get(`${formStore}|${formDate}`)
+  const formTotal = formChannels.reduce((sum, ch) => sum + partTotal(parts[ch.code] ?? EMPTY_PART), 0)
+  const setPart = (code, key, value) => setParts((prev) => ({ ...prev, [code]: { ...(prev[code] ?? EMPTY_PART), [key]: value } }))
 
   const save = async () => {
     setError('')
     setMessage('')
     if (!formDate || !formStore) return setError('날짜와 매장을 고르세요.')
-    const total = form.total === '' ? partsSum : Number(form.total)
-    if (!total && !partsSum) return setError('총매출(또는 카드·현금)을 입력하세요.')
+    const filled = formChannels.filter((ch) => !partEmpty(parts[ch.code] ?? EMPTY_PART))
+    if (filled.length === 0) return setError('매출을 입력하세요.')
     const toNum = (v) => (v === '' ? null : Number(v))
-    setSaving(true)
-    const { error: err } = await supabase.from('sales_daily').upsert(
-      {
+    const upserts = filled.map((ch) => {
+      const p = parts[ch.code]
+      return {
         store_code: formStore,
         sale_date: formDate,
-        total_amount: total,
-        card_amount: toNum(form.card),
-        cash_amount: toNum(form.cash),
-        other_amount: toNum(form.other),
-        guest_count: toNum(form.guests),
-        memo: form.memo.trim() || null,
+        channel: ch.code,
+        total_amount: partTotal(p),
+        card_amount: toNum(p.card),
+        cash_amount: toNum(p.cash),
+        other_amount: toNum(p.other),
+        guest_count: toNum(p.guests),
+        memo: memo.trim() || null,
         source: 'manual',
         updated_at: new Date().toISOString(),
-      },
-      { onConflict: 'store_code,sale_date' },
-    )
+      }
+    })
+    // 비운 구분은 저장된 기록이 있으면 지운다
+    const cleared = formChannels.filter((ch) => partEmpty(parts[ch.code] ?? EMPTY_PART) && existing?.channels.has(ch.code)).map((ch) => ch.code)
+    setSaving(true)
+    const { error: err } = await supabase.from('sales_daily').upsert(upserts, { onConflict: 'store_code,sale_date,channel' })
+    if (!err && cleared.length) {
+      const { error: delErr } = await supabase.from('sales_daily').delete().eq('store_code', formStore).eq('sale_date', formDate).in('channel', cleared)
+      if (delErr) setError(delErr.message)
+    }
     setSaving(false)
     if (err) return setError(err.message)
     const name = stores.find((s) => s.code === formStore)?.name
-    setMessage(`${name} ${formDate} 매출 ${num(total)}원을 저장했어요.`)
-    setForm(EMPTY_FORM)
+    setMessage(`${name} ${formDate} 매출 ${num(formTotal)}원을 저장했어요.`)
     setReloadKey((k) => k + 1)
   }
 
   const remove = async () => {
-    if (!existing || !window.confirm('이 날 매출 기록을 지울까요?')) return
+    if (!existing || !window.confirm('이 날 매출 기록을 모두 지울까요?')) return
     setSaving(true)
     const { error: err } = await supabase.from('sales_daily').delete().eq('store_code', formStore).eq('sale_date', formDate)
     setSaving(false)
     if (err) return setError(err.message)
-    setForm(EMPTY_FORM)
+    setParts(Object.fromEntries(formChannels.map((ch) => [ch.code, { ...EMPTY_PART }])))
     setMessage('지웠어요.')
     setReloadKey((k) => k + 1)
   }
 
   const daysInMonth = new Date(Number(month.slice(0, 4)), Number(month.slice(5, 7)), 0).getDate()
   const dates = Array.from({ length: daysInMonth }, (_, i) => `${month}-${String(i + 1).padStart(2, '0')}`)
-  const dayTotal = (date) => stores.reduce((sum, s) => sum + Number(byStoreDate.get(`${s.code}|${date}`)?.total_amount || 0), 0)
+  const dayTotal = (date) => stores.reduce((sum, s) => sum + Number(combined.get(`${s.code}|${date}`)?.total_amount || 0), 0)
   const enteredDays = new Set(rows.map((r) => r.sale_date)).size
   const weekday = (date) => '일월화수목금토'[new Date(date).getDay()]
+  // 일별 표의 칸: 매장 합계, [층별로 보기]면 구분 칸도
+  const dayColumns = stores.flatMap((s) => {
+    const base = [{ key: s.code, label: s.name, store: s.code, channel: null }]
+    if (!showChannels || !hasChannels(s.code)) return base
+    return [...channelsFor(s.code).map((c) => ({ key: `${s.code}:${c.code}`, label: `${s.name} ${c.label}`, store: s.code, channel: c.code, sub: true })), ...base.map((b) => ({ ...b, label: `${s.name} 합계` }))]
+  })
+  const cellAmount = (col, date) => {
+    const c = combined.get(`${col.store}|${date}`)
+    if (!c) return null
+    return col.channel ? (c.channels.get(col.channel)?.total_amount ?? null) : c.total_amount
+  }
 
   const exportCsv = () => {
     if (mode === 'day') {
+      const cols = stores.flatMap((s) =>
+        hasChannels(s.code)
+          ? [...channelsFor(s.code).map((c) => ({ store: s.code, channel: c.code, label: `${s.name} ${c.label}` })), { store: s.code, channel: null, label: `${s.name} 합계` }]
+          : [{ store: s.code, channel: null, label: s.name }],
+      )
       const csv = rowsToCsv(
         dates.map((d) => ({ d })),
-        [
-          { label: '날짜', value: 'd' },
-          ...stores.map((s) => ({ label: s.name, value: (x) => byStoreDate.get(`${s.code}|${x.d}`)?.total_amount ?? '' })),
-          { label: '합계', value: (x) => dayTotal(x.d) },
-        ],
+        [{ label: '날짜', value: 'd' }, ...cols.map((col) => ({ label: col.label, value: (x) => cellAmount(col, x.d) ?? '' })), { label: '합계', value: (x) => dayTotal(x.d) }],
       )
       downloadCsv(`일매출_${month}.csv`, csv)
     } else {
-      const csv = rowsToCsv(
-        [...stores.map((s) => ({ name: s.name, r: result.byStore.get(s.code) })), { name: '합계', r: result.grand }],
-        [
-          { label: fieldLabel, value: 'name' },
-          ...result.periods.map((p) => ({ label: periodLabel(p), value: (x) => x.r.byPeriod.get(p)[field] })),
-          { label: '합계', value: (x) => x.r.totals[field] },
-        ],
-      )
+      const lines = stores.flatMap((s) => [
+        { name: s.name, r: result.byStore.get(s.code) },
+        ...(childRows?.get(s.code) ?? []).map((c) => ({ name: `${s.name} ${c.name}`, r: c.r })),
+      ])
+      const csv = rowsToCsv([...lines, { name: '합계', r: result.grand }], [
+        { label: fieldLabel, value: 'name' },
+        ...result.periods.map((p) => ({ label: periodLabel(p), value: (x) => x.r.byPeriod.get(p)[field] })),
+        { label: '합계', value: (x) => x.r.totals[field] },
+      ])
       downloadCsv(`매출합산_${from}_${to}.csv`, csv)
     }
   }
+
+  const multiStores = stores.filter((s) => hasChannels(s.code))
 
   return (
     <>
@@ -508,13 +579,7 @@ function DailySalesTab() {
       {formOpen && (
         <div className="cost-summary invoice-form">
           <div className="rrn-row">
-            <input
-              type="date"
-              className="input sales-date"
-              value={formDate}
-              onChange={(e) => loadForm(formStore, e.target.value)}
-              aria-label="날짜"
-            />
+            <input type="date" className="input sales-date" value={formDate} onChange={(e) => loadForm(formStore, e.target.value)} aria-label="날짜" />
             <select className="select sales-store" value={formStore} onChange={(e) => loadForm(e.target.value, formDate)} aria-label="매장">
               {stores.map((s) => (
                 <option key={s.code} value={s.code}>
@@ -524,45 +589,65 @@ function DailySalesTab() {
             </select>
           </div>
           {existing && <p className="hint">이미 입력된 날이에요. 고쳐서 저장하면 바뀌어요.</p>}
-          <div className="field">
-            <label>총매출 (원)</label>
-            <input
-              className="input"
-              inputMode="numeric"
-              value={fmtInput(form.total)}
-              onChange={(e) => setForm((f) => ({ ...f, total: digits(e.target.value) }))}
-              placeholder={partsSum ? `비우면 카드+현금+기타 = ${num(partsSum)}원` : 'POS 일마감 총매출'}
-            />
-          </div>
-          <div className="sales-parts">
-            {[
-              ['card', '카드'],
-              ['cash', '현금'],
-              ['other', '기타'],
-            ].map(([k, label]) => (
-              <div className="field" key={k}>
-                <label>{label}</label>
-                <input
-                  className="input"
-                  inputMode="numeric"
-                  value={fmtInput(form[k])}
-                  onChange={(e) => setForm((f) => ({ ...f, [k]: digits(e.target.value) }))}
-                />
+
+          {formChannels.map((ch) => {
+            const p = parts[ch.code] ?? EMPTY_PART
+            return (
+              <div key={ch.code} className={ch.label ? 'sales-channel-block' : ''}>
+                {ch.label && (
+                  <p className="sales-channel-title">
+                    {ch.label}
+                    {!partEmpty(p) && <span className="hint"> · {num(partTotal(p))}원</span>}
+                  </p>
+                )}
+                <div className="field">
+                  <label>총매출 (원)</label>
+                  <input
+                    className="input"
+                    inputMode="numeric"
+                    value={fmtInput(p.total)}
+                    onChange={(e) => setPart(ch.code, 'total', digits(e.target.value))}
+                    placeholder={partSum(p) ? `비우면 카드+현금+기타 = ${num(partSum(p))}원` : 'POS 일마감 총매출'}
+                  />
+                </div>
+                <div className="sales-parts">
+                  {[
+                    ['card', '카드'],
+                    ['cash', '현금'],
+                    ['other', '기타'],
+                  ].map(([k, label]) => (
+                    <div className="field" key={k}>
+                      <label>{label}</label>
+                      <input className="input" inputMode="numeric" value={fmtInput(p[k])} onChange={(e) => setPart(ch.code, k, digits(e.target.value))} />
+                    </div>
+                  ))}
+                  <div className="field">
+                    <label>객수</label>
+                    <input className="input" inputMode="numeric" value={p.guests} onChange={(e) => setPart(ch.code, 'guests', digits(e.target.value))} />
+                  </div>
+                </div>
               </div>
-            ))}
-            <div className="field">
-              <label>객수</label>
-              <input
-                className="input"
-                inputMode="numeric"
-                value={form.guests}
-                onChange={(e) => setForm((f) => ({ ...f, guests: digits(e.target.value) }))}
-              />
+            )
+          })}
+
+          {formChannels.length > 1 && (
+            <div className="cost-summary-row sales-form-total">
+              <span>{stores.find((s) => s.code === formStore)?.name} 합계</span>
+              <strong>
+                {num(formTotal)}원
+                {formTotal > 0 && (
+                  <span className="hint">
+                    {' '}
+                    ({formChannels.map((ch) => `${ch.label} ${((partTotal(parts[ch.code] ?? EMPTY_PART) / formTotal) * 100).toFixed(1)}%`).join(' · ')})
+                  </span>
+                )}
+              </strong>
             </div>
-          </div>
+          )}
+
           <div className="field">
             <label>메모 (선택)</label>
-            <input className="input" value={form.memo} onChange={(e) => setForm((f) => ({ ...f, memo: e.target.value }))} />
+            <input className="input" value={memo} onChange={(e) => setMemo(e.target.value)} />
           </div>
           <button type="button" className="btn-primary" onClick={save} disabled={saving}>
             {saving ? '저장 중...' : '저장'}
@@ -607,14 +692,20 @@ function DailySalesTab() {
 
       {!loading && !error && mode === 'day' && (
         <>
+          {multiStores.length > 0 && (
+            <label className="toggle-row channel-toggle">
+              <input type="checkbox" checked={showChannels} onChange={(e) => setShowChannels(e.target.checked)} />
+              <span>층별로 보기 ({multiStores.map((s) => `${s.name}: ${channelsFor(s.code).map((c) => c.label).join(' / ')}`).join(', ')})</span>
+            </label>
+          )}
           <div className="ledger-table-wrap">
             <table className="dispatch-table cons-table">
               <thead>
                 <tr>
                   <th>날짜</th>
-                  {stores.map((s) => (
-                    <th key={s.code} className="num">
-                      {s.name}
+                  {dayColumns.map((col) => (
+                    <th key={col.key} className={`num${col.sub ? ' sub-col' : ''}`}>
+                      {col.label}
                     </th>
                   ))}
                   <th className="num">합계</th>
@@ -626,11 +717,26 @@ function DailySalesTab() {
                     <td>
                       {Number(d.slice(8))}일 ({weekday(d)})
                     </td>
-                    {stores.map((s) => {
-                      const r = byStoreDate.get(`${s.code}|${d}`)
+                    {dayColumns.map((col) => {
+                      const amount = cellAmount(col, d)
+                      const c = combined.get(`${col.store}|${d}`)
+                      const missing = !col.channel && hasChannels(col.store) && c ? channelsFor(col.store).filter((ch) => !c.channels.has(ch.code)) : []
                       return (
-                        <td key={s.code} className="num clickable-cell" onClick={() => loadForm(s.code, d)} title="눌러서 입력·수정">
-                          {r ? num(r.total_amount) : <span className="hint">-</span>}
+                        <td
+                          key={col.key}
+                          className={`num clickable-cell${col.sub ? ' sub-col' : ''}`}
+                          onClick={() => loadForm(col.store, d)}
+                          title="눌러서 입력·수정"
+                        >
+                          {amount != null ? num(amount) : <span className="hint">-</span>}
+                          {!showChannels && !col.channel && hasChannels(col.store) && c && (
+                            <span className="channel-breakdown">
+                              {channelsFor(col.store)
+                                .map((ch) => (c.channels.has(ch.code) ? `${ch.label.replace(' 매장', '')} ${num(c.channels.get(ch.code).total_amount)}` : `${ch.label.replace(' 매장', '')} 미입력`))
+                                .join(' · ')}
+                            </span>
+                          )}
+                          {showChannels && missing.length > 0 && <span className="channel-breakdown pending-text">{missing.map((m) => m.label).join('·')} 미입력</span>}
                         </td>
                       )
                     })}
@@ -639,9 +745,13 @@ function DailySalesTab() {
                 ))}
                 <tr className="total-row">
                   <td>합계</td>
-                  {stores.map((s) => (
-                    <td key={s.code} className="num strong">
-                      {num(result.byStore.get(s.code).totals.total_amount)}
+                  {dayColumns.map((col) => (
+                    <td key={col.key} className={`num strong${col.sub ? ' sub-col' : ''}`}>
+                      {num(
+                        col.channel
+                          ? channelResult?.byStore.get(`${col.store}:${col.channel}`)?.totals.total_amount
+                          : result.byStore.get(col.store).totals.total_amount,
+                      )}
                     </td>
                   ))}
                   <td className="num strong">{num(result.grand.totals.total_amount)}</td>
@@ -668,12 +778,35 @@ function DailySalesTab() {
             </div>
             {result.grand.totals.guest_count > 0 && (
               <div className="cost-summary-row">
-                <span>객수 · 객단가</span>
+                <span>객수 · 객단가 (전체)</span>
                 <span>
-                  {num(result.grand.totals.guest_count)}명 · {num(result.grand.totals.total_amount / result.grand.totals.guest_count)}원
+                  {num(result.grand.totals.guest_count)}명 · {perGuest(result.grand.totals.total_amount, result.grand.totals.guest_count)}원
                 </span>
               </div>
             )}
+            {multiStores.map((s) => {
+              const t = result.byStore.get(s.code).totals
+              if (!t.total_amount) return null
+              return (
+                <div key={s.code} className="channel-summary">
+                  <p className="source-sum-title">{s.name}</p>
+                  {channelsFor(s.code).map((c) => {
+                    const ct = channelResult?.byStore.get(`${s.code}:${c.code}`)?.totals
+                    if (!ct) return null
+                    return (
+                      <div key={c.code} className="cost-summary-row position-sum-row">
+                        <span>
+                          {c.label} ({t.total_amount ? ((ct.total_amount / t.total_amount) * 100).toFixed(1) : 0}%)
+                        </span>
+                        <span>
+                          {num(ct.total_amount)}원 · 객수 {num(ct.guest_count)} · 객단가 {perGuest(ct.total_amount, ct.guest_count)}원
+                        </span>
+                      </div>
+                    )
+                  })}
+                </div>
+              )
+            })}
             <p className="hint">표의 칸을 누르면 그 매장·날짜 매출을 입력하거나 고칠 수 있어요.</p>
           </div>
         </>
@@ -688,7 +821,7 @@ function DailySalesTab() {
               </button>
             ))}
           </div>
-          <PeriodMatrix result={result} stores={stores} field={field} fieldLabel={fieldLabel} />
+          <PeriodMatrix result={result} stores={stores} field={field} fieldLabel={fieldLabel} childRows={childRows} />
         </>
       )}
 

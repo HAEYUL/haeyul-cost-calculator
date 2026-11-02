@@ -21,6 +21,11 @@ create table if not exists public.sales_daily (
 );
 create index if not exists sales_daily_date_idx on public.sales_daily (sale_date);
 
+-- 매출 구분(POS): 해율만두전골은 1층 매장('1f') / 2,3층 매장('23f'), 다른 매장은 'main' (sales-channels.sql과 같음)
+alter table public.sales_daily add column if not exists channel text not null default 'main';
+alter table public.sales_daily drop constraint if exists sales_daily_store_code_sale_date_key;
+create unique index if not exists sales_daily_store_date_channel_uniq on public.sales_daily (store_code, sale_date, channel);
+
 -- 메인 관리자만 보고 입력한다.
 alter table public.sales_daily enable row level security;
 drop policy if exists "admin only" on public.sales_daily;
