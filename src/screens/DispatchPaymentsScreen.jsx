@@ -3,8 +3,8 @@ import { useNavigate } from 'react-router-dom'
 import { useStore } from '../context/StoreContext'
 import { supabase } from '../lib/supabaseClient'
 import { useHistoryState } from '../hooks/usePageHistoryState'
-import { fetchShifts, fetchWorkers, SHIFT_COLUMNS } from '../lib/dispatchApi'
-import { groupUnpaid, monthRange, positionLabel, shiftMonthKey, showMaskedRrn, timeRangeLabel, won, wonPlain } from '../lib/dispatch'
+import { fetchShifts, fetchSources, fetchWorkers, SHIFT_COLUMNS } from '../lib/dispatchApi'
+import { groupUnpaid, monthRange, positionLabel, shiftMonthKey, showMaskedRrn, sourcesOf, timeRangeLabel, won, wonPlain } from '../lib/dispatch'
 import PositionTag from '../components/PositionTag'
 import { currentMonth, todayStr } from '../lib/vendorLedger'
 
@@ -29,6 +29,7 @@ export default function DispatchPaymentsScreen() {
   const [paidDate, setPaidDate] = useState(todayStr())
   const [saving, setSaving] = useState(false)
   const [cancelTarget, setCancelTarget] = useState(null)
+  const [sources, setSources] = useState([])
 
   const storeCodes = useMemo(() => stores.map((s) => s.code), [stores])
   const storeName = (code) => stores.find((s) => s.code === code)?.name ?? code
@@ -53,8 +54,9 @@ export default function DispatchPaymentsScreen() {
             if (err) throw err
             return data ?? []
           })()
-    Promise.all([fetchWorkers(storeCodes), load])
-      .then(([w, s]) => {
+    Promise.all([fetchWorkers(storeCodes), load, fetchSources().catch(() => [])])
+      .then(([w, s, src]) => {
+        if (!cancelled) setSources(src)
         if (cancelled) return
         setWorkers(w)
         setShifts(s)
@@ -230,6 +232,9 @@ export default function DispatchPaymentsScreen() {
                     <strong>{won(g.total)}</strong>
                   </div>
                   <p className="hint">
+                    {sourcesOf(g.shifts, new Map(sources.map((src) => [src.id, src]))) !== '-' && (
+                      <span className="tag">{sourcesOf(g.shifts, new Map(sources.map((src) => [src.id, src])))}</span>
+                    )}{' '}
                     {showMaskedRrn(w?.rrn_masked)} · {[last.bank ?? w?.bank, last.account ?? w?.account].filter(Boolean).join(' ') || '계좌 없음'}{' '}
                     <button type="button" className="chip copy-chip" onClick={() => copyAccount(w, last)}>
                       계좌 복사

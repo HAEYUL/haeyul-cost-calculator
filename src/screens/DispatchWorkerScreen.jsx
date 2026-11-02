@@ -3,11 +3,14 @@ import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useStore } from '../context/StoreContext'
 import { supabase } from '../lib/supabaseClient'
 import { useGoBack, useHistoryState } from '../hooks/usePageHistoryState'
-import { dispatchRequest, fetchShifts, WORKER_COLUMNS, workerPayload } from '../lib/dispatchApi'
+import { dispatchRequest, fetchShifts, fetchSources, WORKER_COLUMNS, workerPayload } from '../lib/dispatchApi'
+import SourcePicker from '../components/SourcePicker'
 import PositionTag from '../components/PositionTag'
 import {
   INSURANCE_DAY_LIMIT,
   monthRange,
+  sourceIcon,
+  sourcesOf,
   POSITIONS,
   positionsOf,
   rrnDigits,
@@ -61,6 +64,19 @@ export default function DispatchWorkerScreen() {
     }
   }, [workerId])
 
+  const [sources, setSources] = useState([])
+  useEffect(() => {
+    if (!supabase) return
+    fetchSources()
+      .then(setSources)
+      .catch(() => setSources([]))
+  }, [])
+  const sourceById = new Map(sources.map((src) => [src.id, src]))
+  const sourceLabel = (id) => {
+    const src = sourceById.get(id)
+    return src ? `${sourceIcon(src.kind)} ${src.name}` : '-'
+  }
+
   useEffect(() => {
     if (!supabase) return
     let cancelled = false
@@ -80,6 +96,7 @@ export default function DispatchWorkerScreen() {
       name: worker.name,
       isFixed: worker.is_fixed,
       defaultPosition: worker.default_position ?? '',
+      defaultSourceId: worker.default_source_id ?? '',
       bank: worker.bank ?? '',
       account: worker.account ?? '',
       memo: worker.memo ?? '',
@@ -114,6 +131,7 @@ export default function DispatchWorkerScreen() {
         name: form.name.trim(),
         isFixed: form.isFixed,
         defaultPosition: form.defaultPosition || null,
+        defaultSourceId: form.defaultSourceId || null,
         bank: form.bank,
         account: form.account,
         memo: form.memo,
@@ -173,6 +191,13 @@ export default function DispatchWorkerScreen() {
         </p>
       </div>
 
+      {(worker.default_source_id || worker.memo) && (
+        <div className="cost-summary worker-info-box">
+          {worker.default_source_id && <p className="hint">평소 경로 {sourceLabel(worker.default_source_id)}</p>}
+          {worker.memo && <p className="worker-memo">📝 {worker.memo}</p>}
+        </div>
+      )}
+
       <div className="month-nav">
         <button type="button" className="chip" onClick={() => setMonth(shiftMonthKey(month, -1))} aria-label="이전 달">
           ◀
@@ -204,6 +229,7 @@ export default function DispatchWorkerScreen() {
                   <tr>
                     <th>날짜</th>
                     <th>포지션</th>
+                    <th>경로</th>
                     <th>근무시간</th>
                     <th className="num">일당</th>
                     <th className="num">송금</th>
@@ -217,6 +243,7 @@ export default function DispatchWorkerScreen() {
                       <td>
                         <PositionTag value={s.position} />
                       </td>
+                      <td className="source-cell">{s.source_id ? sourceLabel(s.source_id) : <span className="pending-text">미입력</span>}</td>
                       <td>{timeRangeLabel(s.start_time, s.end_time)}</td>
                       <td className="num">{wonPlain(s.wage)}</td>
                       <td className={`num ${s.paid_date ? 'paid-text' : 'pending-text'}`}>
@@ -257,6 +284,10 @@ export default function DispatchWorkerScreen() {
                 <span>{positionsOf(shifts)}</span>
               </div>
               <div className="cost-summary-row">
+                <span>경로</span>
+                <span>{sourcesOf(shifts, sourceById)}</span>
+              </div>
+              <div className="cost-summary-row">
                 <span>송금 완료</span>
                 <span className="paid-text">{won(summary.paid)}</span>
               </div>
@@ -287,6 +318,15 @@ export default function DispatchWorkerScreen() {
             <input type="checkbox" checked={form.isFixed} onChange={setField('isFixed')} />
             <span>📌 고정 파출 (고정 파출 화면에 모아서 보여주고 [오늘 출근 +]로 빠르게 등록)</span>
           </label>
+          <div className="field">
+            <label>평소 경로</label>
+            <SourcePicker
+              sources={sources}
+              value={form.defaultSourceId}
+              onChange={(id) => setForm((prev) => ({ ...prev, defaultSourceId: id }))}
+              onAdded={(src) => setSources((prev) => [...prev, src])}
+            />
+          </div>
           <div className="field">
             <label>평소 포지션</label>
             <div className="position-row">
@@ -323,8 +363,14 @@ export default function DispatchWorkerScreen() {
             />
           </div>
           <div className="field">
-            <label>메모</label>
-            <input className="input" value={form.memo} onChange={setField('memo')} />
+            <label>메모 (근무 태도·숙련도 등, 다음에 부를 때 참고)</label>
+            <textarea
+              className="input notice-textarea"
+              rows={2}
+              value={form.memo}
+              onChange={(e) => setForm((prev) => ({ ...prev, memo: e.target.value.slice(0, 300) }))}
+              placeholder="예: 손 빠름, 홀 경험 많음 / 지각 2회"
+            />
           </div>
           <button type="button" className="btn-primary" onClick={saveWorker} disabled={saving}>
             {saving ? '저장 중...' : '저장'}

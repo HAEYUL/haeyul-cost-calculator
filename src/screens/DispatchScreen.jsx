@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { useStore } from '../context/StoreContext'
 import { supabase } from '../lib/supabaseClient'
 import { useHistoryState } from '../hooks/usePageHistoryState'
-import { fetchShifts, fetchWorkers } from '../lib/dispatchApi'
+import { fetchShifts, fetchSources, fetchWorkers } from '../lib/dispatchApi'
 import PositionTag from '../components/PositionTag'
 import {
   INSURANCE_DAY_LIMIT,
@@ -12,7 +12,9 @@ import {
   POSITIONS,
   shiftMonthKey,
   showMaskedRrn,
+  sourceIcon,
   summarizeByPosition,
+  summarizeBySource,
   summarizeByWorker,
   timeRangeLabel,
   won,
@@ -39,17 +41,20 @@ export default function DispatchScreen() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [positionFilter, setPositionFilter] = useHistoryState('dispatchPosition', 'all')
+  const [sourceFilter, setSourceFilter] = useHistoryState('dispatchSource', 'all')
+  const [sources, setSources] = useState([])
 
   useEffect(() => {
     if (!supabase) return
     let cancelled = false
     setLoading(true)
     const { start, end } = monthRange(month)
-    Promise.all([fetchWorkers(store.code), fetchShifts({ storeCodes: store.code, start, end })])
-      .then(([w, s]) => {
+    Promise.all([fetchWorkers(store.code), fetchShifts({ storeCodes: store.code, start, end }), fetchSources().catch(() => [])])
+      .then(([w, s, src]) => {
         if (cancelled) return
         setWorkers(w)
         setShifts(s)
+        setSources(src)
         setError('')
       })
       .catch((err) => !cancelled && setError(err.message))
@@ -62,7 +67,17 @@ export default function DispatchScreen() {
   const workerById = useMemo(() => new Map(workers.map((w) => [w.id, w])), [workers])
   const summary = useMemo(() => summarizeByWorker(shifts), [shifts])
   const byPosition = useMemo(() => summarizeByPosition(shifts), [shifts])
-  const visibleShifts = positionFilter === 'all' ? shifts : shifts.filter((s) => s.position === positionFilter)
+  const sourceById = useMemo(() => new Map(sources.map((src) => [src.id, src])), [sources])
+  const bySource = useMemo(() => summarizeBySource(shifts), [shifts])
+  const visibleShifts = shifts.filter(
+    (s) =>
+      (positionFilter === 'all' || s.position === positionFilter) &&
+      (sourceFilter === 'all' || (s.source_id ?? 'none') === sourceFilter),
+  )
+  const sourceLabel = (id) => {
+    const src = sourceById.get(id)
+    return src ? `${sourceIcon(src.kind)} ${src.name}` : '-'
+  }
   const monthTotal = visibleShifts.reduce((sum, s) => sum + Number(s.wage || 0), 0)
   const fixedWorkers = workers.filter((w) => w.is_fixed)
   const [y, m] = month.split('-')
@@ -108,6 +123,9 @@ export default function DispatchScreen() {
           💸 송금 관리로 가기
         </button>
       )}
+      <button type="button" className="btn-secondary" onClick={() => navigate('/dispatch/sources')}>
+        🏢 경로 관리 (파출사무소·당근 등{isAdmin ? '' : ' 연락처'})
+      </button>
 
       {loading && <p className="hint">불러오는 중...</p>}
       {error && <p className="error-text">{error}</p>}
@@ -129,6 +147,14 @@ export default function DispatchScreen() {
               )
             })}
           </div>
+          <select className="select source-filter" value={sourceFilter} onChange={(e) => setSourceFilter(e.target.value)} aria-label="경로로 걸러 보기">
+            <option value="all">경로: 전체</option>
+            {[...bySource.keys()].map((id) => (
+              <option key={id} value={id}>
+                {id === 'none' ? '경로 미입력' : sourceLabel(id)} ({bySource.get(id).count})
+              </option>
+            ))}
+          </select>
           {visibleShifts.length === 0 ? (
             <p className="hint">이 달에 등록된 근무가 없어요.</p>
           ) : (
@@ -139,6 +165,7 @@ export default function DispatchScreen() {
                     <th>날짜</th>
                     <th>이름</th>
                     <th>포지션</th>
+                    <th>경로</th>
                     <th>시간</th>
                     <th className="num">일당</th>
                     <th className="num">송금</th>
@@ -156,6 +183,7 @@ export default function DispatchScreen() {
                       <td>
                         <PositionTag value={s.position} />
                       </td>
+                      <td className="source-cell">{s.source_id ? sourceLabel(s.source_id) : <span className="pending-text">미입력</span>}</td>
                       <td>{timeRangeLabel(s.start_time, s.end_time)}</td>
                       <td className="num">{wonPlain(s.wage)}</td>
                       <td className={`num ${s.paid_date ? 'paid-text' : 'pending-text'}`}>
@@ -211,6 +239,21 @@ export default function DispatchScreen() {
                 </span>
               </div>
             )}
+            {positionFilter === 'all' && sourceFilter === 'all' && bySource.size > 0 && (
+              <>
+                <p className="hint source-sum-title">경로별</p>
+                {[...bySource.entries()]
+                  .sort((a, b) => b[1].total - a[1].total)
+                  .map(([id, r]) => (
+                    <div key={id} className="cost-summary-row position-sum-row">
+                      <span className={id === 'none' ? 'pending-text' : ''}>{id === 'none' ? '경로 미입력 ([수정]에서 넣어주세요)' : sourceLabel(id)}</span>
+                      <span>
+                        {r.count}건 · {won(r.total)}
+                      </span>
+                    </div>
+                  ))}
+              </>
+            )}
             {!isAdmin && <p className="hint">🔒 송금완료된 근무는 메인 관리자만 고칠 수 있어요.</p>}
           </div>
         </>
@@ -230,8 +273,10 @@ export default function DispatchScreen() {
                   {r && r.days >= INSURANCE_DAY_LIMIT && <span className="tag-warn">{INSURANCE_DAY_LIMIT}일 이상</span>}
                 </div>
                 <p className="hint">
-                  평소 포지션 {w.default_position ? <PositionTag value={w.default_position} /> : '미설정'}
+                  평소 포지션 {w.default_position ? <PositionTag value={w.default_position} /> : '미설정'} · 경로{' '}
+                  {w.default_source_id ? sourceLabel(w.default_source_id) : '미설정'}
                 </p>
+                {w.memo && <p className="worker-memo">📝 {w.memo}</p>}
                 <div className="cost-summary-row">
                   <span>{Number(m)}월 근무</span>
                   <strong>{r ? `${r.days}일 · ${won(r.total)}` : '0일'}</strong>
@@ -276,7 +321,9 @@ export default function DispatchScreen() {
                 </div>
                 <p className="hint">
                   {showMaskedRrn(w.rrn_masked)} · {[w.bank, w.account].filter(Boolean).join(' ') || '계좌 없음'}
+                  {w.default_source_id && ` · ${sourceLabel(w.default_source_id)}`}
                 </p>
+                {w.memo && <p className="worker-memo">📝 {w.memo}</p>}
                 <div className="dispatch-card-actions">
                   <button type="button" className="btn-secondary" onClick={() => navigate(`/dispatch/workers/${w.id}?month=${month}`)}>
                     근무 내역

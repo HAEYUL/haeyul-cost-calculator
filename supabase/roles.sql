@@ -97,6 +97,20 @@ alter table public.dispatch_shifts add constraint dispatch_shifts_position_check
 create index if not exists dispatch_shifts_store_date_idx on public.dispatch_shifts (store_code, work_date);
 create index if not exists dispatch_shifts_worker_idx on public.dispatch_shifts (worker_id, work_date);
 
+-- 파출 경로(파출사무소·당근 등): 4개 매장이 함께 쓰는 목록 (접근 규칙은 dispatch-sources.sql)
+create table if not exists public.dispatch_sources (
+  id uuid primary key default gen_random_uuid(),
+  name text not null unique check (char_length(name) between 1 and 40),
+  kind text not null default 'other'
+    check (kind in ('agency', 'danggeun', 'job_site', 'referral', 'walk_in', 'other')),
+  phone text,
+  memo text,
+  hidden boolean not null default false,
+  created_at timestamptz not null default now()
+);
+alter table public.dispatch_shifts add column if not exists source_id uuid references public.dispatch_sources(id) on delete restrict;
+alter table public.dispatch_workers add column if not exists default_source_id uuid references public.dispatch_sources(id) on delete set null;
+
 -- 매장 사업자 정보 (세무 출력물의 지불인 칸: 상호·대표·사업자번호·주소)
 create table if not exists public.store_business_info (
   store_code text primary key references public.stores(code),
@@ -182,7 +196,7 @@ end $$;
 
 -- 인력 명부: 암호화된 주민번호와 중복 확인값은 화면(출입증)으로 읽을 수 없게 한다.
 revoke all on public.dispatch_workers from anon, authenticated;
-grant select (id, store_code, name, rrn_masked, bank, account, is_fixed, default_start, default_end, default_wage, default_position, memo, created_at, updated_at)
+grant select (id, store_code, name, rrn_masked, bank, account, is_fixed, default_start, default_end, default_wage, default_position, default_source_id, memo, created_at, updated_at)
   on public.dispatch_workers to authenticated;
 grant select, insert, update, delete on public.dispatch_shifts to authenticated;
 

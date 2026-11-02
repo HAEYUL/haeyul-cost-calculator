@@ -2963,3 +2963,70 @@ button.kpi-card {
 .position-filter {
   margin-top: 14px;
 }
+
+/* ---------- 파출 경로 · 근무자 메모 ---------- */
+.source-picker .preset-row {
+  margin-bottom: 0;
+}
+
+.chip-add {
+  border-style: dashed;
+  color: var(--accent);
+}
+
+.source-info {
+  margin: 6px 0 0;
+  font-size: 14px;
+}
+
+.source-add {
+  margin-top: 8px;
+}
+
+.source-filter {
+  margin: 8px 0 4px;
+  width: 100%;
+  max-width: 320px;
+  padding: 10px 12px;
+}
+
+.source-cell {
+  font-size: 13px;
+}
+
+.source-sum-title {
+  margin: 8px 0 0;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.source-group {
+  margin-top: 16px;
+}
+
+.source-group .menu-group-title {
+  margin-bottom: 8px;
+}
+
+.source-hidden {
+  opacity: 0.6;
+}
+
+.worker-memo {
+  margin: 6px 0 0;
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: color-mix(in srgb, #f0b46b 14%, transparent);
+  font-size: 14px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  text-align: left;
+}
+
+.worker-info-box .hint {
+  margin: 0;
+}
+
+.source-add-field {
+  text-align: left;
+}

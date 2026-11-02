@@ -177,3 +177,24 @@ describe('포지션(홀/주방)', () => {
     expect(positionsOf([{}])).toBe('-')
   })
 })
+
+import { sourcesOf, summarizeBySource } from './dispatch'
+
+describe('파출 경로', () => {
+  const shifts = [
+    { source_id: 'a', wage: 135000 },
+    { source_id: 'a', wage: 65000 },
+    { source_id: 'b', wage: 65000 },
+    { source_id: null, wage: 10000 },
+  ]
+  it('경로별 건수·금액 (미입력은 none)', () => {
+    const r = summarizeBySource(shifts)
+    expect(r.get('a')).toEqual({ count: 2, total: 200000 })
+    expect(r.get('none')).toEqual({ count: 1, total: 10000 })
+  })
+  it('사람별 경로 이름', () => {
+    const byId = new Map([['a', { name: '수지인력' }], ['b', { name: '당근' }]])
+    expect(sourcesOf(shifts, byId)).toBe('수지인력·당근')
+    expect(sourcesOf([{}], byId)).toBe('-')
+  })
+})

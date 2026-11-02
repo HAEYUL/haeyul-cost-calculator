@@ -4,7 +4,8 @@ import { useStore } from '../context/StoreContext'
 import { supabase } from '../lib/supabaseClient'
 import { useGoBack } from '../hooks/usePageHistoryState'
 import TimeSelect from '../components/TimeSelect'
-import { dispatchRequest, fetchShifts, fetchWorkers, SHIFT_COLUMNS, workerPayload } from '../lib/dispatchApi'
+import SourcePicker from '../components/SourcePicker'
+import { dispatchRequest, fetchShifts, fetchSources, fetchWorkers, SHIFT_COLUMNS, workerPayload } from '../lib/dispatchApi'
 import {
   findSimilarWorkers,
   hhmm,
@@ -51,6 +52,8 @@ export default function DispatchShiftFormScreen() {
   const [editingAccount, setEditingAccount] = useState(false)
   const [memo, setMemo] = useState('')
   const [position, setPosition] = useState('')
+  const [sourceId, setSourceId] = useState('')
+  const [sources, setSources] = useState([])
 
   const [monthInfo, setMonthInfo] = useState(null)
   const [saving, setSaving] = useState(false)
@@ -71,6 +74,7 @@ export default function DispatchShiftFormScreen() {
     setEditingAccount(!w.account)
     setDuplicatePrompt(null)
     if (!editMode && w.default_position) setPosition(w.default_position)
+    if (!editMode && w.default_source_id) setSourceId(w.default_source_id)
   }
 
   // 인력 명부와 (수정이면) 근무 기록 불러오기
@@ -79,9 +83,10 @@ export default function DispatchShiftFormScreen() {
     let cancelled = false
     ;(async () => {
       try {
-        const list = await fetchWorkers(store.code)
+        const [list, sourceList] = await Promise.all([fetchWorkers(store.code), fetchSources()])
         if (cancelled) return
         setWorkers(list)
+        setSources(sourceList)
         if (editMode) {
           const { data, error: err } = await supabase.from('dispatch_shifts').select(SHIFT_COLUMNS).eq('id', shiftId).maybeSingle()
           if (cancelled) return
@@ -99,6 +104,7 @@ export default function DispatchShiftFormScreen() {
           setAccount(data.account ?? w?.account ?? '')
           setMemo(data.memo ?? '')
           setPosition(data.position ?? '')
+          setSourceId(data.source_id ?? '')
         } else {
           const preset = list.find((x) => x.id === searchParams.get('worker'))
           if (preset) applyWorker(preset)
@@ -155,6 +161,7 @@ export default function DispatchShiftFormScreen() {
     if (end <= start) return setError('끝 시간이 시작 시간보다 늦어야 해요.')
     if (wage === '' || !Number.isInteger(wageNum) || wageNum <= 0) return setError('일당을 입력하세요.')
     if (!position) return setError('포지션(홀/주방)을 체크하세요.')
+    if (!sourceId) return setError('어떤 경로로 왔는지(파출사무소·당근 등) 골라주세요.')
     if (!workerId && !creatingNew) {
       if (!nameInput.trim()) return setError('이름을 입력하세요.')
       return setError('위에서 같은 분을 고르거나 [새로 등록할게요]를 눌러주세요.')
@@ -182,6 +189,7 @@ export default function DispatchShiftFormScreen() {
           bank,
           account,
           defaultPosition: position,
+          defaultSourceId: sourceId,
         })
         if (!ok) {
           if (status === 409 && body.duplicate) {
@@ -194,11 +202,19 @@ export default function DispatchShiftFormScreen() {
         setWorkers((prev) => [...prev, body.worker])
         setWorkerId(targetId)
         setCreatingNew(false)
-      } else if (worker && ((worker.bank ?? '') !== bank || (worker.account ?? '') !== account || !worker.default_position)) {
+      } else if (
+        worker &&
+        ((worker.bank ?? '') !== bank || (worker.account ?? '') !== account || !worker.default_position || !worker.default_source_id)
+      ) {
         // 2) 계좌를 바꿨거나 평소 포지션이 비어 있으면 명부에도 반영
         const { ok, body } = await dispatchRequest('saveWorker', {
           storeCode: store.code,
-          ...workerPayload(worker, { bank, account, defaultPosition: worker.default_position || position }),
+          ...workerPayload(worker, {
+            bank,
+            account,
+            defaultPosition: worker.default_position || position,
+            defaultSourceId: worker.default_source_id || sourceId,
+          }),
         })
         if (!ok) throw new Error(body.error || '인력 정보를 저장하지 못했어요.')
         setWorkers((prev) => prev.map((w) => (w.id === body.worker.id ? body.worker : w)))
@@ -213,6 +229,7 @@ export default function DispatchShiftFormScreen() {
         end_time: end,
         wage: wageNum,
         position,
+        source_id: sourceId,
         bank: bank || null,
         account: account || null,
         memo: memo.trim() || null,
@@ -318,6 +335,7 @@ export default function DispatchShiftFormScreen() {
             />
           )}
 
+          {worker && !creatingNew && worker.memo && <p className="worker-memo">📝 {worker.memo}</p>}
           {suggestions.length > 0 && (
             <div className="similar-box">
               <p className="similar-title">
@@ -331,6 +349,7 @@ export default function DispatchShiftFormScreen() {
                     <div className="hint">
                       {showMaskedRrn(w.rrn_masked)} · {[w.bank, w.account].filter(Boolean).join(' ') || '계좌 없음'}
                     </div>
+                    {w.memo && <div className="hint">📝 {w.memo}</div>}
                   </div>
                   <button type="button" className="chip chip-active" onClick={() => applyWorker(w)}>
                     이 분이에요
@@ -396,6 +415,17 @@ export default function DispatchShiftFormScreen() {
             </div>
           )}
           {creatingNew && <p className="hint">주민번호는 암호화해서 저장하고, 화면에는 앞자리만 보여요.</p>}
+        </div>
+
+        <div className="field">
+          <label>경로 (어디서 오셨나요?)</label>
+          <SourcePicker
+            sources={sources}
+            value={sourceId}
+            onChange={setSourceId}
+            onAdded={(src) => setSources((prev) => [...prev, src].sort((a, b) => a.name.localeCompare(b.name, 'ko')))}
+            disabled={locked}
+          />
         </div>
 
         <div className="field">

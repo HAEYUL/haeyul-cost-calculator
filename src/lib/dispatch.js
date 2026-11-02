@@ -130,6 +130,36 @@ export function positionsOf(shifts) {
   return keys.length ? keys.map(positionLabel).join('·') : '-'
 }
 
+// ---------- 경로 (파출사무소·당근 등) ----------
+export const SOURCE_KINDS = [
+  { key: 'agency', label: '파출사무소', icon: '🏢' },
+  { key: 'danggeun', label: '당근', icon: '🥕' },
+  { key: 'job_site', label: '구인 사이트', icon: '💼' },
+  { key: 'referral', label: '지인 소개', icon: '🤝' },
+  { key: 'walk_in', label: '직접 방문·연락', icon: '🚶' },
+  { key: 'other', label: '기타', icon: '✏️' },
+]
+export const sourceIcon = (kind) => SOURCE_KINDS.find((k) => k.key === kind)?.icon ?? '✏️'
+
+// 경로별 건수·금액: Map(source_id 또는 'none' → { count, total })
+export function summarizeBySource(shifts) {
+  const map = new Map()
+  for (const s of shifts) {
+    const key = s.source_id ?? 'none'
+    if (!map.has(key)) map.set(key, { count: 0, total: 0 })
+    const r = map.get(key)
+    r.count += 1
+    r.total += Number(s.wage || 0)
+  }
+  return map
+}
+
+// 한 사람이 한 달 동안 온 경로 이름들: '수지인력', '수지인력·당근'
+export function sourcesOf(shifts, sourceById) {
+  const ids = [...new Set(shifts.map((s) => s.source_id).filter(Boolean))]
+  return ids.length ? ids.map((id) => sourceById.get(id)?.name ?? '?').join('·') : '-'
+}
+
 // ---------- 시간·금액 ----------
 export const won = (n) => `${Math.round(Number(n) || 0).toLocaleString('ko-KR')}원`
 export const wonPlain = (n) => Math.round(Number(n) || 0).toLocaleString('ko-KR')

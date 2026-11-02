@@ -3,10 +3,22 @@ import { apiFetch } from './apiFetch'
 
 // 인력 명부에서 화면이 읽을 수 있는 칸(암호화된 주민번호는 읽을 수 없다)
 export const WORKER_COLUMNS =
-  'id, store_code, name, rrn_masked, bank, account, is_fixed, default_start, default_end, default_wage, default_position, memo, created_at'
+  'id, store_code, name, rrn_masked, bank, account, is_fixed, default_start, default_end, default_wage, default_position, default_source_id, memo, created_at'
 
 export const SHIFT_COLUMNS =
-  'id, store_code, worker_id, work_date, start_time, end_time, wage, position, bank, account, memo, paid_date, paid_marked_at, created_at'
+  'id, store_code, worker_id, work_date, start_time, end_time, wage, position, source_id, bank, account, memo, paid_date, paid_marked_at, created_at'
+
+// 파출 경로 목록 (4개 매장 공통). 숨긴 경로도 불러와서 예전 기록의 이름을 보여준다.
+export async function fetchSources() {
+  const { data, error } = await supabase.from('dispatch_sources').select('id, name, kind, phone, memo, hidden').order('name')
+  if (error) {
+    if (/dispatch_sources/.test(error.message ?? '')) {
+      throw new Error('파출 경로 표가 아직 없어요. Supabase에서 supabase/dispatch-sources.sql을 실행해주세요.')
+    }
+    throw error
+  }
+  return data ?? []
+}
 
 export async function fetchWorkers(storeCodes) {
   const codes = Array.isArray(storeCodes) ? storeCodes : [storeCodes]
@@ -58,6 +70,7 @@ export function workerPayload(worker, overrides = {}) {
     defaultEnd: worker?.default_end ? String(worker.default_end).slice(0, 5) : null,
     defaultWage: worker?.default_wage ?? null,
     defaultPosition: worker?.default_position ?? null,
+    defaultSourceId: worker?.default_source_id ?? null,
     memo: worker?.memo ?? '',
     ...overrides,
   }
