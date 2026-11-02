@@ -16,7 +16,7 @@ import {
 import { findBatchesNeedingVatFix } from '../lib/vatAmountFix'
 
 export default function VendorScreen() {
-  // 매니저도 장부를 똑같이 보지만, 결제 입력·장부 시작 설정·삭제는 메인 관리자만 한다.
+  // 매니저도 장부를 똑같이 보고 결제도 입력한다. 장부 시작 설정·부가세 점검·거래처 삭제는 메인 관리자만.
   const { store, isAdmin } = useStore()
   const navigate = useNavigate()
 
@@ -274,14 +274,18 @@ export default function VendorScreen() {
             <h1>거래처 관리</h1>
             <p className="subtitle">{store.name} · 거래처별 이월 잔액·입고·결제와 미지급금(장부)을 확인해요</p>
           </div>
-          {hasVendors && isAdmin && (
+          {hasVendors && (
             <div className="page-actions">
-              <button type="button" className="action-btn" onClick={() => navigate('/vendors/ledger-setup')}>
-                장부 시작 설정
-              </button>
-              <button type="button" className="action-btn" onClick={() => navigate('/vendors/vat-check')}>
-                부가세 금액 점검{vatFixCount > 0 ? ` (${vatFixCount}장)` : ''}
-              </button>
+              {isAdmin && (
+                <button type="button" className="action-btn" onClick={() => navigate('/vendors/ledger-setup')}>
+                  장부 시작 설정
+                </button>
+              )}
+              {isAdmin && (
+                <button type="button" className="action-btn" onClick={() => navigate('/vendors/vat-check')}>
+                  부가세 금액 점검{vatFixCount > 0 ? ` (${vatFixCount}장)` : ''}
+                </button>
+              )}
               <button
                 type="button"
                 className="action-btn action-btn-primary"
@@ -407,7 +411,7 @@ export default function VendorScreen() {
                             {Math.round(v.balance).toLocaleString()}원
                           </span>
                         </button>
-                        {isAdmin && <div className="ven-actions">
+                        <div className="ven-actions">
                           <button
                             type="button"
                             className="mini-btn"
@@ -415,10 +419,12 @@ export default function VendorScreen() {
                           >
                             결제 입력
                           </button>
-                          <button type="button" className="mini-btn mini-btn-danger" onClick={() => openDeleteConfirm(v)}>
-                            삭제
-                          </button>
-                        </div>}
+                          {isAdmin && (
+                            <button type="button" className="mini-btn mini-btn-danger" onClick={() => openDeleteConfirm(v)}>
+                              삭제
+                            </button>
+                          )}
+                        </div>
                       </div>
 
                       {deleteTarget?.id === v.id && (

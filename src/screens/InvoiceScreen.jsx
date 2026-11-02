@@ -516,7 +516,7 @@ export default function InvoiceScreen() {
       }))
 
       // 수정 전 명세표에 짝지어진 결제(바로 결제 완료·[결제완료])를 미리 찾아둔다.
-      const linkedPayment = originalBatch && isAdmin ? await findLinkedPayment({ storeCode: store.code, batch: originalBatch }) : null
+      const linkedPayment = originalBatch ? await findLinkedPayment({ storeCode: store.code, batch: originalBatch }) : null
 
       // 새 품목을 먼저 넣고, 명세표를 고친 뒤, 예전 품목을 지운다. 중간에 인터넷이 끊겨도 품목이 사라지지 않는다.
       const { data: insertedRows, error: insertEditErr } = await supabase.from('invoices').insert(editRows).select('id')

@@ -141,8 +141,8 @@ do $$
 declare
   t text;
   p record;
-  -- 매니저도 읽기만 하는 표 (거래처 관리 화면): 거래처 결제, 장부 시작 잔액
-  manager_read text[] := array['vendor_payments', 'vendor_opening_balances'];
+  -- 매니저도 읽기만 하는 표 (거래처 관리 화면): 장부 시작 잔액. 거래처 결제는 매니저와 공유(아래 일반 규칙)
+  manager_read text[] := array['vendor_opening_balances'];
   admin_only text[] := array[
     'store_settlements',        -- 매장운영결산
     'recipes', 'recipe_meta', 'ingredient_mapping', 'menu_prices',  -- 레시피·원가
@@ -194,22 +194,6 @@ begin
   end loop;
 end $$;
 
--- 매니저도 입고 입력의 "바로 결제 완료"(즉시 결제)는 남길 수 있다: 같은 거래처·날짜·금액의 명세표가 있을 때만
-drop policy if exists "manager instant payment" on public.vendor_payments;
-create policy "manager instant payment" on public.vendor_payments for insert to authenticated
-  with check (
-    store_code = public.auth_store_code()
-    and memo in ('즉시 결제(자동)', '즉시 결제(나중에 처리)')
-    and paid_date is not null
-    and exists (
-      select 1 from public.invoice_batches b
-      where b.store_code = vendor_payments.store_code
-        and b.vendor_id = vendor_payments.vendor_id
-        and b.invoice_date = vendor_payments.paid_date
-        and round(b.total_amount) = round(vendor_payments.amount)
-    )
-  );
-
 -- 인력 명부: 암호화된 주민번호와 중복 확인값은 화면(출입증)으로 읽을 수 없게 한다.
 revoke all on public.dispatch_workers from anon, authenticated;
 grant select (id, store_code, name, rrn_masked, bank, account, is_fixed, default_start, default_end, default_wage, default_position, default_source_id, memo, created_at, updated_at)
@@ -253,36 +237,8 @@ create trigger dispatch_shifts_guard
   before insert or update or delete on public.dispatch_shifts
   for each row execute function public.dispatch_shifts_guard();
 
--- 4-2) 거래명세표: 관리자가 결제 처리한 명세표(같은 거래처·같은 날·같은 금액의 결제가 있는 것)는
---      매니저가 고치거나 지울 수 없다. (매니저는 결제 자료를 못 읽으므로 DB가 대신 확인한다)
-create or replace function public.invoice_batches_manager_guard()
-returns trigger
-language plpgsql
-security definer
-set search_path = public
-as $$
-begin
-  if public.auth_is_admin() or coalesce(auth.role(), '') = 'service_role' then
-    if tg_op = 'DELETE' then return old; end if;
-    return new;
-  end if;
-  if old.invoice_date is not null and exists (
-    select 1 from public.vendor_payments p
-    where p.store_code = old.store_code
-      and p.vendor_id = old.vendor_id
-      and p.paid_date = old.invoice_date
-      and round(p.amount) = round(old.total_amount)
-  ) then
-    raise exception '관리자가 결제 처리한 명세표라 매니저는 고치거나 지울 수 없어요. 메인 관리자에게 요청해주세요.';
-  end if;
-  if tg_op = 'DELETE' then return old; end if;
-  return new;
-end $$;
-
+-- 4-2) 거래명세표: 결제를 매니저와 공유하므로, 결제된 명세표를 매니저가 못 고치게 하던 잠금은 쓰지 않는다.
 drop trigger if exists invoice_batches_manager_guard on public.invoice_batches;
-create trigger invoice_batches_manager_guard
-  before update or delete on public.invoice_batches
-  for each row execute function public.invoice_batches_manager_guard();
 
 -- 4-3) 전달사항: 매니저는 보내거나 지울 수 없고 확인·답장 칸만 바꾼다.
 create or replace function public.store_notices_guard()

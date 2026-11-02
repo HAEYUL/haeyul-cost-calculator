@@ -3030,3 +3030,8 @@ button.kpi-card {
 .source-add-field {
   text-align: left;
 }
+
+.btn-primary.btn-danger {
+  background: #d84343;
+  color: #fff;
+}
