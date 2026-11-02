@@ -11,6 +11,10 @@ import { groupByVendor, makeLedger } from '../lib/vendorLedger'
 import { menuSectionsFor } from '../data/menuSections'
 import AdminOverview from '../components/AdminOverview'
 import ManagerNoticeBox from '../components/ManagerNoticeBox'
+import ManagerOverview from '../components/ManagerOverview'
+import Icon from '../components/Icon'
+import { eyebrowDate, nowLabel } from '../lib/storeSummary'
+import { storeColor } from '../data/stores'
 
 const MARGIN_WARNING_RATIO = 40
 
@@ -231,43 +235,45 @@ export default function MainMenuScreen() {
 
   return (
     <div className={`screen screen-menu${isAdmin ? '' : ' screen-menu-manager'}`}>
-      <div className="menu-topbar">
-        <button
-          type="button"
-          className="link-btn menu-change-store"
-          onClick={async () => {
-            await logout()
-            navigate('/')
-          }}
-        >
-          ← 로그아웃
-        </button>
-        {isAdmin ? (
-          <>
-            <div className="role-badge role-badge-admin">🔑 메인 관리자</div>
-            <div className="store-tabs" role="tablist" aria-label="보는 매장">
+      <header className="page-hero">
+        <div>
+          <div className="eyebrow">{eyebrowDate()}</div>
+          <h1 className="hero-title">{isAdmin ? '안녕하세요, 사장님' : store.name}</h1>
+          <p className="hero-sub">
+            {isAdmin ? `${nowLabel()} · ${stores.length}개 매장 현황` : `매니저 · ${nowLabel()}`}
+          </p>
+        </div>
+        <div className="hero-actions">
+          {isAdmin && (
+            <div className="seg-tabs" role="tablist" aria-label="보는 매장">
               {stores.map((s) => (
                 <button
                   key={s.code}
                   type="button"
                   role="tab"
                   aria-selected={s.code === store.code}
-                  className={`chip${s.code === store.code ? ' chip-active' : ''}`}
+                  className={s.code === store.code ? 'on' : ''}
                   onClick={() => setStore(s)}
                 >
                   {s.name}
                 </button>
               ))}
             </div>
-          </>
-        ) : (
-          <>
-            <div className="store-badge">{store.name}</div>
-            <span className="role-badge role-badge-manager">매니저</span>
-          </>
-        )}
-      </div>
+          )}
+          <button
+            type="button"
+            className="logout-btn"
+            onClick={async () => {
+              await logout()
+              navigate('/')
+            }}
+          >
+            <Icon name="out" size={16} /> 로그아웃
+          </button>
+        </div>
+      </header>
 
+      {!isAdmin && supabase && <ManagerOverview storeCode={store.code} />}
       {!isAdmin && supabase && <ManagerNoticeBox storeCode={store.code} />}
 
       {isAdmin && supabase && (
@@ -275,15 +281,17 @@ export default function MainMenuScreen() {
           stores={stores}
           onOpenStore={(s) => {
             setStore(s)
-            window.scrollTo({ top: 0, behavior: 'smooth' })
+            document.querySelector('.current-store-heading')?.scrollIntoView({ behavior: 'smooth' })
           }}
         />
       )}
 
       {isAdmin && (
-        <p className="menu-group-title admin-current-store">
-          🏪 {store.name}
-        </p>
+        <h2 className="section-heading current-store-heading">
+          <span className="store-swatch" style={{ background: storeColor(store.code) }} />
+          {store.name}
+          <small>선택한 매장 알림</small>
+        </h2>
       )}
 
       {isAdmin && !loading && !error && supabase && (
@@ -384,11 +392,12 @@ export default function MainMenuScreen() {
         </div>
       )}
 
+      <h2 className="section-heading">{isAdmin ? '전체 메뉴' : '메뉴'}</h2>
       <div className={`menu-list${isAdmin ? '' : ' menu-list-manager'}`}>
         {menuSectionsFor(role).map((section) => (
           <div key={section.title} className={`menu-group menu-group-${section.area}`}>
             <p className="menu-group-title">
-              <span aria-hidden="true">{section.icon}</span> {section.title}
+              <Icon name={section.icon} size={16} /> {section.title}
             </p>
             <div className="menu-group-items">
               {section.items.map((item) => (
@@ -398,7 +407,7 @@ export default function MainMenuScreen() {
                   onClick={() => navigate(item.path)}
                 >
                   <span className="menu-btn-icon" aria-hidden="true">
-                    {item.icon}
+                    <Icon name={item.icon} size={19} />
                   </span>
                   <span className="menu-btn-label">{item.label}</span>
                 </button>

@@ -223,7 +223,7 @@ export default function InvoiceHistory({ storeCode, refreshKey, canRecordPayment
                 {row.invoice_date && <span>{row.invoice_date}</span>}
                 <span>품목 {row.invoices?.length ?? 0}개</span>
               </div>
-              {deleteTarget?.id === row.id && (
+              {deleteTarget && deleteTarget.id === row.id && (
                 <div className="price-alert-box price-alert-box-danger">
                   <p className="price-alert-title">이 명세표를 삭제할까요?</p>
                   <p className="hint">
@@ -251,7 +251,7 @@ export default function InvoiceHistory({ storeCode, refreshKey, canRecordPayment
                   </div>
                 </div>
               )}
-              {payTarget?.id === row.id && (
+              {payTarget && payTarget.id === row.id && (
                 <div className="price-alert-box">
                   <p className="price-alert-title">
                     {Math.round(Number(row.total_amount)).toLocaleString()}원을 {row.invoice_date} 결제로 기록할까요?

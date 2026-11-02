@@ -3,6 +3,7 @@ import { useStore } from '../context/StoreContext'
 import { activeMenuPath, isPathAllowed, menuSectionsFor } from '../data/menuSections'
 import StoreSwitcher from './StoreSwitcher'
 import ErrorBoundary from './ErrorBoundary'
+import Icon from './Icon'
 
 // 매장에 들어온 뒤의 모든 화면을 감싼다. PC(넓은 화면)에서는 왼쪽에 메뉴판을 띄워 어느 화면에서든
 // 바로 다른 메뉴로 갈 수 있게 하고, 휴대폰에서는 메뉴판을 숨겨 지금처럼 한 줄 화면으로 보인다.
@@ -24,21 +25,34 @@ export default function AppLayout() {
   return (
     <div className="app-shell">
       <aside className="side-nav" aria-label="전체 메뉴">
+        <div className="side-brand">
+          <span className="brand-mark">해</span>
+          <div>
+            <b>해율 경영관리</b>
+            <small>HAEYUL</small>
+          </div>
+        </div>
         <div className="side-nav-store">
           {isAdmin ? (
             <>
-              <strong>🔑 메인 관리자</strong>
+              <span className="side-role">메인 관리자 · 보는 매장</span>
               <StoreSwitcher stores={stores} store={store} onChange={setStore} className="side-nav-store-select" />
             </>
           ) : (
-            <strong>{store.name}</strong>
+            <>
+              <span className="side-role">매니저</span>
+              <strong>{store.name}</strong>
+            </>
           )}
           <button type="button" className="side-nav-change" onClick={handleLogout}>
-            로그아웃
+            <Icon name="out" size={14} /> 로그아웃
           </button>
         </div>
         <Link to="/menu" className={`side-nav-home${pathname === '/menu' ? ' active' : ''}`}>
-          🏠 메인 메뉴
+          <span className="side-nav-icon" aria-hidden="true">
+            <Icon name="home" size={17} />
+          </span>
+          대시보드
         </Link>
         {menuSectionsFor(role).map((section) => (
           <div key={section.title} className="side-nav-group">
@@ -51,7 +65,7 @@ export default function AppLayout() {
                 aria-current={activePath === item.path ? 'page' : undefined}
               >
                 <span className="side-nav-icon" aria-hidden="true">
-                  {item.icon}
+                  <Icon name={item.icon} size={17} />
                 </span>
                 {item.label}
               </Link>
