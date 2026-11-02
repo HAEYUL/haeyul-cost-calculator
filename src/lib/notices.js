@@ -29,6 +29,19 @@ export function confirmNotice(id, reply) {
     .eq('id', id)
 }
 
+export async function fetchNotice(id) {
+  const { data, error } = await supabase.from('store_notices').select(NOTICE_COLUMNS).eq('id', id).maybeSingle()
+  if (error) throw error
+  if (!data) throw new Error('전달사항을 찾을 수 없어요.')
+  return data
+}
+
+// 목록에 보여줄 제목: 첫 줄, 길면 줄여서
+export function noticeTitle(message, max = 34) {
+  const first = String(message ?? '').split('\n')[0].trim()
+  return first.length > max ? `${first.slice(0, max)}…` : first
+}
+
 export function noticeTime(iso) {
   const d = new Date(iso)
   return `${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`

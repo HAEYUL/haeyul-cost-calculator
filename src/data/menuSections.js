@@ -109,7 +109,7 @@ export function menuSectionsFor(role) {
 // 매니저가 들어갈 수 있는 주소: 메인 메뉴, 매니저 메뉴 5개와 그 하위 화면(명세표 수정, 거래처 상세, 파출 등록·개인 페이지)
 export function isPathAllowed(role, pathname) {
   if (role === 'admin') return true
-  if (pathname === '/menu' || pathname === '/notices') return true
+  if (pathname === '/menu' || pathname === '/notices' || pathname.startsWith('/notices/')) return true
   if (ADMIN_ONLY_SUBPATHS.some((p) => pathname === p || pathname.startsWith(`${p}/`))) return false
   return MANAGER_MENU_SECTIONS.some((section) =>
     section.items.some((item) => pathname === item.path || pathname.startsWith(`${item.path}/`)),

@@ -3,7 +3,7 @@ import { isPathAllowed, menuSectionsFor } from './menuSections'
 
 describe('매니저가 들어갈 수 있는 화면', () => {
   it('메뉴 5개와 그 하위 화면만 열린다', () => {
-    for (const p of ['/menu', '/invoices', '/invoices/edit/abc', '/stock-count', '/dispatch', '/dispatch/new', '/dispatch/workers/1', '/notices', '/vendors', '/vendors/abc', '/price-trend']) {
+    for (const p of ['/menu', '/invoices', '/invoices/edit/abc', '/stock-count', '/dispatch', '/dispatch/new', '/dispatch/workers/1', '/notices', '/notices/abc', '/vendors', '/vendors/abc', '/price-trend']) {
       expect(isPathAllowed('manager', p)).toBe(true)
     }
   })
