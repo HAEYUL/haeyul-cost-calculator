@@ -2717,3 +2717,17 @@ button.kpi-card {
   font-size: 13px;
   box-shadow: none;
 }
+
+.cons-table .pct {
+  display: inline-block;
+  min-width: 52px;
+  margin-left: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-align: right;
+}
+
+.cons-table .minus .pct {
+  color: #d84343;
+}

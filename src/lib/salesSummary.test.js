@@ -64,3 +64,20 @@ describe('짧은 금액', () => {
     expect(shortWon(5000)).toBe('5,000')
   })
 })
+
+import { formatPercent, settlementPercent } from './salesSummary'
+
+describe('결산 비율', () => {
+  const store = { revenue: 1000, ingredient_cost: 318, operating_profit: -50 }
+  it('비용·손익은 그 매장 총매출 대비', () => {
+    expect(formatPercent(settlementPercent('ingredient_cost', store, 4000))).toBe('31.8%')
+    expect(formatPercent(settlementPercent('operating_profit', store, 4000))).toBe('-5.0%')
+  })
+  it('총매출은 전체 매출에서 차지하는 비중', () => {
+    expect(formatPercent(settlementPercent('revenue', store, 4000))).toBe('25.0%')
+    expect(formatPercent(settlementPercent('revenue', { revenue: 4000 }, 4000))).toBe('100.0%')
+  })
+  it('매출이 0이면 -', () => {
+    expect(formatPercent(settlementPercent('ingredient_cost', { revenue: 0, ingredient_cost: 0 }, 0))).toBe('-')
+  })
+})

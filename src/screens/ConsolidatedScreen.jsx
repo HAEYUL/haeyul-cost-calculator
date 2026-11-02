@@ -5,11 +5,13 @@ import { supabase } from '../lib/supabaseClient'
 import { useHistoryState } from '../hooks/usePageHistoryState'
 import {
   aggregate,
+  formatPercent,
   missingSettlementMonths,
   monthKeyOf,
   periodLabel,
   SALES_FIELDS,
   SETTLEMENT_FIELDS,
+  settlementPercent,
   shortPeriodLabel,
 } from '../lib/salesSummary'
 import { downloadCsv, rowsToCsv } from '../lib/csvExport'
@@ -214,7 +216,19 @@ function SettlementTab() {
   const exportCsv = () => {
     const summary = rowsToCsv(
       [...stores.map((s) => ({ name: s.name, ...result.byStore.get(s.code).totals })), { name: '합계', ...result.grand.totals }],
-      [{ label: '매장', value: 'name' }, ...SETTLEMENT_FIELDS.map(([k, label]) => ({ label, value: k }))],
+      [
+        { label: '매장', value: 'name' },
+        ...SETTLEMENT_FIELDS.flatMap(([k, label]) => [
+          { label, value: k },
+          {
+            label: k === 'revenue' ? '매출 비중(%)' : `${label}(%)`,
+            value: (r) => {
+              const p = settlementPercent(k, r, result.grand.totals.revenue)
+              return p == null ? '' : p.toFixed(1)
+            },
+          },
+        ]),
+      ],
     )
     const matrix = rowsToCsv(
       [
@@ -265,6 +279,7 @@ function SettlementTab() {
                       {SETTLEMENT_FIELDS.map(([k]) => (
                         <td key={k} className={`num${t[k] < 0 ? ' minus' : ''}`}>
                           {num(t[k])}
+                          <span className="pct">{formatPercent(settlementPercent(k, t, result.grand.totals.revenue))}</span>
                         </td>
                       ))}
                     </tr>
@@ -275,12 +290,18 @@ function SettlementTab() {
                   {SETTLEMENT_FIELDS.map(([k]) => (
                     <td key={k} className={`num strong${result.grand.totals[k] < 0 ? ' minus' : ''}`}>
                       {num(result.grand.totals[k])}
+                      <span className="pct">
+                        {formatPercent(settlementPercent(k, result.grand.totals, result.grand.totals.revenue))}
+                      </span>
                     </td>
                   ))}
                 </tr>
               </tbody>
             </table>
           </div>
+          <p className="hint">
+            % — 총매출: 4개 매장 합계에서 차지하는 비중 · 비용·손익: 그 매장 총매출 대비 (합계 줄은 전체 매출 대비)
+          </p>
           <p className="hint">단위: 원 · 매장 이름을 누르면 그 매장의 매장운영결산(입력·사진 올리기) 화면으로 가요.</p>
 
           <p className="menu-group-title cons-section-title">📅 {group === 'year' ? '년별' : '월별'} 합산</p>

@@ -99,3 +99,13 @@ export function shortWon(n) {
   if (abs >= 10000) return `${sign}${Math.round(abs / 10000).toLocaleString('ko-KR')}만`
   return `${sign}${abs.toLocaleString('ko-KR')}`
 }
+
+// 매장별 합계 표의 비율(%): 총매출은 전체 매출에서 차지하는 비중, 나머지는 그 행 총매출 대비.
+// 매출이 0이면 계산할 수 없어 null.
+export function settlementPercent(field, totals, grandRevenue) {
+  const base = field === 'revenue' ? grandRevenue : totals.revenue
+  if (!base) return null
+  return (Number(totals[field] || 0) / base) * 100
+}
+
+export const formatPercent = (p) => (p == null ? '-' : `${p.toFixed(1)}%`)
