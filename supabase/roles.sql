@@ -107,6 +107,18 @@ create table if not exists public.store_business_info (
   updated_at timestamptz not null default now()
 );
 
+-- 전달사항 (메인 관리자 → 매장 매니저). 매니저는 확인·답장만 (아래 store_notices_guard)
+create table if not exists public.store_notices (
+  id uuid primary key default gen_random_uuid(),
+  store_code text not null references public.stores(code),
+  message text not null check (char_length(message) between 1 and 1000),
+  created_at timestamptz not null default now(),
+  confirmed_at timestamptz,
+  reply text,
+  replied_at timestamptz
+);
+create index if not exists store_notices_store_idx on public.store_notices (store_code, created_at desc);
+
 -- ---------------------------------------------------------------------
 -- 3) 접근 규칙: store_code가 있는 모든 표
 --    매니저 = 자기 매장만 / 메인 관리자 = 전부 / 관리자 전용 표는 매니저가 아예 못 연다
@@ -115,9 +127,9 @@ do $$
 declare
   t text;
   p record;
+  -- 매니저도 읽기만 하는 표 (거래처 관리 화면): 거래처 결제, 장부 시작 잔액
+  manager_read text[] := array['vendor_payments', 'vendor_opening_balances'];
   admin_only text[] := array[
-    'vendor_payments',          -- 거래처 결제
-    'vendor_opening_balances',  -- 거래처 시작 잔액
     'store_settlements',        -- 매장운영결산
     'recipes', 'recipe_meta', 'ingredient_mapping', 'menu_prices',  -- 레시피·원가
     'staff_schedules',          -- 직원 근무표
@@ -135,7 +147,16 @@ begin
       execute format('drop policy %I on public.%I', p.policyname, t);
     end loop;
     execute format('alter table public.%I enable row level security', t);
-    if t = any(admin_only) then
+    if t = any(manager_read) then
+      execute format(
+        'create policy "store members read" on public.%I for select to authenticated '
+        'using (store_code = public.auth_store_code() or public.auth_is_admin())', t);
+      execute format('create policy "admin insert" on public.%I for insert to authenticated with check (public.auth_is_admin())', t);
+      execute format(
+        'create policy "admin update" on public.%I for update to authenticated '
+        'using (public.auth_is_admin()) with check (public.auth_is_admin())', t);
+      execute format('create policy "admin delete" on public.%I for delete to authenticated using (public.auth_is_admin())', t);
+    elsif t = any(admin_only) then
       execute format(
         'create policy "admin only" on public.%I for all to authenticated '
         'using (public.auth_is_admin()) with check (public.auth_is_admin())',
@@ -232,6 +253,31 @@ drop trigger if exists invoice_batches_manager_guard on public.invoice_batches;
 create trigger invoice_batches_manager_guard
   before update or delete on public.invoice_batches
   for each row execute function public.invoice_batches_manager_guard();
+
+-- 4-3) 전달사항: 매니저는 보내거나 지울 수 없고 확인·답장 칸만 바꾼다.
+create or replace function public.store_notices_guard()
+returns trigger
+language plpgsql
+as $$
+begin
+  if public.auth_is_admin() or coalesce(auth.role(), '') = 'service_role' then
+    if tg_op = 'DELETE' then return old; end if;
+    return new;
+  end if;
+  if tg_op <> 'UPDATE' then
+    raise exception '전달사항은 메인 관리자만 보내거나 지울 수 있어요.';
+  end if;
+  if new.message is distinct from old.message or new.store_code is distinct from old.store_code
+     or new.created_at is distinct from old.created_at then
+    raise exception '전달사항 내용은 메인 관리자만 바꿀 수 있어요.';
+  end if;
+  return new;
+end $$;
+
+drop trigger if exists store_notices_guard on public.store_notices;
+create trigger store_notices_guard
+  before insert or update or delete on public.store_notices
+  for each row execute function public.store_notices_guard();
 
 -- ---------------------------------------------------------------------
 -- 5) 명세표 사진: 매니저는 자기 매장 폴더, 관리자는 전부

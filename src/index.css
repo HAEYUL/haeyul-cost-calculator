@@ -2731,3 +2731,79 @@ button.kpi-card {
 .cons-table .minus .pct {
   color: #d84343;
 }
+
+/* ---------- 전달사항 ---------- */
+.manager-notices {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 18px;
+  text-align: left;
+}
+
+.notice-card {
+  margin-top: 0;
+  border-color: #f0b46b;
+  background: #fffaf2;
+  color: #2b2832;
+}
+
+.notice-card.notice-done {
+  border-color: var(--border);
+  background: var(--surface);
+  color: var(--text);
+}
+
+.notice-meta {
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.notice-message {
+  margin: 6px 0;
+  font-size: 16px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.notice-reply {
+  margin: 4px 0 0;
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  font-size: 14px;
+}
+
+.notice-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-top: 6px;
+}
+
+.notice-actions .input {
+  flex: 1;
+  min-width: 0;
+}
+
+.notice-actions .btn-primary {
+  width: auto;
+  margin-top: 0;
+  padding: 12px 16px;
+  white-space: nowrap;
+}
+
+.notice-actions-right {
+  text-align: right;
+}
+
+.notice-textarea {
+  margin: 8px 0 0;
+  resize: vertical;
+  font-family: inherit;
+}
+
+.notice-all-link {
+  align-self: flex-start;
+  margin-top: 0;
+}

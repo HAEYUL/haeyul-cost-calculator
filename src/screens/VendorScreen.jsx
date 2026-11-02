@@ -16,7 +16,8 @@ import {
 import { findBatchesNeedingVatFix } from '../lib/vatAmountFix'
 
 export default function VendorScreen() {
-  const { store } = useStore()
+  // 매니저도 장부를 똑같이 보지만, 결제 입력·장부 시작 설정·삭제는 메인 관리자만 한다.
+  const { store, isAdmin } = useStore()
   const navigate = useNavigate()
 
   const [vendors, setVendors] = useState([])
@@ -273,7 +274,7 @@ export default function VendorScreen() {
             <h1>거래처 관리</h1>
             <p className="subtitle">{store.name} · 거래처별 이월 잔액·입고·결제와 미지급금(장부)을 확인해요</p>
           </div>
-          {hasVendors && (
+          {hasVendors && isAdmin && (
             <div className="page-actions">
               <button type="button" className="action-btn" onClick={() => navigate('/vendors/ledger-setup')}>
                 장부 시작 설정
@@ -406,7 +407,7 @@ export default function VendorScreen() {
                             {Math.round(v.balance).toLocaleString()}원
                           </span>
                         </button>
-                        <div className="ven-actions">
+                        {isAdmin && <div className="ven-actions">
                           <button
                             type="button"
                             className="mini-btn"
@@ -417,7 +418,7 @@ export default function VendorScreen() {
                           <button type="button" className="mini-btn mini-btn-danger" onClick={() => openDeleteConfirm(v)}>
                             삭제
                           </button>
-                        </div>
+                        </div>}
                       </div>
 
                       {deleteTarget?.id === v.id && (
@@ -516,6 +517,7 @@ export default function VendorScreen() {
                 className="cost-row-btn"
                 style={{ marginTop: 8 }}
                 onClick={() =>
+                  isAdmin &&
                   navigate('/vendor-payment-report', { state: { dateRange: { dateFrom: paymentDateFrom, dateTo: paymentDateTo } } })
                 }
               >

@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
 import { groupByVendor, makeLedger, todayStr } from '../lib/vendorLedger'
 import { rowDateStr } from '../lib/rowDateStr'
+import { fetchNotices } from '../lib/notices'
 
 const won = (n) => `${Math.round(n).toLocaleString('ko-KR')}원`
 
@@ -49,6 +50,7 @@ async function loadStoreSummary(storeCode, today) {
 export default function AdminOverview({ stores, onOpenStore }) {
   const navigate = useNavigate()
   const [summaries, setSummaries] = useState(null)
+  const [noticeInfo, setNoticeInfo] = useState(null)
   const [error, setError] = useState('')
 
   useEffect(() => {
@@ -62,6 +64,16 @@ export default function AdminOverview({ stores, onOpenStore }) {
       .catch((err) => {
         if (!cancelled) setError(err.message)
       })
+    fetchNotices({ storeCodes: stores.map((st) => st.code), sinceDays: 30 })
+      .then((rows) => {
+        if (cancelled) return
+        const weekAgo = Date.now() - 7 * 86400000
+        setNoticeInfo({
+          pending: rows.filter((n) => !n.confirmed_at).length,
+          replies: rows.filter((n) => n.reply && new Date(n.replied_at).getTime() > weekAgo).length,
+        })
+      })
+      .catch(() => !cancelled && setNoticeInfo(null))
     return () => {
       cancelled = true
     }
@@ -121,6 +133,15 @@ export default function AdminOverview({ stores, onOpenStore }) {
           </div>
           <p className="hint">매장 카드를 누르면 그 매장으로 바뀌어요</p>
         </div>
+        <button type="button" className="cost-summary admin-overview-card" onClick={() => navigate('/notices')}>
+          <div className="cost-summary-row">
+            <span>📢 매니저 전달사항</span>
+            <strong className={noticeInfo?.pending ? 'cost-warning' : ''}>
+              {noticeInfo ? `미확인 ${noticeInfo.pending}건 · 새 답장 ${noticeInfo.replies}건` : '보내기 →'}
+            </strong>
+          </div>
+          <p className="hint">매장 매니저에게 메모를 보내고 확인·답장을 받아요</p>
+        </button>
         <button type="button" className="cost-summary admin-overview-card" onClick={() => navigate('/consolidated')}>
           <div className="cost-summary-row">
             <span>🧮 통합 매출·결산</span>

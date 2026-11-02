@@ -10,6 +10,7 @@ import { rowDateStr } from '../lib/rowDateStr'
 import { groupByVendor, makeLedger } from '../lib/vendorLedger'
 import { menuSectionsFor } from '../data/menuSections'
 import AdminOverview from '../components/AdminOverview'
+import ManagerNoticeBox from '../components/ManagerNoticeBox'
 
 const MARGIN_WARNING_RATIO = 40
 
@@ -262,10 +263,12 @@ export default function MainMenuScreen() {
         ) : (
           <>
             <div className="store-badge">{store.name}</div>
-            <p className="hint manager-hint">매니저 화면이에요. 거래명세표·실재고·파출을 입력할 수 있어요.</p>
+            <p className="hint manager-hint">매니저 화면이에요. 입고·실재고·거래처·단가·파출을 볼 수 있어요.</p>
           </>
         )}
       </div>
+
+      {!isAdmin && supabase && <ManagerNoticeBox storeCode={store.code} />}
 
       {isAdmin && supabase && (
         <AdminOverview

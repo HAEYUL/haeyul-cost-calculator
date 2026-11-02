@@ -29,7 +29,8 @@ const fmt = (n) => Math.round(Number(n)).toLocaleString()
 const isPreLedgerPayment = (p) => Boolean(p.paid_date) && p.paid_date < LEDGER_START
 
 export default function VendorDetailScreen() {
-  const { store } = useStore()
+  // 매니저도 장부·결제 내역을 똑같이 보지만, 결제 입력·시작 잔액·삭제는 메인 관리자만 한다.
+  const { store, isAdmin } = useStore()
   const navigate = useNavigate()
   const location = useLocation()
   const { vendorId } = useParams()
@@ -419,12 +420,12 @@ export default function VendorDetailScreen() {
 
       {!loading && supabase && vendor && (
         <>
-          <div className="field">
+          {isAdmin && (<div className="field">
             <label className="toggle-row">
               <input type="checkbox" checked={!!vendor.vat_separate} onChange={handleToggleVatSeparate} disabled={savingVatSeparate} />
               <span>부가세 별도 거래처 (명세표의 "금액"이 공급가액만이고, 부가세를 더해야 진짜 합계가 돼요)</span>
             </label>
-          </div>
+          </div>)}
 
           <div className="cost-summary">
             <div className="cost-summary-row">
@@ -450,11 +451,13 @@ export default function VendorDetailScreen() {
             <div className="price-alert-box">
               <p className="price-alert-title">장부 시작 잔액을 아직 안 넣었어요</p>
               <p className="hint">
-                {addDays(LEDGER_START, -1)}까지 남아 있던 잔액을 아래에 넣어주세요. 지금은 0원부터 계산했어요.
+                {isAdmin
+                  ? `${addDays(LEDGER_START, -1)}까지 남아 있던 잔액을 아래에 넣어주세요. 지금은 0원부터 계산했어요.`
+                  : `지금은 0원부터 계산했어요. 메인 관리자가 ${addDays(LEDGER_START, -1)} 기준 잔액을 넣으면 정확해져요.`}
               </p>
             </div>
           )}
-          <div className="field">
+          {isAdmin && (<><div className="field">
             <label htmlFor="startBalance">장부 시작 잔액 ({addDays(LEDGER_START, -1)} 기준 잔액)</label>
             <AmountInput
               id="startBalance"
@@ -479,7 +482,7 @@ export default function VendorDetailScreen() {
           </div>
           <button type="button" className="btn-secondary" onClick={handleSaveOpeningBalance} disabled={savingOpeningBalance}>
             {savingOpeningBalance ? '저장 중...' : '시작 잔액 저장'}
-          </button>
+          </button></>)}
 
           {undatedPayments.length > 0 && (
             <p className="error-text">
@@ -503,7 +506,7 @@ export default function VendorDetailScreen() {
                       {issue.fromDate} ~ {issue.toDate} 사이에 {fmt(gap)}원 결제를 빠뜨린 것 같아요. 실제 결제일을 고르고
                       등록하세요.
                     </p>
-                    <div className="invoice-form">
+                    {isAdmin && (<div className="invoice-form">
                       <input
                         type="date"
                         className="input"
@@ -521,7 +524,7 @@ export default function VendorDetailScreen() {
                       >
                         {registeringIssueId === issue.batchId ? '등록 중...' : '결제로 등록'}
                       </button>
-                    </div>
+                    </div>)}
                   </>
                 )}
                 {issue.amount > 0 && (
@@ -538,14 +541,14 @@ export default function VendorDetailScreen() {
                       장부 시작 잔액이 틀렸을 수도 있어요. 시작 잔액을 {fmt(ledger.opening + issue.amount)}원으로 고치면 이
                       명세표와 맞아요.
                     </p>
-                    <button
+                    {isAdmin && <button
                       type="button"
                       className="btn-secondary"
                       onClick={() => handleFixOpening(issue)}
                       disabled={savingOpeningBalance}
                     >
                       시작 잔액을 {fmt(ledger.opening + issue.amount)}원으로 고치기
-                    </button>
+                    </button>}
                   </>
                 )}
               </div>
@@ -639,6 +642,8 @@ export default function VendorDetailScreen() {
             </table>
           </div>
 
+          {isAdmin && (
+            <>
           <h2 id="payment" className="section-title">결제 입력</h2>
           <p className="hint">결제할 때마다 입력해 주세요. 장부의 미지급금은 입력한 결제로만 줄어요.</p>
           <div className="field">
@@ -715,6 +720,9 @@ export default function VendorDetailScreen() {
             </div>
           )}
 
+            </>
+          )}
+
           <h2 className="section-title">결제 내역 ({payments.length}건)</h2>
           {payments.length === 0 && <p className="hint">아직 결제 기록이 없습니다.</p>}
           {undatedPayments.length > 0 && (
@@ -724,8 +732,8 @@ export default function VendorDetailScreen() {
             {payments.map((p) => (
               <li key={p.id} className="history-row">
                 <div className="history-row-main">
-                  {p.paid_date ? (
-                    <span className="history-item">{p.paid_date}</span>
+                  {p.paid_date || !isAdmin ? (
+                    <span className="history-item">{p.paid_date ?? '날짜 없음'}</span>
                   ) : (
                     <span className="history-item" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                       <input
@@ -749,7 +757,7 @@ export default function VendorDetailScreen() {
                   )}
                   <div className="history-row-main-end">
                     <span>{Math.round(Number(p.amount)).toLocaleString()}원</span>
-                    <button
+                    {isAdmin && <button
                       type="button"
                       className="icon-btn"
                       aria-label="결제 기록 삭제"
@@ -759,7 +767,7 @@ export default function VendorDetailScreen() {
                       }}
                     >
                       ✕
-                    </button>
+                    </button>}
                   </div>
                 </div>
                 {p.memo && (
@@ -833,7 +841,7 @@ export default function VendorDetailScreen() {
                     {paidIds.has(batch.id) ? (
                       <span className="paid-badge">✓ 결제됨</span>
                     ) : (
-                      canRecordBatchPayment(batch) && (
+                      isAdmin && canRecordBatchPayment(batch) && (
                         <button type="button" className="link-btn" onClick={() => setPayBatchTarget(batch)}>
                           결제완료
                         </button>
@@ -848,7 +856,7 @@ export default function VendorDetailScreen() {
                     >
                       수정
                     </button>
-                    <button
+                    {isAdmin && <button
                       type="button"
                       className="icon-btn"
                       aria-label="명세표 삭제"
@@ -858,7 +866,7 @@ export default function VendorDetailScreen() {
                       }}
                     >
                       ✕
-                    </button>
+                    </button>}
                   </div>
                 </div>
 

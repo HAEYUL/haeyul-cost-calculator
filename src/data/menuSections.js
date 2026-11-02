@@ -1,5 +1,5 @@
 // 메인 메뉴 버튼과 PC 화면 왼쪽 메뉴판이 같은 목록을 쓴다.
-// MENU_SECTIONS = 메인 관리자(전체 메뉴), MANAGER_MENU_SECTIONS = 매니저(입력 메뉴 3개).
+// MENU_SECTIONS = 메인 관리자(전체 메뉴), MANAGER_MENU_SECTIONS = 매니저(메뉴 5개).
 export const MENU_SECTIONS = [
   {
     title: '입고 · 재고',
@@ -60,6 +60,7 @@ export const MENU_SECTIONS = [
     area: 'settings',
     icon: '⚙️',
     items: [
+      { label: '매니저 전달사항', path: '/notices', icon: '📢' },
       { label: '알림 설정', path: '/notification-settings', icon: '🔔' },
       { label: '데이터 백업', path: '/backup', icon: '💾' },
       { label: '직원 근무표', path: '/staff-schedule', icon: '👥' },
@@ -73,25 +74,43 @@ export const MENU_SECTIONS = [
 
 export const MANAGER_MENU_SECTIONS = [
   {
-    title: '입력',
+    title: '입고 · 재고',
     area: 'stock',
-    icon: '✏️',
+    icon: '📦',
     items: [
-      { label: '거래명세표 등록', path: '/invoices', icon: '🧾' },
-      { label: '실재고 조사', path: '/stock-count', icon: '📦' },
-      { label: '파출 관리', path: '/dispatch', icon: '👷' },
+      { label: '입고 입력', path: '/invoices', icon: '🧾' },
+      { label: '실재고 조사', path: '/stock-count', icon: '📝' },
     ],
   },
+  {
+    title: '거래처',
+    area: 'vendor',
+    icon: '🤝',
+    items: [
+      { label: '거래처 관리', path: '/vendors', icon: '🏪' },
+      { label: '단가 추이 조회', path: '/price-trend', icon: '📈' },
+    ],
+  },
+  {
+    title: '인력',
+    area: 'dispatch',
+    icon: '👷',
+    items: [{ label: '파출 관리', path: '/dispatch', icon: '👷' }],
+  },
 ]
+
+// 매니저 메뉴 안에 있어도 메인 관리자만 쓰는 하위 화면 (장부 시작 설정·일괄 결제·부가세 점검)
+const ADMIN_ONLY_SUBPATHS = ['/vendors/ledger-setup', '/vendors/bulk-payment', '/vendors/vat-check']
 
 export function menuSectionsFor(role) {
   return role === 'admin' ? MENU_SECTIONS : MANAGER_MENU_SECTIONS
 }
 
-// 매니저가 들어갈 수 있는 주소: 메인 메뉴, 입력 메뉴 3개와 그 하위 화면(명세표 수정, 파출 등록·개인 페이지)
+// 매니저가 들어갈 수 있는 주소: 메인 메뉴, 매니저 메뉴 5개와 그 하위 화면(명세표 수정, 거래처 상세, 파출 등록·개인 페이지)
 export function isPathAllowed(role, pathname) {
   if (role === 'admin') return true
-  if (pathname === '/menu') return true
+  if (pathname === '/menu' || pathname === '/notices') return true
+  if (ADMIN_ONLY_SUBPATHS.some((p) => pathname === p || pathname.startsWith(`${p}/`))) return false
   return MANAGER_MENU_SECTIONS.some((section) =>
     section.items.some((item) => pathname === item.path || pathname.startsWith(`${item.path}/`)),
   )

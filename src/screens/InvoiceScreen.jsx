@@ -144,7 +144,7 @@ function findItemMismatches(items) {
 }
 
 export default function InvoiceScreen() {
-  // 매니저는 결제·원가 자료를 열 수 없어서, 결제 체크·잔액 대조·원가율 경고는 메인 관리자에게만 보인다.
+  // 매니저는 결제 내역을 볼 수 있지만 결제 기록(바로 결제 완료)은 남기지 않고, 원가 자료는 열 수 없어 원가율 경고는 관리자만 본다.
   const { store, isAdmin } = useStore()
   const navigate = useNavigate()
   const location = useLocation()
@@ -251,7 +251,7 @@ export default function InvoiceScreen() {
   // 거래처+입고일이 정해지면, 그 거래처가 이 날짜보다 전에 마지막으로 저장한 명세표의
   // 현잔액을 불러온다. "이번 명세표의 전잔액"이 그 값과 이어지는지 대조하기 위함이다.
   useEffect(() => {
-    if (!store || !supabase || !vendorId || vendorId === 'new' || !date || !isAdmin) {
+    if (!store || !supabase || !vendorId || vendorId === 'new' || !date) {
       setPreviousBatchBalance(null)
       return
     }
@@ -288,7 +288,7 @@ export default function InvoiceScreen() {
     return () => {
       cancelled = true
     }
-  }, [store, vendorId, date, editMode, batchId, isAdmin])
+  }, [store, vendorId, date, editMode, batchId])
 
   // 수정 모드: 기존 명세표와 품목을 불러와 입력 폼에 채워 넣는다.
   useEffect(() => {
@@ -1446,7 +1446,7 @@ export default function InvoiceScreen() {
         )}
       </div>
 
-      {!editMode && <InvoiceHistory storeCode={store.code} refreshKey={historyKey} showPayments={isAdmin} />}
+      {!editMode && <InvoiceHistory storeCode={store.code} refreshKey={historyKey} canRecordPayments={isAdmin} />}
     </div>
   )
 }
