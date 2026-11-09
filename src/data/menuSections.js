@@ -1,5 +1,5 @@
 // 메인 메뉴 버튼과 PC 화면 왼쪽 메뉴판이 같은 목록을 쓴다.
-// MENU_SECTIONS = 메인 관리자(전체 메뉴), MANAGER_MENU_SECTIONS = 매니저(메뉴 6개).
+// MENU_SECTIONS = 메인 관리자(전체 메뉴), MANAGER_MENU_SECTIONS = 매니저(메뉴 7개).
 export const MENU_SECTIONS = [
   {
     title: '입고 · 재고',
@@ -79,6 +79,7 @@ export const MANAGER_MENU_SECTIONS = [
     icon: 'box',
     items: [
       { label: '입고 입력', path: '/invoices', icon: 'receipt' },
+      { label: '재고 관리', path: '/inventory', icon: 'box' },
       { label: '실재고 조사', path: '/stock-count', icon: 'check' },
       { label: '재주문 알림', path: '/reorder-alerts', icon: 'bell' },
     ],
@@ -107,7 +108,7 @@ export function menuSectionsFor(role) {
   return role === 'admin' ? MENU_SECTIONS : MANAGER_MENU_SECTIONS
 }
 
-// 매니저가 들어갈 수 있는 주소: 메인 메뉴, 매니저 메뉴 6개와 그 하위 화면(명세표 수정, 거래처 상세, 파출 등록·개인 페이지)
+// 매니저가 들어갈 수 있는 주소: 메인 메뉴, 매니저 메뉴 7개와 그 하위 화면(명세표 수정, 거래처 상세, 파출 등록·개인 페이지)
 export function isPathAllowed(role, pathname) {
   if (role === 'admin') return true
   if (pathname === '/menu' || pathname === '/notices' || pathname.startsWith('/notices/')) return true

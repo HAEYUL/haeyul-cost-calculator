@@ -13,7 +13,7 @@ const NO_UNIT_KEY = 'none'
 const WASTE_REASONS = ['상함/부패', '유통기한 경과', '조리 실수', '기타']
 
 export default function InventoryDetailScreen() {
-  const { store } = useStore()
+  const { store, isAdmin } = useStore()
   const navigate = useNavigate()
   const goBack = useGoBack('/inventory')
   const { itemName: encodedItemName, unit: unitParam } = useParams()
@@ -435,6 +435,8 @@ export default function InventoryDetailScreen() {
         <p className="subtitle">{store.name} · {unitLabel ? `${unitLabel} 단위 재고` : '재고'}</p>
       </div>
 
+      {/* 이름·단위 수정, 합치기, 레시피 단위는 레시피 연결(관리자 전용)까지 바꾸므로 관리자만 쓴다. */}
+      {isAdmin && (
       <div className="inventory-row-actions">
         <button
           type="button"
@@ -466,8 +468,9 @@ export default function InventoryDetailScreen() {
           레시피 단위 설정
         </button>
       </div>
+      )}
 
-      {unit === 'box' && !recipeUnitConfig && (
+      {isAdmin && unit === 'box' && !recipeUnitConfig && (
         <p className="hint">📦 박스당 개수/kg 환산 전이에요 · "이름/단위 수정" 또는 "레시피 단위 설정"에서 등록할 수 있어요</p>
       )}
       {recipeUnitConfig && (
