@@ -18,6 +18,7 @@ import { menuSectionsFor } from '../data/menuSections'
 import AdminOverview from '../components/AdminOverview'
 import ManagerNoticeBox from '../components/ManagerNoticeBox'
 import ManagerOverview from '../components/ManagerOverview'
+import ManagerReorderCard from '../components/ManagerReorderCard'
 import Icon from '../components/Icon'
 import { eyebrowDate, nowLabel } from '../lib/storeSummary'
 import { storeColor } from '../data/stores'
@@ -272,6 +273,7 @@ export default function MainMenuScreen() {
       </header>
 
       {!isAdmin && supabase && <ManagerOverview storeCode={store.code} />}
+      {!isAdmin && supabase && <ManagerReorderCard storeCode={store.code} />}
       {!isAdmin && supabase && <ManagerNoticeBox storeCode={store.code} />}
 
       {isAdmin && supabase && (
