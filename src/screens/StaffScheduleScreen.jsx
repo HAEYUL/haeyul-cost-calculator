@@ -6,6 +6,10 @@ import { compressImage } from '../lib/compressImage'
 import { cycleMark, daysInMonth, countMarks, MARK_LABELS } from '../lib/staffSchedule'
 import { apiFetch } from '../lib/apiFetch'
 import DailyCheck from '../components/staff/DailyCheck'
+import { mergeScheduleDays } from '../lib/staffDaily'
+import { buildStaffMonthSheets } from '../lib/staffExport'
+import { downloadXlsx } from '../lib/xlsxWriter'
+import { fetchShifts, fetchWorkers } from '../lib/dispatchApi'
 import StaffRoster from '../components/staff/StaffRoster'
 
 function pad2(n) {
@@ -137,25 +141,24 @@ export default function StaffScheduleScreen() {
 
       const { data: existing, error: existErr } = await supabase
         .from('staff_schedules')
-        .select('employee_name')
+        .select('employee_name, days')
         .eq('store_code', store.code)
         .eq('year', year)
         .eq('month', month)
       if (existErr) throw existErr
-      const existingNames = new Set((existing ?? []).map((r) => r.employee_name))
+      // 이미 저장된(매일 입력했거나 전에 올린) 근무와 합치기 위해 직원별 기존 표시를 같이 들고 있는다.
+      const existingByName = Object.fromEntries((existing ?? []).map((r) => [r.employee_name, r.days ?? {}]))
 
       const employees = (data.employees ?? []).map((e) => ({
         name: e.name,
         days: Object.fromEntries((e.entries ?? []).map((en) => [String(en.day), en.mark])),
-        isDuplicate: existingNames.has(e.name),
-        overwrite: false,
       }))
 
       if (employees.length === 0) {
         setUploadError('사진에서 인식된 직원이 없습니다. 더 선명한 사진으로 다시 시도해주세요.')
         return
       }
-      setExtracted({ year, month, employees })
+      setExtracted({ year, month, employees, existingByName, policy: 'keep' })
       setOpenDetail(new Set())
     } catch (err) {
       setUploadError(err.message)
@@ -168,12 +171,7 @@ export default function StaffScheduleScreen() {
     setExtracted((prev) => ({ ...prev, employees: prev.employees.map((e, i) => (i === index ? { ...e, name } : e)) }))
   }
 
-  const toggleExtractedOverwrite = (index) => {
-    setExtracted((prev) => ({
-      ...prev,
-      employees: prev.employees.map((e, i) => (i === index ? { ...e, overwrite: !e.overwrite } : e)),
-    }))
-  }
+  const setMergePolicy = (policy) => setExtracted((prev) => ({ ...prev, policy }))
 
   const cycleExtractedDay = (index, day) => {
     setExtracted((prev) => ({
@@ -200,9 +198,9 @@ export default function StaffScheduleScreen() {
 
   const handleSaveExtracted = async () => {
     if (!extracted || !supabase) return
-    const toSave = extracted.employees.filter((e) => e.name.trim() && (!e.isDuplicate || e.overwrite))
+    const toSave = extracted.employees.filter((e) => e.name.trim())
     if (toSave.length === 0) {
-      setUploadError('저장할 직원이 없습니다. 겹치는 직원은 덮어쓰기를 체크해주세요.')
+      setUploadError('저장할 직원이 없습니다.')
       return
     }
     setSavingExtracted(true)
@@ -212,7 +210,8 @@ export default function StaffScheduleScreen() {
       employee_name: e.name.trim(),
       year: extracted.year,
       month: extracted.month,
-      days: e.days,
+      // 이미 저장된 근무와 합친다: 새 날짜는 더하고, 다른 날짜는 고른 기준(기존 유지/사진 기준)으로.
+      days: mergeScheduleDays(extracted.existingByName[e.name.trim()], e.days, extracted.policy).merged,
     }))
     const { error: err } = await supabase.from('staff_schedules').upsert(payload, { onConflict: 'store_code,employee_name,year,month' })
     if (!err) {
@@ -226,7 +225,7 @@ export default function StaffScheduleScreen() {
     }
     setSavingExtracted(false)
     if (err) {
-      setUploadError(err.message)
+      setUploadError(/마감한 달/.test(err.message ?? '') ? '마감한 달이라 메인 관리자만 저장할 수 있어요.' : err.message)
       return
     }
     setUploadMessage(`${toSave.length}명 저장했습니다.`)
@@ -237,8 +236,6 @@ export default function StaffScheduleScreen() {
 
   // ---- 월별 조회·인쇄 ----
   const [browseMonth, setBrowseMonth] = useState(thisMonthKey())
-  // 매니저는 이번 달만 고칠 수 있다(지난달·마감한 달은 메인 관리자). 마감은 DB에서도 막는다.
-  const browseEditable = isAdmin || browseMonth === thisMonthKey()
   const [browseRows, setBrowseRows] = useState([])
   const [browseLoading, setBrowseLoading] = useState(false)
   const [browseLoaded, setBrowseLoaded] = useState(false)
@@ -246,6 +243,12 @@ export default function StaffScheduleScreen() {
   const [browseMessage, setBrowseMessage] = useState('')
   const [browseOpenDetail, setBrowseOpenDetail] = useState(new Set())
   const [browseSaving, setBrowseSaving] = useState(false)
+  const [browseClosed, setBrowseClosed] = useState(false)
+  const [browseOrder, setBrowseOrder] = useState([])
+  const [closing, setClosing] = useState(false)
+  const [exporting, setExporting] = useState(false)
+  // 매니저는 이번 달만 고칠 수 있다(지난달·마감한 달은 메인 관리자). 마감은 DB에서도 막는다.
+  const browseEditable = isAdmin || (browseMonth === thisMonthKey() && !browseClosed)
   const [printData, setPrintData] = useState(null)
   const [pendingPrint, setPendingPrint] = useState(false)
 
@@ -255,19 +258,32 @@ export default function StaffScheduleScreen() {
     setBrowseLoading(true)
     setBrowseError('')
     setBrowseMessage('')
-    const { data, error: err } = await supabase
-      .from('staff_schedules')
-      .select('id, employee_name, days')
-      .eq('store_code', store.code)
-      .eq('year', Number(yearStr))
-      .eq('month', Number(monthStr))
-      .order('employee_name')
+    const [{ data, error: err }, closesRes, membersRes] = await Promise.all([
+      supabase
+        .from('staff_schedules')
+        .select('id, employee_name, days')
+        .eq('store_code', store.code)
+        .eq('year', Number(yearStr))
+        .eq('month', Number(monthStr))
+        .order('employee_name'),
+      supabase.from('staff_month_closes').select('year').eq('store_code', store.code).eq('year', Number(yearStr)).eq('month', Number(monthStr)),
+      supabase.from('staff_members').select('name, sort_order').eq('store_code', store.code).order('sort_order').order('name'),
+    ])
     setBrowseLoading(false)
     if (err) {
       setBrowseError(err.message)
       return
     }
-    setBrowseRows((data ?? []).map((r) => ({ ...r, days: r.days ?? {} })))
+    const order = (membersRes.data ?? []).map((m) => m.name)
+    const rank = new Map(order.map((n, i) => [n, i]))
+    setBrowseOrder(order)
+    setBrowseClosed(!closesRes.error && (closesRes.data ?? []).length > 0)
+    // 직원 명부 순서대로(명부에 없는 이름은 뒤에 가나다순)
+    setBrowseRows(
+      (data ?? [])
+        .map((r) => ({ ...r, days: r.days ?? {} }))
+        .sort((a, b) => (rank.get(a.employee_name) ?? 9999) - (rank.get(b.employee_name) ?? 9999) || a.employee_name.localeCompare(b.employee_name)),
+    )
     setBrowseLoaded(true)
     setBrowseOpenDetail(new Set())
   }
@@ -318,6 +334,52 @@ export default function StaffScheduleScreen() {
     }
     setBrowseSaving(false)
     setBrowseMessage('수정한 내용을 저장했습니다.')
+  }
+
+  // 월 마감(메인 관리자만): 마감하면 매니저는 그 달 근무표·오늘 근무 체크를 고칠 수 없다(DB에서도 막는다).
+  const handleToggleClose = async () => {
+    if (!supabase || !isAdmin) return
+    const [yearStr, monthStr] = browseMonth.split('-')
+    const label = `${Number(yearStr)}년 ${Number(monthStr)}월`
+    const ok = browseClosed
+      ? window.confirm(`${label} 마감을 해제할까요?\n매니저가 다시 근무를 고칠 수 있게 돼요.`)
+      : window.confirm(`${label}을(를) 마감할까요?\n마감하면 매니저는 이 달 근무를 고칠 수 없어요. (메인 관리자는 고칠 수 있고, 마감 해제도 가능해요)`)
+    if (!ok) return
+    setClosing(true)
+    setBrowseError('')
+    const q = browseClosed
+      ? supabase.from('staff_month_closes').delete().eq('store_code', store.code).eq('year', Number(yearStr)).eq('month', Number(monthStr))
+      : supabase.from('staff_month_closes').insert({ store_code: store.code, year: Number(yearStr), month: Number(monthStr) })
+    const { error: err } = await q
+    setClosing(false)
+    if (err) {
+      setBrowseError(err.message)
+      return
+    }
+    setBrowseClosed(!browseClosed)
+    setBrowseMessage(browseClosed ? `${label} 마감을 해제했어요.` : `${label}을(를) 마감했어요. 엑셀 저장·인쇄로 보관하세요.`)
+  }
+
+  // 엑셀 저장: 1번 시트 근무표(직원 × 날짜 + 합계), 2번 시트 그 달 파출 근무
+  const handleExportXlsx = async () => {
+    if (browseRows.length === 0) return
+    const [yearStr, monthStr] = browseMonth.split('-')
+    const year = Number(yearStr)
+    const month = Number(monthStr)
+    const start = `${yearStr}-${monthStr}-01`
+    const nextMonth = month === 12 ? `${year + 1}-01-01` : `${year}-${pad2(month + 1)}-01`
+    setExporting(true)
+    setBrowseError('')
+    let shifts = []
+    let workers = []
+    try {
+      ;[shifts, workers] = await Promise.all([fetchShifts({ storeCodes: store.code, start, end: nextMonth }), fetchWorkers(store.code)])
+    } catch (e) {
+      setBrowseError(`파출 기록을 불러오지 못해 근무표만 저장해요. (${e.message})`)
+    }
+    const sheets = buildStaffMonthSheets({ storeName: store.name, year, month, rows: browseRows, order: browseOrder, shifts, workers })
+    downloadXlsx(`직원근무표_${store.name}_${year}-${monthStr}.xlsx`, sheets)
+    setExporting(false)
   }
 
   const handlePrint = () => {
@@ -472,8 +534,38 @@ export default function StaffScheduleScreen() {
                 읽은 내용 확인 — {extracted.year}년 {extracted.month}월
               </h2>
               <p className="hint">
-                이름이나 표시가 잘못 읽혔으면 고치고, 확인되면 저장하세요. 날짜 칸을 누르면 O→△→X 순서로 바뀌어요.
+                이름이나 표시가 잘못 읽혔으면 고치고, 확인되면 저장하세요. 날짜 칸을 누르면 O→△→연→X 순서로 바뀌어요.
+                이미 입력해 둔 근무가 있으면 합쳐서 저장해요(새 날짜는 더하고, 같은 표시는 그대로).
               </p>
+              {(() => {
+                const totalConflicts = extracted.employees.reduce(
+                  (sum, e) => sum + mergeScheduleDays(extracted.existingByName[e.name.trim()], e.days).conflicts.length,
+                  0,
+                )
+                if (totalConflicts === 0) return null
+                return (
+                  <div className="panel staff-merge-policy">
+                    <p className="price-alert-title">⚠️ 이미 입력한 근무와 다른 날이 {totalConflicts}칸 있어요</p>
+                    <p className="hint">아래 직원별로 다른 날짜를 확인하고, 어느 쪽으로 저장할지 고르세요.</p>
+                    <div className="toolbar-chips">
+                      <button
+                        type="button"
+                        className={`chip${extracted.policy === 'keep' ? ' chip-active' : ''}`}
+                        onClick={() => setMergePolicy('keep')}
+                      >
+                        기존 입력 유지
+                      </button>
+                      <button
+                        type="button"
+                        className={`chip${extracted.policy === 'photo' ? ' chip-active' : ''}`}
+                        onClick={() => setMergePolicy('photo')}
+                      >
+                        사진 기준으로 바꾸기
+                      </button>
+                    </div>
+                  </div>
+                )
+              })()}
 
               {extracted.employees.map((emp, i) => (
                 <div className="cost-summary" key={i} style={{ textAlign: 'left' }}>
@@ -486,12 +578,23 @@ export default function StaffScheduleScreen() {
                     />
                   </div>
                   <CountsLine counts={countMarks(emp.days)} />
-                  {emp.isDuplicate && (
-                    <label className="toggle-row" style={{ padding: '8px 0' }}>
-                      <input type="checkbox" checked={emp.overwrite} onChange={() => toggleExtractedOverwrite(i)} />
-                      <span>이미 저장된 직원이에요 — 덮어쓸게요</span>
-                    </label>
-                  )}
+                  {(() => {
+                    const prev = extracted.existingByName[emp.name.trim()]
+                    if (!prev) return <p className="hint">새로 저장되는 직원이에요.</p>
+                    const { conflicts, added } = mergeScheduleDays(prev, emp.days)
+                    return (
+                      <div className="staff-merge-info">
+                        <p className="hint">
+                          이미 저장된 직원이에요 · 새로 더해지는 날 {added}일{conflicts.length > 0 ? ` · 다른 날 ${conflicts.length}일` : ''}
+                        </p>
+                        {conflicts.length > 0 && (
+                          <p className="cost-warning staff-conflicts">
+                            {conflicts.map((c) => `${c.day}일 기존 ${c.existing} → 사진 ${c.photo}`).join(' · ')}
+                          </p>
+                        )}
+                      </div>
+                    )
+                  })()}
                   <button type="button" className="link-btn" style={{ marginTop: 8 }} onClick={() => toggleDetail(i)}>
                     {openDetail.has(i) ? '자세히 닫기' : '자세히보기'}
                   </button>
@@ -516,7 +619,9 @@ export default function StaffScheduleScreen() {
 
       {section === 'browse' && (
         <>
-          <h2 className="section-title">월별 조회·인쇄</h2>
+          <h2 className="section-title">
+            월 근무표 {browseLoaded && browseClosed && <span className="status-tag status-tag-danger">마감</span>}
+          </h2>
           <div className="date-range">
             <input
               type="month"
@@ -582,9 +687,17 @@ export default function StaffScheduleScreen() {
                 <button type="button" className="btn-secondary" onClick={handleSaveBrowse} disabled={browseSaving || !browseEditable}>
                   {browseSaving ? '저장 중...' : '수정 저장'}
                 </button>
-                <button type="button" className="btn-primary" onClick={handlePrint}>
-                  인쇄하기
+                <button type="button" className="btn-primary" onClick={handleExportXlsx} disabled={exporting}>
+                  {exporting ? '만드는 중...' : '📊 엑셀 저장 (근무표 + 파출)'}
                 </button>
+                <button type="button" className="btn-secondary" onClick={handlePrint}>
+                  🖨 인쇄하기 (A4 가로)
+                </button>
+                {isAdmin && (
+                  <button type="button" className="btn-secondary" onClick={handleToggleClose} disabled={closing}>
+                    {closing ? '처리 중...' : browseClosed ? '🔓 이 달 마감 해제' : '🔒 이 달 마감'}
+                  </button>
+                )}
               </div>
             </>
           )}
@@ -690,7 +803,9 @@ export default function StaffScheduleScreen() {
           <h2 className="print-title">
             {printData.year}년 {printData.month}월 근무표
           </h2>
-          <p className="print-store-name">{store.name}</p>
+          <p className="print-store-name">
+            {store.name} · O=종일 △=반타임 연=연차 X=휴무 · 총 근무일 = 종일 + 반타임
+          </p>
           <table className="print-table">
             <thead>
               <tr>
@@ -702,6 +817,14 @@ export default function StaffScheduleScreen() {
                 <th>△(반타임)</th>
                 <th>연(연차)</th>
                 <th>X(휴무)</th>
+                <th>총 근무일</th>
+              </tr>
+              <tr>
+                <th>요일</th>
+                {Array.from({ length: daysInMonth(printData.year, printData.month) }, (_, i) => i + 1).map((day) => (
+                  <th key={day}>{['일', '월', '화', '수', '목', '금', '토'][new Date(printData.year, printData.month - 1, day).getDay()]}</th>
+                ))}
+                <th colSpan={5} />
               </tr>
             </thead>
             <tbody>
@@ -717,6 +840,7 @@ export default function StaffScheduleScreen() {
                     <td>{counts.half}</td>
                     <td>{counts.leave}</td>
                     <td>{counts.off}</td>
+                    <td>{counts.total}</td>
                   </tr>
                 )
               })}

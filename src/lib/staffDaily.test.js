@@ -76,3 +76,34 @@ describe('연차 표시', () => {
     expect(countMarks({ 1: 'O', 2: '△', 3: '연', 4: 'X' })).toEqual({ full: 1, half: 1, leave: 1, off: 1, total: 2 })
   })
 })
+
+import { mergeScheduleDays, unrecordedDates } from './staffDaily'
+
+describe('mergeScheduleDays', () => {
+  const existing = { 1: 'O', 2: 'O', 3: 'X' }
+  const photo = { 2: '△', 3: 'X', 4: 'O' }
+  it('기존 유지: 다른 날은 기존 표시, 새 날만 더한다', () => {
+    const r = mergeScheduleDays(existing, photo, 'keep')
+    expect(r.merged).toEqual({ 1: 'O', 2: 'O', 3: 'X', 4: 'O' })
+    expect(r.conflicts).toEqual([{ day: 2, existing: 'O', photo: '△' }])
+    expect(r.added).toBe(1)
+  })
+  it('사진 기준: 다른 날은 사진 표시로', () => {
+    expect(mergeScheduleDays(existing, photo, 'photo').merged).toEqual({ 1: 'O', 2: '△', 3: 'X', 4: 'O' })
+  })
+  it('기존 기록이 없으면 사진 그대로', () => {
+    expect(mergeScheduleDays(undefined, photo).merged).toEqual(photo)
+  })
+})
+
+describe('unrecordedDates', () => {
+  it('저장 안 했고 표시도 없는 날만', () => {
+    const r = unrecordedDates({
+      start: '2026-11-01',
+      endExclusive: '2026-11-06',
+      savedDates: new Set(['2026-11-01']),
+      scheduleRows: [{ year: 2026, month: 11, days: { 2: 'O', 4: 'X' } }],
+    })
+    expect(r).toEqual(['2026-11-03', '2026-11-05'])
+  })
+})

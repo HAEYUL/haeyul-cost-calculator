@@ -92,3 +92,37 @@ export function canEditDate({ dateStr, today, isAdmin, closed }) {
   if (closed) return false
   return dateStr.slice(0, 7) === today.slice(0, 7)
 }
+
+// 사진으로 읽은 근무표를 이미 저장된 근무표와 합친다.
+// - 사진에만 있는 날짜는 더하고, 같은 표시는 그대로.
+// - 둘 다 있는데 다른 날짜(conflicts)는 policy로 정한다: 'keep' = 기존 입력 유지, 'photo' = 사진 기준.
+export function mergeScheduleDays(existingDays = {}, photoDays = {}, policy = 'keep') {
+  const merged = { ...existingDays }
+  const conflicts = []
+  let added = 0
+  for (const [day, mark] of Object.entries(photoDays)) {
+    const prev = existingDays[day]
+    if (prev == null) {
+      merged[day] = mark
+      added += 1
+    } else if (prev !== mark) {
+      conflicts.push({ day: Number(day), existing: prev, photo: mark })
+      if (policy === 'photo') merged[day] = mark
+    }
+  }
+  conflicts.sort((a, b) => a.day - b.day)
+  return { merged, conflicts, added }
+}
+
+// 기록이 안 된 날(YYYY-MM-DD 목록): start ~ endExclusive 전날 중에서
+// [저장]한 날도 아니고, 근무표에 그날 표시가 하나도 없는 날(사진으로 올린 달은 기록된 것으로 본다).
+export function unrecordedDates({ start, endExclusive, savedDates, scheduleRows }) {
+  const out = []
+  for (let d = start; d < endExclusive; d = shiftDate(d, 1)) {
+    if (savedDates.has(d)) continue
+    const { year, month, day } = parseDate(d)
+    const marked = scheduleRows.some((r) => r.year === year && r.month === month && r.days?.[String(day)])
+    if (!marked) out.push(d)
+  }
+  return out
+}
