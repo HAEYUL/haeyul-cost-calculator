@@ -5,6 +5,8 @@ import { supabase } from '../lib/supabaseClient'
 import { compressImage } from '../lib/compressImage'
 import { cycleMark, daysInMonth, countMarks, MARK_LABELS } from '../lib/staffSchedule'
 import { apiFetch } from '../lib/apiFetch'
+import DailyCheck from '../components/staff/DailyCheck'
+import StaffRoster from '../components/staff/StaffRoster'
 
 function pad2(n) {
   return String(n).padStart(2, '0')
@@ -12,6 +14,11 @@ function pad2(n) {
 
 function monthKeyOf(row) {
   return `${row.year}-${pad2(row.month)}`
+}
+
+function thisMonthKey() {
+  const now = new Date()
+  return `${now.getFullYear()}-${pad2(now.getMonth() + 1)}`
 }
 
 function lastMonthKey() {
@@ -26,9 +33,11 @@ function thisYearRange() {
 }
 
 const SECTIONS = [
-  { key: 'upload', label: '자료 올리기' },
-  { key: 'browse', label: '월별 조회·인쇄' },
+  { key: 'daily', label: '오늘 근무 체크' },
+  { key: 'browse', label: '월 근무표' },
+  { key: 'upload', label: '사진·파일로 올리기' },
   { key: 'employee', label: '직원별 조회' },
+  { key: 'roster', label: '직원 관리' },
 ]
 
 const PRESETS = [
@@ -42,7 +51,8 @@ function CountsLine({ counts }) {
     <>
       <div className="cost-summary-row">
         <span>
-          {MARK_LABELS.O} {counts.full}일 · {MARK_LABELS['△']} {counts.half}일 · {MARK_LABELS.X} {counts.off}일
+          {MARK_LABELS.O} {counts.full}일 · {MARK_LABELS['△']} {counts.half}일 · {MARK_LABELS['연']} {counts.leave}일 ·{' '}
+          {MARK_LABELS.X} {counts.off}일
         </span>
       </div>
       <div className="cost-summary-row">
@@ -60,9 +70,10 @@ function DayGrid({ year, month, days, onCycle }) {
       <div className="day-grid" style={{ minWidth: n * 34 }}>
         {Array.from({ length: n }, (_, i) => i + 1).map((day) => {
           const mark = days[day]
-          const markClass = mark === 'O' ? 'day-cell-full' : mark === '△' ? 'day-cell-half' : mark === 'X' ? 'day-cell-off' : ''
+          const markClass =
+            mark === 'O' ? 'day-cell-full' : mark === '△' ? 'day-cell-half' : mark === '연' ? 'day-cell-leave' : mark === 'X' ? 'day-cell-off' : ''
           return (
-            <button key={day} type="button" className={`day-cell ${markClass}`} onClick={() => onCycle(day)}>
+            <button key={day} type="button" className={`day-cell ${markClass}`} onClick={() => onCycle(day)} disabled={!onCycle}>
               <span className="day-cell-num">{day}</span>
               <span className="day-cell-mark">{mark ?? '-'}</span>
             </button>
@@ -74,9 +85,9 @@ function DayGrid({ year, month, days, onCycle }) {
 }
 
 export default function StaffScheduleScreen() {
-  const { store } = useStore()
+  const { store, isAdmin } = useStore()
   const navigate = useNavigate()
-  const [section, setSection] = useState('upload')
+  const [section, setSection] = useState('daily')
 
   useEffect(() => {
     if (!store) navigate('/', { replace: true })
@@ -204,6 +215,15 @@ export default function StaffScheduleScreen() {
       days: e.days,
     }))
     const { error: err } = await supabase.from('staff_schedules').upsert(payload, { onConflict: 'store_code,employee_name,year,month' })
+    if (!err) {
+      // 사진에서 읽은 직원을 직원 명부에도 넣어 [오늘 근무 체크]에 나오게 한다(이미 있으면 그대로).
+      await supabase
+        .from('staff_members')
+        .upsert(
+          payload.map((p) => ({ store_code: p.store_code, name: p.employee_name })),
+          { onConflict: 'store_code,name', ignoreDuplicates: true },
+        )
+    }
     setSavingExtracted(false)
     if (err) {
       setUploadError(err.message)
@@ -216,7 +236,9 @@ export default function StaffScheduleScreen() {
   }
 
   // ---- 월별 조회·인쇄 ----
-  const [browseMonth, setBrowseMonth] = useState(lastMonthKey())
+  const [browseMonth, setBrowseMonth] = useState(thisMonthKey())
+  // 매니저는 이번 달만 고칠 수 있다(지난달·마감한 달은 메인 관리자). 마감은 DB에서도 막는다.
+  const browseEditable = isAdmin || browseMonth === thisMonthKey()
   const [browseRows, setBrowseRows] = useState([])
   const [browseLoading, setBrowseLoading] = useState(false)
   const [browseLoaded, setBrowseLoaded] = useState(false)
@@ -255,6 +277,7 @@ export default function StaffScheduleScreen() {
   }
 
   const cycleBrowseDay = (index, day) => {
+    if (!browseEditable) return
     setBrowseRows((prev) =>
       prev.map((r, i) => {
         if (i !== index) return r
@@ -394,10 +417,8 @@ export default function StaffScheduleScreen() {
         <button type="button" className="link-btn" onClick={() => navigate('/menu')}>
           ← 메인 메뉴
         </button>
-        <h1>직원 근무표</h1>
-        <p className="subtitle">
-          {store.name} · 근무표 사진을 올리면 {MARK_LABELS.O} / {MARK_LABELS['△']} / {MARK_LABELS.X}를 자동으로 읽어드려요
-        </p>
+        <h1>직원근무표</h1>
+        <p className="subtitle">{store.name} · 매일 근무한 직원·파출을 기록하고, 월 근무표로 모아 봐요</p>
       </div>
 
       {!supabase && <p className="hint">Supabase가 설정되지 않았습니다.</p>}
@@ -414,6 +435,10 @@ export default function StaffScheduleScreen() {
           </button>
         ))}
       </div>
+
+      {section === 'daily' && <DailyCheck store={store} isAdmin={isAdmin} onGoRoster={() => setSection('roster')} />}
+
+      {section === 'roster' && <StaffRoster store={store} />}
 
       {section === 'upload' && (
         <>
@@ -521,13 +546,21 @@ export default function StaffScheduleScreen() {
 
           {browseLoaded && browseRows.length > 0 && (
             <>
-              <p className="hint">이름이나 표시가 잘못됐으면 고친 뒤 "수정 저장"을 누르세요.</p>
+              <p className="hint">
+                {browseEditable
+                  ? '"자세히보기"에서 날짜 칸을 누를 때마다 종일(O) → 반타임(△) → 연차(연) → 휴무(X) → 빈칸 순으로 바뀌어요. 고친 뒤 "수정 저장"을 누르세요.'
+                  : '매니저는 이번 달 근무표만 고칠 수 있어요. 지난달은 보기만 돼요.'}
+              </p>
               {browseRows.map((row, i) => {
                 const [yearStr, monthStr] = browseMonth.split('-')
                 return (
                   <div className="cost-summary" key={row.id} style={{ textAlign: 'left' }}>
                     <div className="field" style={{ marginBottom: 8 }}>
-                      <input className="input" value={row.employee_name} onChange={(e) => updateBrowseName(i, e.target.value)} />
+                      {isAdmin ? (
+                        <input className="input" value={row.employee_name} onChange={(e) => updateBrowseName(i, e.target.value)} />
+                      ) : (
+                        <strong>{row.employee_name}</strong>
+                      )}
                     </div>
                     <CountsLine counts={countMarks(row.days)} />
                     <button type="button" className="link-btn" style={{ marginTop: 8 }} onClick={() => toggleBrowseDetail(i)}>
@@ -538,7 +571,7 @@ export default function StaffScheduleScreen() {
                         year={Number(yearStr)}
                         month={Number(monthStr)}
                         days={row.days}
-                        onCycle={(day) => cycleBrowseDay(i, day)}
+                        onCycle={browseEditable ? (day) => cycleBrowseDay(i, day) : null}
                       />
                     )}
                   </div>
@@ -546,7 +579,7 @@ export default function StaffScheduleScreen() {
               })}
 
               <div className="invoice-form">
-                <button type="button" className="btn-secondary" onClick={handleSaveBrowse} disabled={browseSaving}>
+                <button type="button" className="btn-secondary" onClick={handleSaveBrowse} disabled={browseSaving || !browseEditable}>
                   {browseSaving ? '저장 중...' : '수정 저장'}
                 </button>
                 <button type="button" className="btn-primary" onClick={handlePrint}>
@@ -667,6 +700,7 @@ export default function StaffScheduleScreen() {
                 ))}
                 <th>O(종일근무)</th>
                 <th>△(반타임)</th>
+                <th>연(연차)</th>
                 <th>X(휴무)</th>
               </tr>
             </thead>
@@ -681,6 +715,7 @@ export default function StaffScheduleScreen() {
                     ))}
                     <td>{counts.full}</td>
                     <td>{counts.half}</td>
+                    <td>{counts.leave}</td>
                     <td>{counts.off}</td>
                   </tr>
                 )
