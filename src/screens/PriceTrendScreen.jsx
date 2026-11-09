@@ -4,6 +4,8 @@ import { useStore } from '../context/StoreContext'
 import { supabase } from '../lib/supabaseClient'
 import { searchItemNames } from '../lib/itemSearch'
 import { UNIT_LABELS } from '../lib/units'
+import { monthBoundsOf, monthsWithData, monthLabel } from '../lib/dateRange'
+import { summarizeReceipts, formatQtyByUnit } from '../lib/quantitySummary'
 
 // 명세표의 실제 입고일(invoice_date)이 있으면 그걸 기준으로, 없으면 저장 시각(created_at)으로
 // 정렬한다. created_at은 사진을 "언제 업로드했는지"라 늦게 업로드된 예전 명세표가 있으면
@@ -92,7 +94,7 @@ export default function PriceTrendScreen() {
     setVendorFilter('all')
     supabase
       .from('invoices')
-      .select('vendor, unit_price, unit, invoice_date, created_at')
+      .select('vendor, unit_price, unit, quantity, amount, invoice_date, created_at')
       .eq('store_code', store.code)
       .eq('item_name', selectedItem)
       .order('created_at', { ascending: true })
@@ -102,7 +104,7 @@ export default function PriceTrendScreen() {
           setLoadingRows(false)
           return
         }
-        setRows((data ?? []).filter((r) => r.unit_price != null))
+        setRows(data ?? [])
         setLoadingRows(false)
       })
   }, [store, selectedItem])
@@ -184,8 +186,10 @@ export default function PriceTrendScreen() {
   }
 
   // 거래처별 최신 단가 비교: 거래처마다 가장 최근 입고 단가를 뽑아 저렴한 순으로 정렬
+  // 단가가 없는 입고(수량만 있는 줄)는 가격 비교·추이에서 빼고, 수량 합계에는 넣는다.
+  const priceRows = rows.filter((r) => r.unit_price != null)
   const latestByVendor = new Map()
-  for (const r of rows) {
+  for (const r of priceRows) {
     const existing = latestByVendor.get(r.vendor)
     if (!existing || rowDateValue(r) > rowDateValue(existing)) {
       latestByVendor.set(r.vendor, r)
@@ -195,14 +199,28 @@ export default function PriceTrendScreen() {
     .map(([vendor, r]) => ({ vendor, ...r }))
     .sort((a, b) => a.unit_price - b.unit_price)
 
-  const vendorNames = [...latestByVendor.keys()].sort((a, b) => a.localeCompare(b))
+  const vendorNames = [...new Set(rows.map((r) => r.vendor))].filter(Boolean).sort((a, b) => a.localeCompare(b))
 
-  // 가격 추이: 거래처/기간으로 좁혀서 입고일 기준 오름차순으로 정리 (변동률 계산용)
-  const trendRows = rows
+  // 거래처/기간으로 좁힌 입고 기록(입고일 기준 오름차순). 가격 추이는 단가 있는 줄만 쓴다.
+  const periodRows = rows
     .filter((r) => vendorFilter === 'all' || r.vendor === vendorFilter)
     .filter((r) => !dateFrom || (r.invoice_date && r.invoice_date >= dateFrom))
     .filter((r) => !dateTo || (r.invoice_date && r.invoice_date <= dateTo))
     .sort((a, b) => rowDateValue(a) - rowDateValue(b))
+  const trendRows = periodRows.filter((r) => r.unit_price != null)
+  const periodSummary = summarizeReceipts(periodRows)
+
+  // 월별 바로 보기: 이 품목(선택한 거래처)의 입고 기록이 있는 달만 버튼으로 보여준다.
+  const months = monthsWithData(rows.filter((r) => vendorFilter === 'all' || r.vendor === vendorFilter))
+  const activeMonth = months.find((ym) => {
+    const { start, end } = monthBoundsOf(ym)
+    return dateFrom === start && dateTo === end
+  })
+  const selectMonth = (ym) => {
+    const { start, end } = monthBoundsOf(ym)
+    setDateFrom(start)
+    setDateTo(end)
+  }
 
   const firstPrice = trendRows[0]?.unit_price
   const lastPrice = trendRows[trendRows.length - 1]?.unit_price
@@ -210,7 +228,7 @@ export default function PriceTrendScreen() {
   const trendPct = trendDiff != null && firstPrice !== 0 ? (trendDiff / firstPrice) * 100 : null
 
   // 목록 표시는 최신 날짜가 위로 오도록 내림차순
-  const trendRowsDesc = [...trendRows].reverse()
+  const periodRowsDesc = [...periodRows].reverse()
 
   return (
     <div className="screen screen-wide">
@@ -317,6 +335,28 @@ export default function PriceTrendScreen() {
               ))}
             </select>
           </div>
+          <div className="preset-row">
+            <button
+              type="button"
+              className={!dateFrom && !dateTo ? 'chip chip-active' : 'chip'}
+              onClick={() => {
+                setDateFrom('')
+                setDateTo('')
+              }}
+            >
+              전체 기간
+            </button>
+            {months.map((ym) => (
+              <button
+                key={ym}
+                type="button"
+                className={activeMonth === ym ? 'chip chip-active' : 'chip'}
+                onClick={() => selectMonth(ym)}
+              >
+                {monthLabel(ym)}
+              </button>
+            ))}
+          </div>
           <div className="date-range">
             <input
               type="date"
@@ -335,8 +375,27 @@ export default function PriceTrendScreen() {
             />
           </div>
 
-          {trendDiff != null && (
+          {(trendDiff != null || periodRows.length > 0) && (
             <div className="cost-summary">
+              {periodRows.length > 0 && (
+                <>
+                  <div className="cost-summary-row">
+                    <span>기간 내 입고 총 수량</span>
+                    <strong>{formatQtyByUnit(periodSummary.qtyByUnit)}</strong>
+                  </div>
+                  <div className="cost-summary-row">
+                    <span>입고 횟수</span>
+                    <strong>{periodSummary.count.toLocaleString()}회</strong>
+                  </div>
+                  {periodSummary.amount != null && (
+                    <div className="cost-summary-row">
+                      <span>입고 금액 합계</span>
+                      <strong>{Math.round(periodSummary.amount).toLocaleString()}원</strong>
+                    </div>
+                  )}
+                </>
+              )}
+              {trendDiff != null && (
               <div className="cost-summary-row">
                 <span>기간 내 가격 변동</span>
                 <strong className={trendDiff > 0 ? 'alert-up' : trendDiff < 0 ? 'alert-down' : ''}>
@@ -344,6 +403,7 @@ export default function PriceTrendScreen() {
                   {trendPct !== null && ` (${trendDiff > 0 ? '▲' : trendDiff < 0 ? '▼' : ''}${Math.abs(trendPct).toFixed(1)}%)`}
                 </strong>
               </div>
+              )}
             </div>
           )}
 
@@ -367,21 +427,28 @@ export default function PriceTrendScreen() {
             🔍 식봄에서 "{foodspringQuery.trim() || selectedItem}" 검색
           </a>
 
-          {!loadingRows && trendRows.length === 0 && <p className="hint">조건에 맞는 입고 기록이 없습니다.</p>}
+          {!loadingRows && periodRows.length === 0 && <p className="hint">조건에 맞는 입고 기록이 없습니다.</p>}
           <ul className="history-list">
-            {trendRowsDesc.map((r, i) => (
+            {periodRowsDesc.map((r, i) => (
               <li key={`${r.created_at}-${i}`} className="history-row">
                 <div className="history-row-main">
                   <span className="history-item">{r.invoice_date ?? new Date(r.created_at).toLocaleDateString('ko-KR')}</span>
                   <span>
-                    {Number(r.unit_price).toLocaleString()}원{r.unit ? `/${UNIT_LABELS[r.unit] ?? r.unit}` : ''}
+                    {r.unit_price != null
+                      ? `${Number(r.unit_price).toLocaleString()}원${r.unit ? `/${UNIT_LABELS[r.unit] ?? r.unit}` : ''}`
+                      : '단가 없음'}
                   </span>
                 </div>
-                {vendorFilter === 'all' && (
-                  <div className="history-row-sub">
-                    <span>{r.vendor}</span>
-                  </div>
-                )}
+                <div className="history-row-sub">
+                  {r.quantity != null && (
+                    <span>
+                      수량 {Number(r.quantity).toLocaleString()}
+                      {r.unit ? UNIT_LABELS[r.unit] ?? r.unit : ''}
+                    </span>
+                  )}
+                  {r.amount != null && <span>{Number(r.amount).toLocaleString()}원</span>}
+                  {vendorFilter === 'all' && <span>{r.vendor}</span>}
+                </div>
               </li>
             ))}
           </ul>
