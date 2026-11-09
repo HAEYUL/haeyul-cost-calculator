@@ -8,6 +8,7 @@ import { useGoBack } from '../hooks/usePageHistoryState'
 import AmountInput from '../components/AmountInput'
 import { latestInvoiceInfoByItem, computeMenuCost } from '../lib/costCalc'
 import { UNIT_LABELS } from '../lib/units'
+import { unusualQuantity } from '../lib/quantityCheck'
 import { findLinkedPayment, paidBatchIds } from '../lib/batchPayment'
 import { findVatAmountFixes } from '../lib/vatAmountFix'
 import { apiFetch } from '../lib/apiFetch'
@@ -209,7 +210,7 @@ export default function InvoiceScreen() {
     if (!store || !supabase) return
     supabase
       .from('invoices')
-      .select('item_name, vendor_id, unit, created_at')
+      .select('item_name, vendor_id, unit, quantity, created_at')
       .eq('store_code', store.code)
       .then(({ data, error: err }) => {
         if (!err) setItemNameRecords(data ?? [])
@@ -942,6 +943,15 @@ export default function InvoiceScreen() {
     })
     .filter(Boolean)
 
+  // 수량이 같은 물품의 평소 입고량보다 지나치게 많으면(사진 인식 오류·과다 주문) 행 아래에 확인 문구를 띄운다.
+  const quantityWarningFor = (item) => {
+    const typed = item.name.trim()
+    if (!typed || item.quantity === '') return null
+    const unit = item.unit || 'kg'
+    const history = itemNameRecords.filter((r) => r.item_name === typed && r.unit === unit).map((r) => r.quantity)
+    return unusualQuantity(history, item.quantity)
+  }
+
   return (
     <div className="screen screen-wide">
       <div className="screen-header">
@@ -1394,6 +1404,17 @@ export default function InvoiceScreen() {
                   ✕
                 </button>
                 </div>
+                {(() => {
+                  const warn = quantityWarningFor(item)
+                  if (!warn) return null
+                  const unitLabel = UNIT_LABELS[item.unit || 'kg'] ?? ''
+                  return (
+                    <p className="cost-warning item-qty-warning">
+                      ⚠️ 평소 입고량(약 {Math.round(warn.usual * 10) / 10}
+                      {unitLabel})보다 {Math.round(warn.factor * 10) / 10}배 많아요. 수량이 맞는지 확인해 주세요.
+                    </p>
+                  )
+                })()}
                 {focusedNameIndex === index &&
                   autocompleteCandidates(item.name).length > 0 && (
                     <div className="preset-row item-name-suggestions">

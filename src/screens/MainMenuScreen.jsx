@@ -3,7 +3,12 @@ import { useNavigate } from 'react-router-dom'
 import { useStore } from '../context/StoreContext'
 import { supabase } from '../lib/supabaseClient'
 import { latestInvoiceInfoByItem, computeMenuCost, computeAllSubRecipeUnitCosts } from '../lib/costCalc'
-import { computeReorderAlerts, mutedKeysFromDismissals } from '../lib/reorderCalc'
+import {
+  computeReorderAlerts,
+  groupAlertsByVendor,
+  mutedKeysFromDismissals,
+  orderedMarksFromDismissals,
+} from '../lib/reorderCalc'
 import { buildStockLedger } from '../lib/stockLedger'
 import { UNIT_LABELS } from '../lib/units'
 import { stockKey } from '../lib/stockKey'
@@ -48,7 +53,7 @@ export default function MainMenuScreen() {
   const [negativeStockCount, setNegativeStockCount] = useState(0)
   const [marginWarningMenus, setMarginWarningMenus] = useState([])
   const [marginWarningCount, setMarginWarningCount] = useState(0)
-  const [reorderAlerts, setReorderAlerts] = useState([])
+  const [reorderVendors, setReorderVendors] = useState([])
   const [signatures, setSignatures] = useState({})
   const [dismissals, setDismissals] = useState(new Map())
 
@@ -66,7 +71,7 @@ export default function MainMenuScreen() {
       supabase.from('vendor_opening_balances').select('vendor_id, as_of_date, balance').eq('store_code', store.code),
       supabase
         .from('invoices')
-        .select('item_name, unit, quantity, unit_price, vat_included_unit_price, invoice_date, created_at')
+        .select('item_name, unit, quantity, unit_price, vat_included_unit_price, invoice_date, created_at, vendor')
         .eq('store_code', store.code),
       supabase.from('stock_usage').select('item_name, unit, used_qty').eq('store_code', store.code),
       supabase.from('waste_records').select('item_name, unit, qty').eq('store_code', store.code),
@@ -79,6 +84,7 @@ export default function MainMenuScreen() {
         .eq('store_code', store.code),
       supabase.from('menu_prices').select('menu_name, selling_price').eq('store_code', store.code),
       supabase.from('dashboard_dismissals').select('card_key, signature').eq('store_code', store.code),
+      supabase.from('pinned_items').select('item_name').eq('store_code', store.code),
     ]).then(
       ([
         batchesRes,
@@ -93,6 +99,7 @@ export default function MainMenuScreen() {
         mappingRes,
         pricesRes,
         dismissalsRes,
+        pinsRes,
       ]) => {
       const err =
         batchesRes.error ||
@@ -182,6 +189,9 @@ export default function MainMenuScreen() {
       const reorderAlertsResult = computeReorderAlerts(invoicesRes.data ?? [], {
         stockByKey: stock,
         mutedKeys: mutedKeysFromDismissals(dismissalsRes.data),
+        orderedMarks: orderedMarksFromDismissals(dismissalsRes.data),
+        pinnedNames: new Set((pinsRes.data ?? []).map((p) => p.item_name)),
+        recipeItemNames: new Set((mappingRes.data ?? []).map((m) => m.invoice_item_name)),
       })
 
       setTotalBalance(balanceSum)
@@ -190,7 +200,7 @@ export default function MainMenuScreen() {
       setNegativeStockCount(negativeStock.length)
       setMarginWarningMenus(marginWarnings.slice(0, 5))
       setMarginWarningCount(marginWarnings.length)
-      setReorderAlerts(reorderAlertsResult)
+      setReorderVendors(groupAlertsByVendor(reorderAlertsResult))
 
       setSignatures({
         balance: makeSignature([`${Math.round(balanceSum)}`, `${Math.round(monthSum)}`]),
@@ -356,7 +366,7 @@ export default function MainMenuScreen() {
             </div>
           )}
 
-          {reorderAlerts.length > 0 && !isDismissed('reorder') && (
+          {reorderVendors.length > 0 && !isDismissed('reorder') && (
             <div className="cost-summary dashboard-card" onClick={() => navigate('/reorder-alerts')}>
               <button
                 type="button"
@@ -366,15 +376,24 @@ export default function MainMenuScreen() {
               >
                 ✕
               </button>
-              <p className="price-alert-title">🔔 재주문할 때가 된 품목 {reorderAlerts.length}개</p>
+              <p className="price-alert-title">🔔 오늘 주문할 거래처 {reorderVendors.length}곳</p>
               <ul className="price-alert-list">
-                {reorderAlerts.slice(0, 5).map((a) => (
-                  <li key={stockKey(a.itemName, a.unit)} className={a.status === 'overdue' ? 'alert-up' : 'cost-warning'}>
-                    {a.itemName}
+                {reorderVendors.slice(0, 5).map((g) => (
+                  <li key={g.vendor} className={g.urgentCount > 0 ? 'alert-up' : 'cost-warning'}>
+                    <button
+                      type="button"
+                      className="reorder-vendor-link"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        navigate(`/reorder-alerts?vendor=${encodeURIComponent(g.vendor)}`)
+                      }}
+                    >
+                      {g.vendor} · {g.items.length}품목{g.urgentCount > 0 ? ` (급함 ${g.urgentCount})` : ''} ›
+                    </button>
                   </li>
                 ))}
               </ul>
-              {reorderAlerts.length > 5 && <p className="hint">외 {reorderAlerts.length - 5}개 더 보기 →</p>}
+              {reorderVendors.length > 5 && <p className="hint">외 {reorderVendors.length - 5}곳 더 보기 →</p>}
             </div>
           )}
         </div>

@@ -1,5 +1,18 @@
 import { describe, it, expect } from 'vitest'
-import { analyzeReorder, computeReorderAlerts, mutedKeysFromDismissals, muteCardKey, MUTED_SIGNATURE } from './reorderCalc'
+import {
+  analyzeReorder,
+  computeReorderAlerts,
+  mutedKeysFromDismissals,
+  muteCardKey,
+  MUTED_SIGNATURE,
+  orderedCardKey,
+  orderedMarksFromDismissals,
+  groupAlertsByVendor,
+  buildOrderMessage,
+  roundOrderQty,
+  localDateStr,
+  NO_VENDOR,
+} from './reorderCalc'
 import { buildStockLedger } from './stockLedger'
 import { stockKey } from './stockKey'
 
@@ -130,7 +143,7 @@ describe('③ 품목별 알림 끄기', () => {
 })
 
 describe('정렬', () => {
-  it('주문 시기 지남 → 곧 주문 → 재고 적음, 같은 상태는 늦은 순', () => {
+  it('주문 시기 지남 → 곧 주문 → 재고 적음, 같은 상태·우선순위면 늦은 순', () => {
     const invoices = [
       ...rows('A', [['2026-11-01', 10], ['2026-11-04', 10], ['2026-11-07', 10]]), // 100%
       ...rows('B', [['2026-10-25', 10], ['2026-10-30', 10], ['2026-11-04', 10]]), // 6/5 = 120%
@@ -142,5 +155,134 @@ describe('정렬', () => {
       'A:overdue',
       'D:dueSoon',
     ])
+  })
+})
+
+const vrows = (item, vendor, list, unit = 'kg') =>
+  list.map(([invoice_date, quantity]) => ({ item_name: item, unit, vendor, invoice_date, quantity }))
+
+describe('입고되면 바로 빠짐', () => {
+  it('마지막 입고일이 오늘이면 알림에 없다', () => {
+    const r = rows('대파', [['2026-11-01', 10], ['2026-11-04', 10], ['2026-11-07', 10], ['2026-11-10', 10]])
+    expect(computeReorderAlerts(r, { now })).toEqual([])
+  })
+})
+
+describe('거래처', () => {
+  it('가장 최근에 사 온 거래처로 묶고 나머지는 otherVendors', () => {
+    const r = [
+      ...vrows('대파', 'A유통', [['2026-11-01', 10], ['2026-11-04', 10]]),
+      ...vrows('대파', 'B상회', [['2026-11-07', 10]]),
+    ]
+    const [a] = computeReorderAlerts(r, { now })
+    expect(a.vendor).toBe('B상회')
+    expect(a.otherVendors).toEqual(['A유통'])
+  })
+  it('거래처가 비어 있으면 "거래처 미지정"', () => {
+    const [a] = computeReorderAlerts(rows('대파', [['2026-11-01', 10], ['2026-11-04', 10], ['2026-11-07', 10]]), { now })
+    expect(a.vendor).toBe(NO_VENDOR)
+  })
+})
+
+describe('추천 주문량', () => {
+  it('하루 사용량 × 평소 주기 = 평소 한 번 주문량', () => {
+    const [a] = computeReorderAlerts(rows('대파', [['2026-11-01', 2], ['2026-11-04', 2], ['2026-11-07', 2]], 'box'), { now })
+    expect(a.recommendedQty).toBe(2)
+  })
+  it('재고를 믿을 수 있으면 남은 양만큼 줄인다', () => {
+    const invoices = rows('대파', [['2026-11-01', 10], ['2026-11-04', 10], ['2026-11-07', 10]])
+    const stockByKey = buildStockLedger({ invoices, usage: [{ item_name: '대파', unit: 'kg', used_qty: 27 }] })
+    const [a] = computeReorderAlerts(invoices, { now, stockByKey })
+    expect(a.recommendedQty).toBe(7) // 10 - 3
+  })
+  it('수량을 모르면 추천하지 않는다', () => {
+    const [a] = computeReorderAlerts(rows('대파', [['2026-11-01', null], ['2026-11-04', null], ['2026-11-07', null]]), { now })
+    expect(a.recommendedQty).toBeNull()
+  })
+  it('반올림', () => {
+    expect(roundOrderQty(1.2, 'box')).toBe(2)
+    expect(roundOrderQty(0.3, 'ea')).toBe(1)
+    expect(roundOrderQty(2.01, 'kg')).toBe(3)
+    expect(roundOrderQty(0.42, 'kg')).toBe(0.5)
+    expect(roundOrderQty(0, 'kg')).toBeNull()
+  })
+})
+
+describe('주문했어요', () => {
+  const invoices = rows('대파', [['2026-11-01', 10], ['2026-11-04', 10], ['2026-11-07', 10]])
+  const marks = (date) => orderedMarksFromDismissals([{ card_key: orderedCardKey('대파', 'kg'), signature: date }])
+
+  it('주문 후 3일 안에는 목록에서 숨긴다', () => {
+    const { alerts, ordered } = analyzeReorder(invoices, { now, orderedMarks: marks('2026-11-09') })
+    expect(alerts).toEqual([])
+    expect(ordered[0].orderedDate).toBe('2026-11-09')
+  })
+  it('3일이 지나도 입고가 없으면 "입고 안 됨"으로 맨 위에 다시 알린다', () => {
+    const extra = rows('양파', [['2026-10-25', 10], ['2026-10-30', 10], ['2026-11-04', 10]]) // 더 늦은 품목
+    const { alerts } = analyzeReorder([...invoices, ...extra], { now: new Date('2026-11-12'), orderedMarks: marks('2026-11-09') })
+    expect(alerts[0].itemName).toBe('대파')
+    expect(alerts[0].orderPending).toBe(true)
+  })
+  it('주문 뒤 입고되면 주문 기록은 끝나고 평소대로 계산한다', () => {
+    const received = [...invoices, ...rows('대파', [['2026-11-10', 10]])]
+    const { alerts, ordered } = analyzeReorder(received, { now, orderedMarks: marks('2026-11-09') })
+    expect(alerts).toEqual([])
+    expect(ordered).toEqual([])
+  })
+  it('취소 기록이나 날짜가 아닌 값은 무시한다', () => {
+    expect(orderedMarksFromDismissals([{ card_key: orderedCardKey('대파', 'kg'), signature: 'cancelled' }]).size).toBe(0)
+  })
+  it('localDateStr', () => {
+    expect(localDateStr(new Date(2026, 0, 5))).toBe('2026-01-05')
+  })
+})
+
+describe('우선순위', () => {
+  const same = [['2026-11-01', 10], ['2026-11-04', 10], ['2026-11-07', 10]]
+  it('같은 상태면 ★관심 품목 → 레시피 재료 → 자주 입고 순', () => {
+    const invoices = [
+      ...rows('자주', [['2026-10-04', 10], ['2026-10-10', 10], ['2026-10-16', 10], ['2026-10-22', 10], ['2026-10-28', 10], ['2026-11-03', 10]]),
+      ...rows('레시피', same),
+      ...rows('관심', same),
+      ...rows('보통', same),
+    ]
+    // 자주: 6일 주기, 7일 지남 → overdue (나머지도 3일 주기, 3일 지남 → overdue)
+    const order = computeReorderAlerts(invoices, {
+      now,
+      pinnedNames: new Set(['관심']),
+      recipeItemNames: new Set(['레시피']),
+    }).map((a) => a.itemName)
+    expect(order).toEqual(['관심', '레시피', '자주', '보통'])
+  })
+})
+
+describe('groupAlertsByVendor', () => {
+  it('급한 품목이 많은 거래처부터, 미지정은 맨 뒤', () => {
+    const alerts = [
+      { itemName: 'a', vendor: 'A', status: 'dueSoon', ratio: 0.9, recentReceipts: 1, pinned: false, recipeLinked: false, orderPending: false },
+      { itemName: 'b', vendor: 'A', status: 'dueSoon', ratio: 0.9, recentReceipts: 1, pinned: false, recipeLinked: false, orderPending: false },
+      { itemName: 'c', vendor: 'B', status: 'overdue', ratio: 1.2, recentReceipts: 1, pinned: false, recipeLinked: false, orderPending: false },
+      { itemName: 'd', vendor: NO_VENDOR, status: 'overdue', ratio: 2, recentReceipts: 1, pinned: false, recipeLinked: false, orderPending: false },
+    ]
+    const groups = groupAlertsByVendor(alerts)
+    expect(groups.map((g) => `${g.vendor}:${g.items.length}:${g.urgentCount}`)).toEqual(['B:1:1', 'A:2:0', `${NO_VENDOR}:1:1`])
+  })
+})
+
+describe('buildOrderMessage', () => {
+  it('거래처·매장 이름과 품목·수량으로 문구를 만든다', () => {
+    const msg = buildOrderMessage({
+      vendor: '퀸스유통',
+      storeName: '해율만두전골',
+      lines: [
+        { itemName: '염장연근채', qty: 2, unitLabel: '박스' },
+        { itemName: '단무지', qty: null },
+      ],
+    })
+    expect(msg).toBe('퀸스유통 사장님, 해율만두전골입니다.\n내일 배송 부탁드립니다.\n\n- 염장연근채 2박스\n- 단무지\n\n감사합니다.')
+  })
+  it('거래처 미지정이면 거래처 이름을 넣지 않는다', () => {
+    const msg = buildOrderMessage({ vendor: NO_VENDOR, storeName: '곤드레밥집', lines: [] })
+    expect(msg.startsWith('사장님, 곤드레밥집입니다.')).toBe(true)
   })
 })

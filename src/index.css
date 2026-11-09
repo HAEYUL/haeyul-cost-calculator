@@ -3998,3 +3998,143 @@ h1 {
 .login-screen.login-prompt h1 {
   font-family: var(--font-serif);
 }
+
+/* 재주문 알림: 거래처별 주문 */
+.reorder-tabs {
+  margin-top: 8px;
+}
+
+.reorder-vendor-link {
+  padding: 0;
+  border: none;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.reorder-vendor {
+  list-style: none;
+}
+
+.reorder-vendor-head {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+
+.reorder-vendor-name {
+  font-size: 17px;
+  font-weight: 700;
+}
+
+.reorder-vendor-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-muted);
+  font-size: 15px;
+  white-space: nowrap;
+}
+
+.reorder-items {
+  margin: 12px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.reorder-item {
+  padding: 12px 0;
+  border-top: 1px solid var(--border);
+}
+
+.reorder-item-check {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.reorder-item-check input {
+  width: 20px;
+  height: 20px;
+  margin-top: 2px;
+  flex-shrink: 0;
+}
+
+.reorder-badges {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 4px;
+}
+
+.reorder-item .reorder-badges {
+  margin-left: 28px;
+}
+
+.reorder-qty {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin: 8px 0 0 28px;
+}
+
+.reorder-qty .mini-btn {
+  min-width: 36px;
+  font-size: 17px;
+}
+
+.reorder-qty-input {
+  width: 80px;
+  padding: 6px 8px;
+  text-align: center;
+}
+
+.reorder-qty-unit {
+  min-width: 24px;
+  color: var(--text-muted);
+}
+
+.reorder-item .history-row-sub {
+  margin-left: 28px;
+  font-size: 14px;
+}
+
+.reorder-message-label {
+  display: block;
+  margin-top: 14px;
+  font-size: 14px;
+  color: var(--text-muted);
+}
+
+.reorder-message {
+  width: 100%;
+  box-sizing: border-box;
+  margin-top: 6px;
+  font-size: 15px;
+  line-height: 1.5;
+  resize: vertical;
+}
+
+.reorder-actions .btn-primary,
+.reorder-actions .btn-secondary {
+  margin-top: 10px;
+}
+
+.item-qty-warning {
+  margin: 4px 0 8px;
+  font-size: 14px;
+}
