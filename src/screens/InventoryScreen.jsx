@@ -13,7 +13,7 @@ import ActionMenu from '../components/ActionMenu'
 const NO_UNIT_KEY = 'none'
 
 export default function InventoryScreen() {
-  const { store } = useStore()
+  const { store, isAdmin } = useStore()
   const navigate = useNavigate()
 
   const [rows, setRows] = useState([])
@@ -334,7 +334,7 @@ export default function InventoryScreen() {
         <button type="button" className="cost-row-btn inv-main" onClick={() => navigate(detailPath(r))}>
           <span className="inv-name">
             <span className="history-item">{r.itemName}</span>
-            {r.unit === 'box' && !recipeUnitByItem.has(r.itemName) && (
+            {isAdmin && r.unit === 'box' && !recipeUnitByItem.has(r.itemName) && (
               <span
                 className="inv-badge inv-badge-warn"
                 title='박스당 개수/kg 환산 전이에요. "이름 수정" 또는 "레시피 단위"에서 등록할 수 있어요.'
@@ -374,18 +374,23 @@ export default function InventoryScreen() {
         <div className="inv-actions">
           <ActionMenu
             items={[
-              {
-                label: '이름 수정',
-                onClick: () => {
-                  setRenameTarget({ itemName: r.itemName, unit: r.unit })
-                  setRenameInput(r.itemName)
-                  setRenameUnit(r.unit)
-                  setRenameRatio('')
-                  setRenameMessage('')
-                },
-              },
-              { label: '합치기', onClick: () => openMergeTarget(r) },
-              { label: '레시피 단위 설정', onClick: () => openRecipeUnit(r) },
+              // 이름 수정·합치기·레시피 단위는 레시피 연결(관리자 전용)까지 바꾸므로 관리자만 보인다.
+              ...(isAdmin
+                ? [
+                    {
+                      label: '이름 수정',
+                      onClick: () => {
+                        setRenameTarget({ itemName: r.itemName, unit: r.unit })
+                        setRenameInput(r.itemName)
+                        setRenameUnit(r.unit)
+                        setRenameRatio('')
+                        setRenameMessage('')
+                      },
+                    },
+                    { label: '합치기', onClick: () => openMergeTarget(r) },
+                    { label: '레시피 단위 설정', onClick: () => openRecipeUnit(r) },
+                  ]
+                : []),
               { label: '재고 실사', onClick: () => navigate(detailPath(r), { state: { scrollTo: 'stock-count' } }) },
             ]}
           />

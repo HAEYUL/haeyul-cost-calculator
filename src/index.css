@@ -2812,7 +2812,7 @@ button.kpi-card {
   margin-top: 0;
 }
 
-/* ---------- 매니저 메인 화면: 촘촘하게 (휴대폰 한 화면에 메뉴 5개) ---------- */
+/* ---------- 매니저 메인 화면: 촘촘하게 (매니저 메뉴) ---------- */
 .role-badge-manager {
   align-self: center;
   margin: 6px 0 0;
@@ -4121,10 +4121,6 @@ h1 {
 .item-qty-warning {
   margin: 4px 0 8px;
   font-size: 14px;
-}
-
-.reorder-row-static {
-  text-align: left;
 }
 
 .manager-reorder {

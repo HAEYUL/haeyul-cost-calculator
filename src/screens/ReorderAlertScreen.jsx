@@ -252,7 +252,7 @@ function VendorPanel({ group, defaultOpen, onMarkOrdered, saving }) {
 }
 
 export default function ReorderAlertScreen() {
-  const { store, isAdmin } = useStore()
+  const { store } = useStore()
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const focusVendor = searchParams.get('vendor')
@@ -361,16 +361,9 @@ export default function ReorderAlertScreen() {
 
   const renderItemRow = (item, actions = []) => (
     <li key={item.key} className="history-row">
-      {/* 재고 관리 상세 화면은 관리자 전용이라, 매니저 화면에서는 눌러도 넘어가지 않게 한다. */}
-      {isAdmin ? (
-        <button type="button" className="cost-row-btn" onClick={() => goDetail(item)}>
-          <ItemSummary item={item} />
-        </button>
-      ) : (
-        <div className="reorder-row-static">
-          <ItemSummary item={item} />
-        </div>
-      )}
+      <button type="button" className="cost-row-btn" onClick={() => goDetail(item)}>
+        <ItemSummary item={item} />
+      </button>
       {actions.length > 0 && (
         <div className="history-row-main-end">
           {actions.map((a) => (
