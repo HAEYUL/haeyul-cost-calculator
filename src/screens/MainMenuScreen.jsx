@@ -3,7 +3,8 @@ import { useNavigate } from 'react-router-dom'
 import { useStore } from '../context/StoreContext'
 import { supabase } from '../lib/supabaseClient'
 import { latestInvoiceInfoByItem, computeMenuCost, computeAllSubRecipeUnitCosts } from '../lib/costCalc'
-import { computeReorderAlerts } from '../lib/reorderCalc'
+import { computeReorderAlerts, mutedKeysFromDismissals } from '../lib/reorderCalc'
+import { buildStockLedger } from '../lib/stockLedger'
 import { UNIT_LABELS } from '../lib/units'
 import { stockKey } from '../lib/stockKey'
 import { rowDateStr } from '../lib/rowDateStr'
@@ -138,29 +139,13 @@ export default function MainMenuScreen() {
       }
 
       // 재고 부족(마이너스) 품목
-      const stock = new Map()
-      const ensure = (itemName, unit) => {
-        const key = stockKey(itemName, unit)
-        if (!stock.has(key)) stock.set(key, { itemName, unit, received: 0, used: 0, wasted: 0, adjusted: 0 })
-        return stock.get(key)
-      }
-      for (const row of invoicesRes.data ?? []) {
-        if (row.quantity == null) continue
-        ensure(row.item_name, row.unit).received += Number(row.quantity)
-      }
-      for (const row of usageRes.data ?? []) {
-        ensure(row.item_name, row.unit).used += Number(row.used_qty)
-      }
-      for (const row of wasteRes.data ?? []) {
-        ensure(row.item_name, row.unit).wasted += Number(row.qty)
-      }
-      for (const row of adjustmentsRes.data ?? []) {
-        ensure(row.item_name, row.unit).adjusted += Number(row.delta)
-      }
-      const negativeStock = [...stock.values()]
-        .map((r) => ({ ...r, current: r.received - r.used - r.wasted + r.adjusted }))
-        .filter((r) => r.current < 0)
-        .sort((a, b) => a.current - b.current)
+      const stock = buildStockLedger({
+        invoices: invoicesRes.data ?? [],
+        usage: usageRes.data ?? [],
+        waste: wasteRes.data ?? [],
+        adjustments: adjustmentsRes.data ?? [],
+      })
+      const negativeStock = [...stock.values()].filter((r) => r.current < 0).sort((a, b) => a.current - b.current)
 
       // 원가율이 높은(마진이 낮은) 메뉴
       const mappingByIngredient = new Map(
@@ -194,7 +179,10 @@ export default function MainMenuScreen() {
         .filter((m) => m.ratio != null && m.ratio >= MARGIN_WARNING_RATIO)
         .sort((a, b) => b.ratio - a.ratio)
 
-      const reorderAlertsResult = computeReorderAlerts(invoicesRes.data ?? [])
+      const reorderAlertsResult = computeReorderAlerts(invoicesRes.data ?? [], {
+        stockByKey: stock,
+        mutedKeys: mutedKeysFromDismissals(dismissalsRes.data),
+      })
 
       setTotalBalance(balanceSum)
       setMonthTotal(monthSum)
