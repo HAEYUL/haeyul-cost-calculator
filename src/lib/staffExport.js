@@ -1,37 +1,59 @@
-import { countMarks, daysInMonth } from './staffSchedule'
-import { WEEKDAY_LABELS } from './staffDaily'
+import { employmentLabel } from './staffPosition'
 
 function hhmm(t) {
   return t ? String(t).slice(0, 5) : ''
 }
 
-// 월 근무표 엑셀: 1번 시트 "근무표"(직원 × 날짜 + 합계), 2번 시트 "파출"(그 달 파출 근무 목록 + 합계)
-// rows: staff_schedules 행들(employee_name, days), order: 직원 이름 순서(명부 순서), shifts/workers: 파출
-export function buildStaffMonthSheets({ storeName, year, month, rows, order = [], shifts = [], workers = [] }) {
-  const n = daysInMonth(year, month)
-  const dayNums = Array.from({ length: n }, (_, i) => i + 1)
-  const rank = new Map(order.map((name, i) => [name, i]))
-  const sorted = [...rows].sort(
-    (a, b) => (rank.get(a.employee_name) ?? 9999) - (rank.get(b.employee_name) ?? 9999) || a.employee_name.localeCompare(b.employee_name),
-  )
+const DISPATCH_POS = { hall: '홀', kitchen: '주방' }
 
-  const title = [`${storeName} ${year}년 ${month}월 직원 근무표`]
-  const legend = ['O=종일  △=반타임  연=연차  X=휴무  (총 근무일 = 종일 + 반타임)']
-  const head = ['직원명', ...dayNums.map((d) => d), '종일', '반타임', '연차', '휴무', '총 근무일']
-  const weekdays = ['요일', ...dayNums.map((d) => WEEKDAY_LABELS[new Date(year, month - 1, d).getDay()]), '', '', '', '', '']
-  const body = sorted.map((r) => {
-    const c = countMarks(r.days)
-    return [r.employee_name, ...dayNums.map((d) => r.days?.[String(d)] ?? ''), c.full, c.half, c.leave, c.off, c.total]
-  })
-  const totals = body.reduce(
-    (acc, row) => acc.map((v, i) => v + Number(row[n + 1 + i] || 0)),
-    [0, 0, 0, 0, 0],
-  )
+// 월 근무표 엑셀(buildMonthModel 결과를 그대로 쓴다)
+// 1번 시트 "근무표": 포지션별 묶음(소계) × 날짜 + 요일 + 합계, 아래에 포지션별 일별 인원(직원+파출)·파출 수
+// 2번 시트 "파출": 그 달 파출 근무 목록 + 사람별 합계
+export function buildStaffMonthSheets({ storeName, model, shifts = [], workers = [] }) {
+  const { year, month, days, groups, headcount, dispatchPerDay } = model
+  const n = days.length
+  const blankDays = days.map(() => '')
+  const rows = [
+    [`${storeName} ${year}년 ${month}월 직원 근무표`],
+    ['O=종일  △=반타임  연=연차  X=휴무  (총 근무일 = 종일 + 반타임)'],
+    [],
+    ['직원명', '고용', ...days.map((d) => d.day), '종일', '반타임', '연차', '휴무', '총 근무일'],
+    ['', '요일', ...days.map((d) => d.weekday), '', '', '', '', ''],
+  ]
+  const bold = [0, 3, 4]
+  const all = { full: 0, half: 0, leave: 0, off: 0, total: 0 }
+  for (const g of groups) {
+    bold.push(rows.length)
+    const s = g.subtotal
+    rows.push([`[${g.position}] ${g.rows.length}명`, '', ...blankDays, s.full, s.half, s.leave, s.off, s.total])
+    for (const r of g.rows) {
+      const c = r.counts
+      rows.push([
+        r.name,
+        employmentLabel(r.employmentType),
+        ...days.map((d) => r.days[String(d.day)] ?? ''),
+        c.full,
+        c.half,
+        c.leave,
+        c.off,
+        c.total,
+      ])
+    }
+    for (const k of Object.keys(all)) all[k] += s[k]
+  }
+  bold.push(rows.length)
+  rows.push(['전체 합계', '', ...blankDays, all.full, all.half, all.leave, all.off, all.total])
+  rows.push([])
+  bold.push(rows.length)
+  rows.push(['일별 인원', '(직원+파출)', ...days.map((d) => d.day), '', '', '', '', ''])
+  for (const h of headcount) rows.push([h.position, '', ...h.perDay.map((c) => c.total), '', '', '', '', ''])
+  rows.push(['파출', '', ...dispatchPerDay, '', '', '', '', ''])
+
   const staffSheet = {
     name: '근무표',
-    rows: [title, legend, [], head, weekdays, ...body, ['합계', ...dayNums.map(() => ''), ...totals]],
-    colWidths: [12, ...dayNums.map(() => 4.5), 7, 7, 7, 7, 9],
-    boldRows: [0, 3, 4, 5 + body.length],
+    rows,
+    colWidths: [12, 8, ...Array.from({ length: n }, () => 4.5), 7, 7, 7, 7, 9],
+    boldRows: bold,
     titleRows: [0, 1],
   }
 
@@ -41,7 +63,7 @@ export function buildStaffMonthSheets({ storeName, year, month, rows, order = []
     .map((s) => [
       s.work_date,
       workerById.get(s.worker_id)?.name ?? '',
-      s.position ?? '',
+      DISPATCH_POS[s.position] ?? s.position ?? '',
       hhmm(s.start_time),
       hhmm(s.end_time),
       Number(s.wage || 0),

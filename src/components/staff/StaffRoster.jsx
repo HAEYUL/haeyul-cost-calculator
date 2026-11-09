@@ -1,6 +1,86 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../../lib/supabaseClient'
 import { WEEKDAY_LABELS } from '../../lib/staffDaily'
+import { EMPLOYMENT_TYPES, NO_POSITION, POSITION_PRESETS, employmentLabel } from '../../lib/staffPosition'
+
+// 포지션: [홀] [주방] [기타 ___] — 기타는 직접 입력(예: 카운터, 주방보조). 다시 누르면 해제(미지정).
+function PositionPicker({ value, onChange, disabled }) {
+  const isPreset = POSITION_PRESETS.includes(value)
+  const [custom, setCustom] = useState(value && !isPreset ? value : '')
+  const [customOpen, setCustomOpen] = useState(Boolean(value && !isPreset))
+  useEffect(() => {
+    const preset = POSITION_PRESETS.includes(value)
+    setCustomOpen(Boolean(value && !preset))
+    setCustom(value && !preset ? value : '')
+  }, [value])
+  return (
+    <div className="staff-weekdays" role="group" aria-label="포지션">
+      {POSITION_PRESETS.map((p) => (
+        <button
+          key={p}
+          type="button"
+          className={`chip staff-weekday${value === p ? ' chip-active' : ''}`}
+          aria-pressed={value === p}
+          disabled={disabled}
+          onClick={() => {
+            setCustomOpen(false)
+            onChange(value === p ? null : p)
+          }}
+        >
+          {p}
+        </button>
+      ))}
+      <button
+        type="button"
+        className={`chip staff-weekday${customOpen ? ' chip-active' : ''}`}
+        aria-pressed={customOpen}
+        disabled={disabled}
+        onClick={() => {
+          if (customOpen) {
+            setCustomOpen(false)
+            if (value && !POSITION_PRESETS.includes(value)) onChange(null)
+          } else setCustomOpen(true)
+        }}
+      >
+        기타
+      </button>
+      {customOpen && (
+        <input
+          className="input staff-position-input"
+          value={custom}
+          maxLength={20}
+          placeholder="예: 카운터"
+          disabled={disabled}
+          onChange={(e) => setCustom(e.target.value)}
+          onBlur={() => {
+            const t = custom.trim()
+            if ((t || null) !== (value && !POSITION_PRESETS.includes(value) ? value : null)) onChange(t || null)
+          }}
+          aria-label="포지션 직접 입력"
+        />
+      )}
+    </div>
+  )
+}
+
+function EmploymentPicker({ value, onChange, disabled }) {
+  return (
+    <div className="staff-weekdays" role="group" aria-label="고용 형태">
+      {EMPLOYMENT_TYPES.map((t) => (
+        <button
+          key={t.key}
+          type="button"
+          className={`chip staff-weekday${value === t.key ? ' chip-active' : ''}`}
+          aria-pressed={value === t.key}
+          disabled={disabled}
+          onClick={() => onChange(value === t.key ? null : t.key)}
+        >
+          {t.label}
+        </button>
+      ))}
+    </div>
+  )
+}
 
 function WeekdayPicker({ value, onChange, disabled }) {
   return (
@@ -37,6 +117,8 @@ export default function StaffRoster({ store }) {
 
   const [newName, setNewName] = useState('')
   const [newOff, setNewOff] = useState([])
+  const [newPosition, setNewPosition] = useState(null)
+  const [newEmployment, setNewEmployment] = useState(null)
   const [showRetired, setShowRetired] = useState(false)
 
   useEffect(() => {
@@ -45,7 +127,7 @@ export default function StaffRoster({ store }) {
     setLoading(true)
     supabase
       .from('staff_members')
-      .select('id, name, off_weekdays, active, sort_order')
+      .select('id, name, off_weekdays, active, sort_order, position, employment_type')
       .eq('store_code', store.code)
       .order('sort_order')
       .order('name')
@@ -84,7 +166,15 @@ export default function StaffRoster({ store }) {
     const maxOrder = members.reduce((mx, m) => Math.max(mx, m.sort_order ?? 0), 0)
     const { error: err } = await supabase
       .from('staff_members')
-      .insert({ store_code: store.code, name, off_weekdays: newOff, active: true, sort_order: maxOrder + 1 })
+      .insert({
+        store_code: store.code,
+        name,
+        off_weekdays: newOff,
+        position: newPosition,
+        employment_type: newEmployment,
+        active: true,
+        sort_order: maxOrder + 1,
+      })
     setBusyId('')
     if (err) {
       setError(err.message)
@@ -92,6 +182,8 @@ export default function StaffRoster({ store }) {
     }
     setNewName('')
     setNewOff([])
+    setNewPosition(null)
+    setNewEmployment(null)
     setMessage(`${name} 직원을 등록했어요.`)
     setReloadKey((k) => k + 1)
   }
@@ -144,6 +236,14 @@ export default function StaffRoster({ store }) {
           />
         </div>
         <div className="field">
+          <label>포지션</label>
+          <PositionPicker value={newPosition} onChange={setNewPosition} />
+        </div>
+        <div className="field">
+          <label>고용 형태 (선택)</label>
+          <EmploymentPicker value={newEmployment} onChange={setNewEmployment} />
+        </div>
+        <div className="field">
           <label>평소 쉬는 요일 (선택)</label>
           <WeekdayPicker value={newOff} onChange={setNewOff} />
           <p className="hint">고른 요일이 아닌 날은 [오늘 근무 체크]에서 "종일"로 미리 골라져요.</p>
@@ -163,7 +263,13 @@ export default function StaffRoster({ store }) {
         {active.map((m, i) => (
           <li key={m.id} className="history-row">
             <div className="history-row-main">
-              <span className="history-item">{m.name}</span>
+              <span className="history-item">
+                {m.name}
+                <span className="staff-member-tags">
+                  {m.position ? m.position : NO_POSITION}
+                  {m.employment_type ? ` · ${employmentLabel(m.employment_type)}` : ''}
+                </span>
+              </span>
               <span className="history-row-main-end">
                 <button type="button" className="mini-btn" onClick={() => move(i, -1)} disabled={i === 0} aria-label={`${m.name} 위로`}>
                   ▲
@@ -179,6 +285,15 @@ export default function StaffRoster({ store }) {
                 </button>
               </span>
             </div>
+            <p className="staff-roster-label">포지션</p>
+            <PositionPicker value={m.position ?? null} disabled={busyId === m.id} onChange={(next) => update(m, { position: next })} />
+            <p className="staff-roster-label">고용 형태</p>
+            <EmploymentPicker
+              value={m.employment_type ?? null}
+              disabled={busyId === m.id}
+              onChange={(next) => update(m, { employment_type: next })}
+            />
+            <p className="staff-roster-label">평소 쉬는 요일</p>
             <WeekdayPicker
               value={m.off_weekdays ?? []}
               disabled={busyId === m.id}

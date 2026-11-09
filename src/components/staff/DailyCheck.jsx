@@ -15,6 +15,7 @@ import {
   parseDate,
   shiftDate,
 } from '../../lib/staffDaily'
+import { POSITION_ICONS, dispatchPositionName, groupByPosition } from '../../lib/staffPosition'
 
 function won(n) {
   return `${Number(n || 0).toLocaleString()}원`
@@ -58,7 +59,7 @@ export default function DailyCheck({ store, isAdmin, onGoRoster }) {
     Promise.all([
       supabase
         .from('staff_members')
-        .select('id, name, off_weekdays, active, sort_order')
+        .select('id, name, off_weekdays, active, sort_order, position, employment_type')
         .eq('store_code', store.code)
         .eq('active', true)
         .order('sort_order')
@@ -119,6 +120,20 @@ export default function DailyCheck({ store, isAdmin, onGoRoster }) {
   const workerById = new Map(workers.map((w) => [w.id, w]))
   const shiftWorkerIds = new Set(shifts.map((s) => s.worker_id))
   const fixedNotYet = workers.filter((w) => w.is_fixed && !shiftWorkerIds.has(w.id))
+  const groups = groupByPosition(members)
+  const isWorking = (name) => ['O', '△'].includes(selections.get(name))
+  const dispatchCount = (position) => shifts.filter((s) => dispatchPositionName(s.position) === position).length
+  const headcountLine = groups
+    .map((g) => {
+      const staff = g.members.filter((m) => isWorking(m.name)).length
+      const d = dispatchCount(g.position)
+      return `${g.position} ${staff + d}명${d ? ` (파출 ${d})` : ''}`
+    })
+    .join(' · ')
+  const dispatchByPositionText = ['홀', '주방']
+    .map((p) => `${p} ${dispatchCount(p)}명`)
+    .concat(shifts.some((s) => !dispatchPositionName(s.position)) ? [`포지션 없음 ${shifts.filter((s) => !dispatchPositionName(s.position)).length}명`] : [])
+    .join(' · ')
 
   const choose = (name, mark) => {
     if (!editable) return
@@ -214,39 +229,50 @@ export default function DailyCheck({ store, isAdmin, onGoRoster }) {
             근무한 사람만 고르세요. 고르지 않은 사람은 저장할 때 <b>휴무</b>로 기록돼요.
             {!saved && ' 평소 근무하는 요일인 직원은 미리 "종일"로 골라 뒀어요.'}
           </p>
-          <ul className="staff-daily-list">
-            {members.map((m) => {
-              const mark = selections.get(m.name) ?? null
-              return (
-                <li key={m.id} className="staff-daily-row">
-                  <div className="staff-daily-name">
-                    <span className="history-item">{m.name}</span>
-                    {(m.off_weekdays ?? []).length > 0 && (
-                      <span className="hint">평소 휴무 {m.off_weekdays.map((d) => WEEKDAY_LABELS[d]).join('·')}</span>
-                    )}
-                  </div>
-                  <div className="staff-daily-choices" role="group" aria-label={`${m.name} 근무`}>
-                    {DAILY_CHOICES.map((c) => (
-                      <button
-                        key={c.mark}
-                        type="button"
-                        className={`chip staff-choice${mark === c.mark ? ` chip-active staff-choice-${c.label}` : ''}`}
-                        aria-pressed={mark === c.mark}
-                        disabled={!editable}
-                        onClick={() => choose(m.name, c.mark)}
-                      >
-                        {c.label}
-                      </button>
-                    ))}
-                    {mark == null && <span className="staff-off-label">휴무</span>}
-                  </div>
-                </li>
-              )
-            })}
-          </ul>
+          {groups.map((g) => (
+            <section key={g.position} className="staff-daily-group">
+              <h3 className="staff-daily-group-title">
+                {POSITION_ICONS[g.position] ?? '👤'} {g.position}
+                <span className="hint">
+                  근무 {g.members.filter((m) => isWorking(m.name)).length} / {g.members.length}명
+                </span>
+              </h3>
+              <ul className="staff-daily-list">
+                {g.members.map((m) => {
+                  const mark = selections.get(m.name) ?? null
+                  return (
+                    <li key={m.id} className="staff-daily-row">
+                      <div className="staff-daily-name">
+                        <span className="history-item">{m.name}</span>
+                        {(m.off_weekdays ?? []).length > 0 && (
+                          <span className="hint">평소 휴무 {m.off_weekdays.map((d) => WEEKDAY_LABELS[d]).join('·')}</span>
+                        )}
+                      </div>
+                      <div className="staff-daily-choices" role="group" aria-label={`${m.name} 근무`}>
+                        {DAILY_CHOICES.map((c) => (
+                          <button
+                            key={c.mark}
+                            type="button"
+                            className={`chip staff-choice${mark === c.mark ? ` chip-active staff-choice-${c.label}` : ''}`}
+                            aria-pressed={mark === c.mark}
+                            disabled={!editable}
+                            onClick={() => choose(m.name, c.mark)}
+                          >
+                            {c.label}
+                          </button>
+                        ))}
+                        {mark == null && <span className="staff-off-label">휴무</span>}
+                      </div>
+                    </li>
+                  )
+                })}
+              </ul>
+            </section>
+          ))}
           <p className="staff-daily-count">
             종일 {counts.O} · 반타임 {counts['△']} · 연차 {counts['연']} · 휴무 {counts.X}
           </p>
+          {headcountLine && <p className="staff-daily-headcount">오늘 인원(직원+파출): {headcountLine}</p>}
           {editable && (
             <div className="staff-daily-save">
               <button type="button" className="btn-primary" onClick={handleSave} disabled={saving}>
@@ -258,7 +284,9 @@ export default function DailyCheck({ store, isAdmin, onGoRoster }) {
         </>
       )}
 
-      <h2 className="section-title">👷 파출</h2>
+      <h2 className="section-title">
+        👷 파출 {shifts.length > 0 && <span className="hint staff-dispatch-summary">{dispatchByPositionText}</span>}
+      </h2>
       {dispatchError && <p className="error-text">{dispatchError}</p>}
       {shifts.length === 0 && fixedNotYet.length === 0 && !dispatchError && <p className="hint">이 날 등록된 파출 근무가 없어요.</p>}
       {shifts.length > 0 && (
@@ -270,7 +298,7 @@ export default function DailyCheck({ store, isAdmin, onGoRoster }) {
                 <span>{won(s.wage)}</span>
               </div>
               <div className="history-row-sub">
-                {s.position && <span>{s.position}</span>}
+                {s.position && <span>{dispatchPositionName(s.position) ?? s.position}</span>}
                 {(s.start_time || s.end_time) && (
                   <span>
                     {hhmm(s.start_time)}~{hhmm(s.end_time)}
@@ -293,7 +321,7 @@ export default function DailyCheck({ store, isAdmin, onGoRoster }) {
                 </button>
               </div>
               <div className="history-row-sub">
-                {w.default_position && <span>{w.default_position}</span>}
+                {w.default_position && <span>{dispatchPositionName(w.default_position) ?? w.default_position}</span>}
                 {(w.default_start || w.default_end) && (
                   <span>
                     {hhmm(w.default_start)}~{hhmm(w.default_end)}
