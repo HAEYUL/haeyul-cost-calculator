@@ -7,10 +7,8 @@ import {
   buildOrderList,
   groupAlertsByVendor,
   localDateStr,
-  mutedKeysFromDismissals,
   muteCardKey,
   orderedCardKey,
-  orderedMarksFromDismissals,
   MAX_ITEM_ALERTS,
   MUTED_SIGNATURE,
   UNMUTED_SIGNATURE,
@@ -18,7 +16,7 @@ import {
   ORDER_WAIT_DAYS,
   STALE_RATIO,
 } from '../lib/reorderCalc'
-import { buildStockLedger } from '../lib/stockLedger'
+import { loadReorderInputs } from '../lib/reorderData'
 import { UNIT_LABELS } from '../lib/units'
 
 const NO_UNIT_KEY = 'none'
@@ -110,6 +108,27 @@ function ItemFacts({ item }) {
       {item.basis === 'interval' && <span>(수량이 빠진 입고가 있어 날짜로만 계산)</span>}
       {item.otherVendors.length > 0 && <span>다른 거래처에서도 구매: {item.otherVendors.join(', ')}</span>}
     </div>
+  )
+}
+
+function ItemSummary({ item }) {
+  return (
+    <>
+      <div className="history-row-main">
+        <span className="history-item">{item.itemName}</span>
+        <StatusBadges item={item} />
+      </div>
+      <div className="history-row-sub">
+        <span>{item.vendor}</span>
+        {item.recommendedQty != null && (
+          <span>
+            추천 주문량 {fmtQty(item.recommendedQty)}
+            {unitLabelOf(item.unit)}
+          </span>
+        )}
+      </div>
+      <ItemFacts item={item} />
+    </>
   )
 }
 
@@ -233,7 +252,7 @@ function VendorPanel({ group, defaultOpen, onMarkOrdered, saving }) {
 }
 
 export default function ReorderAlertScreen() {
-  const { store } = useStore()
+  const { store, isAdmin } = useStore()
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const focusVendor = searchParams.get('vendor')
@@ -255,41 +274,23 @@ export default function ReorderAlertScreen() {
     if (!store || !supabase) return
     setLoading(true)
     setError('')
-    Promise.all([
-      supabase.from('invoices').select('item_name, unit, quantity, invoice_date, vendor').eq('store_code', store.code),
-      supabase.from('stock_usage').select('item_name, unit, used_qty').eq('store_code', store.code),
-      supabase.from('waste_records').select('item_name, unit, qty').eq('store_code', store.code),
-      supabase.from('stock_adjustments').select('item_name, unit, delta').eq('store_code', store.code),
-      supabase
-        .from('dashboard_dismissals')
-        .select('card_key, signature')
-        .eq('store_code', store.code)
-        .like('card_key', 'reorder-%'),
-      supabase.from('pinned_items').select('item_name').eq('store_code', store.code),
-      // 레시피 연결 정보는 관리자만 볼 수 있다(매니저는 빈 목록 → 우선순위에서만 빠짐).
-      supabase.from('ingredient_mapping').select('invoice_item_name').eq('store_code', store.code),
-    ]).then(([invoicesRes, usageRes, wasteRes, adjustmentsRes, marksRes, pinsRes, mappingRes]) => {
-      const err = invoicesRes.error || usageRes.error || wasteRes.error || adjustmentsRes.error || marksRes.error
-      if (err) {
+    let cancelled = false
+    loadReorderInputs(store.code)
+      .then((inputs) => {
+        if (cancelled) return
+        setRawData(inputs)
+        setMutedKeys(inputs.mutedKeys)
+        setOrderedMarks(inputs.orderedMarks)
+        setLoading(false)
+      })
+      .catch((err) => {
+        if (cancelled) return
         setError(err.message)
         setLoading(false)
-        return
-      }
-      setRawData({
-        invoices: invoicesRes.data ?? [],
-        stockByKey: buildStockLedger({
-          invoices: invoicesRes.data ?? [],
-          usage: usageRes.data ?? [],
-          waste: wasteRes.data ?? [],
-          adjustments: adjustmentsRes.data ?? [],
-        }),
-        pinnedNames: new Set((pinsRes.data ?? []).map((p) => p.item_name)),
-        recipeItemNames: new Set((mappingRes.error ? [] : mappingRes.data ?? []).map((m) => m.invoice_item_name)),
       })
-      setMutedKeys(mutedKeysFromDismissals(marksRes.data))
-      setOrderedMarks(orderedMarksFromDismissals(marksRes.data))
-      setLoading(false)
-    })
+    return () => {
+      cancelled = true
+    }
   }, [store])
 
   if (!store) return null
@@ -360,22 +361,16 @@ export default function ReorderAlertScreen() {
 
   const renderItemRow = (item, actions = []) => (
     <li key={item.key} className="history-row">
-      <button type="button" className="cost-row-btn" onClick={() => goDetail(item)}>
-        <div className="history-row-main">
-          <span className="history-item">{item.itemName}</span>
-          <StatusBadges item={item} />
+      {/* 재고 관리 상세 화면은 관리자 전용이라, 매니저 화면에서는 눌러도 넘어가지 않게 한다. */}
+      {isAdmin ? (
+        <button type="button" className="cost-row-btn" onClick={() => goDetail(item)}>
+          <ItemSummary item={item} />
+        </button>
+      ) : (
+        <div className="reorder-row-static">
+          <ItemSummary item={item} />
         </div>
-        <div className="history-row-sub">
-          <span>{item.vendor}</span>
-          {item.recommendedQty != null && (
-            <span>
-              추천 주문량 {fmtQty(item.recommendedQty)}
-              {unitLabelOf(item.unit)}
-            </span>
-          )}
-        </div>
-        <ItemFacts item={item} />
-      </button>
+      )}
       {actions.length > 0 && (
         <div className="history-row-main-end">
           {actions.map((a) => (
