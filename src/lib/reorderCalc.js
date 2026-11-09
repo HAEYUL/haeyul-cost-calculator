@@ -280,14 +280,9 @@ export function groupAlertsByVendor(alerts) {
   )
 }
 
-export const DEFAULT_ORDER_GREETING = '{거래처} 사장님, {매장}입니다.\n내일 배송 부탁드립니다.'
-
-// 주문 문구. lines: [{ itemName, qty, unitLabel }] (qty가 없으면 이름만)
-export function buildOrderMessage({ vendor, storeName, lines, greeting = DEFAULT_ORDER_GREETING }) {
-  const head = greeting
-    .replaceAll('{거래처}', vendor === NO_VENDOR ? '' : vendor)
-    .replaceAll('{매장}', storeName ?? '')
-    .trim()
-  const body = lines.map((l) => (l.qty != null && l.qty !== '' ? `- ${l.itemName} ${l.qty}${l.unitLabel ?? ''}` : `- ${l.itemName}`))
-  return [head, '', ...body, '', '감사합니다.'].join('\n')
+// 카톡에 붙여넣을 주문 목록: 인사말 없이 "품목 수량" 한 줄씩. lines: [{ itemName, qty, unitLabel }] (qty가 없으면 이름만)
+export function buildOrderList(lines) {
+  return lines
+    .map((l) => (l.qty != null && l.qty !== '' ? `${l.itemName} ${l.qty}${l.unitLabel ?? ''}` : l.itemName))
+    .join('\n')
 }

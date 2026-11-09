@@ -8,7 +8,7 @@ import {
   orderedCardKey,
   orderedMarksFromDismissals,
   groupAlertsByVendor,
-  buildOrderMessage,
+  buildOrderList,
   roundOrderQty,
   localDateStr,
   NO_VENDOR,
@@ -269,20 +269,16 @@ describe('groupAlertsByVendor', () => {
   })
 })
 
-describe('buildOrderMessage', () => {
-  it('거래처·매장 이름과 품목·수량으로 문구를 만든다', () => {
-    const msg = buildOrderMessage({
-      vendor: '퀸스유통',
-      storeName: '해율만두전골',
-      lines: [
-        { itemName: '염장연근채', qty: 2, unitLabel: '박스' },
-        { itemName: '단무지', qty: null },
-      ],
-    })
-    expect(msg).toBe('퀸스유통 사장님, 해율만두전골입니다.\n내일 배송 부탁드립니다.\n\n- 염장연근채 2박스\n- 단무지\n\n감사합니다.')
+describe('buildOrderList', () => {
+  it('인사말 없이 품목과 수량만 한 줄씩', () => {
+    const text = buildOrderList([
+      { itemName: '염장연근채', qty: 2, unitLabel: '박스' },
+      { itemName: '단무지', qty: null },
+      { itemName: '대파', qty: 0.5, unitLabel: 'kg' },
+    ])
+    expect(text).toBe('염장연근채 2박스\n단무지\n대파 0.5kg')
   })
-  it('거래처 미지정이면 거래처 이름을 넣지 않는다', () => {
-    const msg = buildOrderMessage({ vendor: NO_VENDOR, storeName: '곤드레밥집', lines: [] })
-    expect(msg.startsWith('사장님, 곤드레밥집입니다.')).toBe(true)
+  it('품목이 없으면 빈 문자열', () => {
+    expect(buildOrderList([])).toBe('')
   })
 })
