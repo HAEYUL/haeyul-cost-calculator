@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js'
+import { createPaginatedFetch } from './paginatedFetch'
 
 const url = import.meta.env.VITE_SUPABASE_URL
 const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY
@@ -16,6 +17,8 @@ export const supabase =
           persistSession: true,
           autoRefreshToken: true,
         },
+        // 목록 조회가 1,000줄(Supabase 기본 상한)에서 잘리지 않도록 끝까지 이어 받는다. paginatedFetch.js 참고.
+        global: { fetch: createPaginatedFetch() },
       })
     : null
 
