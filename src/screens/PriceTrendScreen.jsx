@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useStore } from '../context/StoreContext'
 import { supabase } from '../lib/supabaseClient'
+import { searchItemNames } from '../lib/itemSearch'
 import { UNIT_LABELS } from '../lib/units'
 
 // 명세표의 실제 입고일(invoice_date)이 있으면 그걸 기준으로, 없으면 저장 시각(created_at)으로
@@ -121,12 +122,10 @@ export default function PriceTrendScreen() {
     : []
 
   // 거래처를 고르지 않아도 물품명만으로 바로 찾을 수 있게, 전체 거래처의 물품명을 대상으로
-  // 입력한 글자로 "시작하는" 물품만 걸러서 보여준다(중간에 포함된 건 잡지 않음).
+  // 입력한 글자가 이름 어디에든 들어 있으면 찾는다(앞글자부터 맞는 이름이 먼저, 띄어쓰기 무시).
   const allItemNames = [...new Set(invoiceIndex.map((r) => r.item_name))].sort((a, b) => a.localeCompare(b))
-  const trimmedDirectSearch = directSearch.trim().toLowerCase()
-  const directSuggestions = trimmedDirectSearch
-    ? allItemNames.filter((name) => name.toLowerCase().startsWith(trimmedDirectSearch)).slice(0, 8)
-    : []
+  const trimmedDirectSearch = directSearch.trim()
+  const directSuggestions = searchItemNames(allItemNames, trimmedDirectSearch)
 
   const handleSelectDirectItem = (name) => {
     setSelectedItem(name)
@@ -234,7 +233,7 @@ export default function PriceTrendScreen() {
           className="input"
           value={directSearch}
           onChange={(e) => setDirectSearch(e.target.value)}
-          placeholder="예: 대파"
+          placeholder="예: 연근, 대파 (이름 일부만 입력해도 돼요)"
         />
       </div>
       {directSuggestions.length > 0 && (
@@ -251,7 +250,7 @@ export default function PriceTrendScreen() {
         </ul>
       )}
       {trimmedDirectSearch && directSuggestions.length === 0 && (
-        <p className="hint">"{directSearch}"(으)로 시작하는 물품이 없어요.</p>
+        <p className="hint">"{directSearch}"이(가) 들어간 물품이 없어요.</p>
       )}
 
       <div className="field">
