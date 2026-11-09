@@ -37,7 +37,11 @@ export default function DispatchShiftFormScreen() {
   const [loading, setLoading] = useState(true)
   const [original, setOriginal] = useState(null)
 
-  const [date, setDate] = useState(todayStr())
+  // 직원근무표 [오늘 근무 체크]에서 다른 날짜로 들어오면 ?date=YYYY-MM-DD로 그 날짜를 채운다.
+  const [date, setDate] = useState(() => {
+    const d = searchParams.get('date')
+    return d && /^\d{4}-\d{2}-\d{2}$/.test(d) ? d : todayStr()
+  })
   const [workerId, setWorkerId] = useState(null)
   const [nameInput, setNameInput] = useState('')
   const [creatingNew, setCreatingNew] = useState(false)

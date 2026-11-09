@@ -1,5 +1,5 @@
 // 메인 메뉴 버튼과 PC 화면 왼쪽 메뉴판이 같은 목록을 쓴다.
-// MENU_SECTIONS = 메인 관리자(전체 메뉴), MANAGER_MENU_SECTIONS = 매니저(메뉴 7개).
+// MENU_SECTIONS = 메인 관리자(전체 메뉴), MANAGER_MENU_SECTIONS = 매니저(메뉴 8개).
 export const MENU_SECTIONS = [
   {
     title: '입고 · 재고',
@@ -25,10 +25,11 @@ export const MENU_SECTIONS = [
     ],
   },
   {
-    title: '인력 · 파출',
+    title: '직원근무 · 파출',
     area: 'dispatch',
     icon: 'user',
     items: [
+      { label: '직원근무표', path: '/staff-schedule', icon: 'users' },
       { label: '파출 관리', path: '/dispatch', icon: 'user' },
       { label: '파출비 송금 관리', path: '/dispatch-payments', icon: 'send' },
       { label: '파출 세무 출력', path: '/dispatch-report', icon: 'print' },
@@ -63,7 +64,6 @@ export const MENU_SECTIONS = [
       { label: '매니저 전달사항', path: '/notices', icon: 'mega' },
       { label: '알림 설정', path: '/notification-settings', icon: 'bell' },
       { label: '데이터 백업', path: '/backup', icon: 'save' },
-      { label: '직원 근무표', path: '/staff-schedule', icon: 'users' },
       { label: '불편사항/건의사항', path: '/feedback', icon: 'chat' },
       { label: '사용법 물어보기', path: '/ask', icon: 'help' },
       { label: '매장(매니저) 비밀번호 변경', path: '/change-pin', icon: 'lock' },
@@ -94,10 +94,13 @@ export const MANAGER_MENU_SECTIONS = [
     ],
   },
   {
-    title: '인력',
+    title: '직원근무 · 파출',
     area: 'dispatch',
     icon: 'user',
-    items: [{ label: '파출 관리', path: '/dispatch', icon: 'user' }],
+    items: [
+      { label: '직원근무표', path: '/staff-schedule', icon: 'users' },
+      { label: '파출 관리', path: '/dispatch', icon: 'user' },
+    ],
   },
 ]
 
@@ -108,7 +111,7 @@ export function menuSectionsFor(role) {
   return role === 'admin' ? MENU_SECTIONS : MANAGER_MENU_SECTIONS
 }
 
-// 매니저가 들어갈 수 있는 주소: 메인 메뉴, 매니저 메뉴 7개와 그 하위 화면(명세표 수정, 거래처 상세, 파출 등록·개인 페이지)
+// 매니저가 들어갈 수 있는 주소: 메인 메뉴, 매니저 메뉴 8개와 그 하위 화면(명세표 수정, 거래처 상세, 파출 등록·개인 페이지)
 export function isPathAllowed(role, pathname) {
   if (role === 'admin') return true
   if (pathname === '/menu' || pathname === '/notices' || pathname.startsWith('/notices/')) return true

@@ -934,6 +934,15 @@ h1 {
   color: var(--text-muted);
 }
 
+.day-cell-leave {
+  border-color: #4a7bd0;
+  color: #4a7bd0;
+}
+
+.day-cell:disabled {
+  cursor: default;
+}
+
 .print-schedule {
   display: none;
 }
@@ -4125,4 +4134,119 @@ h1 {
 
 .manager-reorder {
   margin-top: 16px;
+}
+
+/* 직원근무표: 오늘 근무 체크 · 직원 관리 */
+.staff-daily-nav {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 12px;
+}
+
+.staff-daily-nav .mini-btn {
+  min-width: 40px;
+  padding: 9px 10px;
+  font-size: 15px;
+}
+
+.staff-daily-date {
+  flex: 1;
+  max-width: 220px;
+  padding: 8px 10px;
+}
+
+.staff-daily-title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 12px 0 0;
+  font-size: 19px;
+  font-weight: 700;
+}
+
+.staff-daily-list {
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.staff-daily-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.staff-daily-name {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 90px;
+}
+
+.staff-daily-name .hint {
+  margin: 0;
+  font-size: 13px;
+}
+
+.staff-daily-choices {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.staff-choice {
+  padding: 8px 14px;
+  box-shadow: none;
+}
+
+.chip-active.staff-choice-반타임 {
+  background: #b8860b;
+  border-color: #b8860b;
+  color: #fff;
+}
+
+.chip-active.staff-choice-연차 {
+  background: #4a7bd0;
+  border-color: #4a7bd0;
+  color: #fff;
+}
+
+.staff-off-label {
+  min-width: 32px;
+  color: var(--text-muted);
+  font-size: 14px;
+}
+
+.staff-daily-count {
+  margin: 10px 0 0;
+  color: var(--text-muted);
+  font-size: 15px;
+}
+
+.staff-daily,
+.staff-roster {
+  text-align: left;
+}
+
+.staff-daily-save {
+  margin-bottom: 8px;
+}
+
+.staff-weekdays {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.staff-weekday {
+  min-width: 40px;
+  padding: 6px 10px;
+  box-shadow: none;
 }

@@ -19,6 +19,7 @@ import AdminOverview from '../components/AdminOverview'
 import ManagerNoticeBox from '../components/ManagerNoticeBox'
 import ManagerOverview from '../components/ManagerOverview'
 import ManagerReorderCard from '../components/ManagerReorderCard'
+import StaffStatusCard from '../components/staff/StaffStatusCard'
 import Icon from '../components/Icon'
 import { eyebrowDate, nowLabel } from '../lib/storeSummary'
 import { storeColor } from '../data/stores'
@@ -273,6 +274,7 @@ export default function MainMenuScreen() {
       </header>
 
       {!isAdmin && supabase && <ManagerOverview storeCode={store.code} />}
+      {!isAdmin && supabase && <StaffStatusCard storeCode={store.code} mode="manager" />}
       {!isAdmin && supabase && <ManagerReorderCard storeCode={store.code} />}
       {!isAdmin && supabase && <ManagerNoticeBox storeCode={store.code} />}
 
@@ -367,6 +369,8 @@ export default function MainMenuScreen() {
               )}
             </div>
           )}
+
+          <StaffStatusCard key={store.code} storeCode={store.code} mode="admin" />
 
           {reorderVendors.length > 0 && !isDismissed('reorder') && (
             <div className="cost-summary dashboard-card" onClick={() => navigate('/reorder-alerts')}>

@@ -142,11 +142,11 @@ declare
   t text;
   p record;
   -- 매니저도 읽기만 하는 표 (거래처 관리 화면): 장부 시작 잔액. 거래처 결제는 매니저와 공유(아래 일반 규칙)
-  manager_read text[] := array['vendor_opening_balances'];
+  manager_read text[] := array['vendor_opening_balances', 'staff_month_closes'];  -- staff_month_closes: staff-daily.sql
   admin_only text[] := array[
     'store_settlements',        -- 매장운영결산
     'recipes', 'recipe_meta', 'ingredient_mapping', 'menu_prices',  -- 레시피·원가
-    'staff_schedules',          -- 직원 근무표
+    -- 직원 근무표(staff_schedules)는 staff-daily.sql부터 매니저도 자기 매장 것을 쓴다(아래 일반 규칙).
     'store_business_info',      -- 사업자 정보(세무 출력)
     'sales_daily'               -- 일매출 (sales.sql)
   ];
