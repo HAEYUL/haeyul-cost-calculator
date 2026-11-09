@@ -4487,3 +4487,592 @@ h1 {
   font-weight: 700;
   background: #f3f0e8;
 }
+
+/* =====================================================================
+   오늘의 매장 현황 (관리자 홈 · StoreBoard)
+   ===================================================================== */
+.overview-lower-single {
+  grid-template-columns: 1fr !important;
+}
+
+.sb {
+  --sb-red: #c0392b;
+  --sb-orange: #c27c0e;
+  --sb-green: #2f8f5b;
+  position: relative;
+  margin-top: 4px;
+  padding: 22px 22px 8px;
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  background: var(--surface);
+  box-shadow: var(--shadow-card);
+  text-align: left;
+}
+
+.sb::before {
+  content: '';
+  position: absolute;
+  left: 22px;
+  right: 22px;
+  top: 0;
+  height: 2px;
+  border-radius: 0 0 2px 2px;
+  background: linear-gradient(90deg, var(--gold), transparent 70%);
+}
+
+.sb-hd {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 6px 16px;
+  padding-bottom: 14px;
+}
+
+.sb-eyebrow {
+  margin: 0;
+  color: var(--gold);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+}
+
+.sb-title {
+  margin: 2px 0 0;
+  font-family: var(--font-serif);
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.sb-meta {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 12.5px;
+}
+
+.sb-cols,
+.sb-row-main {
+  display: grid;
+  grid-template-columns: minmax(150px, 1.3fr) 1fr 1fr 1fr minmax(150px, auto);
+  align-items: center;
+  gap: 12px;
+}
+
+.sb-cols {
+  padding: 8px 14px;
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  color: var(--text-muted);
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+
+.sb-cols span:last-child {
+  text-align: right;
+}
+
+.sb-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.sb-row {
+  position: relative;
+  border-bottom: 1px solid var(--border);
+}
+
+.sb-row:last-child {
+  border-bottom: none;
+}
+
+.sb-row::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 14px;
+  bottom: 14px;
+  width: 3px;
+  border-radius: 3px;
+  background: var(--c);
+}
+
+.sb-row-main {
+  width: 100%;
+  padding: 16px 14px 16px 16px;
+  border: none;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.sb-row-main:hover {
+  background: color-mix(in srgb, var(--gold) 6%, transparent);
+}
+
+.sb-row-open .sb-row-main {
+  background: color-mix(in srgb, var(--gold) 8%, transparent);
+}
+
+.sb-store {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.sb-store-name {
+  font-family: var(--font-serif);
+  font-size: 16.5px;
+  font-weight: 700;
+}
+
+.sb-store-info {
+  color: var(--text-muted);
+  font-size: 11.5px;
+}
+
+.sb-metric {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.sb-metric-label {
+  display: none;
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.sb-metric-value {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 6px;
+  font-size: 17px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+}
+
+.sb-metric-value small {
+  margin-left: -4px;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.sb-muted {
+  color: var(--text-muted);
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.sb-delta {
+  padding: 1px 6px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  font-weight: 700;
+}
+
+.sb-delta-up {
+  color: var(--sb-green);
+  background: color-mix(in srgb, var(--sb-green) 12%, transparent);
+}
+
+.sb-delta-down {
+  color: var(--sb-red);
+  background: color-mix(in srgb, var(--sb-red) 10%, transparent);
+}
+
+.sb-food-good {
+  color: var(--sb-green);
+}
+
+.sb-food-warn {
+  color: var(--sb-orange);
+}
+
+.sb-food-danger {
+  color: var(--sb-red);
+}
+
+.sb-gauge {
+  position: relative;
+  flex-basis: 100%;
+  height: 4px;
+  max-width: 120px;
+  margin-top: 4px;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--text-muted) 18%, transparent);
+}
+
+.sb-gauge-fill {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  border-radius: 4px;
+}
+
+.sb-gauge-good {
+  background: var(--sb-green);
+}
+
+.sb-gauge-warn {
+  background: var(--sb-orange);
+}
+
+.sb-gauge-danger {
+  background: var(--sb-red);
+}
+
+.sb-gauge-mark {
+  position: absolute;
+  top: -2px;
+  bottom: -2px;
+  width: 1px;
+  background: var(--text-muted);
+  opacity: 0.6;
+}
+
+.sb-skeleton {
+  display: block;
+  width: 70%;
+  max-width: 110px;
+  height: 16px;
+  border-radius: 6px;
+  background: linear-gradient(90deg, var(--border), color-mix(in srgb, var(--border) 40%, transparent), var(--border));
+  background-size: 200% 100%;
+  animation: sb-shimmer 1.2s ease-in-out infinite;
+}
+
+@keyframes sb-shimmer {
+  from {
+    background-position: 200% 0;
+  }
+  to {
+    background-position: -200% 0;
+  }
+}
+
+.sb-status {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.sb-chev {
+  display: inline-flex;
+  color: var(--text-muted);
+  transform: rotate(90deg);
+  transition: transform 0.2s ease;
+}
+
+.sb-row-open .sb-chev {
+  transform: rotate(-90deg);
+}
+
+.sb-signal-group {
+  display: inline-flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.sb-signal {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 11px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  font-size: 12.5px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.sb-signal i,
+.sb-alert-title i {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.sb-signal-ok {
+  color: var(--sb-green);
+  border-color: color-mix(in srgb, var(--sb-green) 30%, transparent);
+  background: color-mix(in srgb, var(--sb-green) 8%, transparent);
+}
+
+.sb-signal-red {
+  color: var(--sb-red);
+  border-color: color-mix(in srgb, var(--sb-red) 30%, transparent);
+  background: color-mix(in srgb, var(--sb-red) 8%, transparent);
+}
+
+.sb-signal-orange {
+  color: var(--sb-orange);
+  border-color: color-mix(in srgb, var(--sb-orange) 30%, transparent);
+  background: color-mix(in srgb, var(--sb-orange) 8%, transparent);
+}
+
+.sb-signal-wait {
+  color: var(--text-muted);
+  border-color: var(--border);
+}
+
+/* 펼친 내용 */
+.sb-detail {
+  padding: 4px 16px 18px 16px;
+  background: color-mix(in srgb, var(--gold) 4%, transparent);
+  animation: sb-open 0.18s ease-out;
+}
+
+@keyframes sb-open {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.sb-facts {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 14px;
+  padding: 14px 16px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+}
+
+.sb-fact {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.sb-fact span {
+  color: var(--text-muted);
+  font-size: 11.5px;
+}
+
+.sb-fact b {
+  font-size: 15px;
+  font-variant-numeric: tabular-nums;
+}
+
+.sb-fact-op {
+  color: var(--gold);
+  font-family: var(--font-serif);
+  font-size: 18px;
+}
+
+.sb-fact-note {
+  flex-basis: 100%;
+  margin: 2px 0 0;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.sb-alerts {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.sb-alert-group ul {
+  margin: 4px 0 0;
+  padding: 0;
+  list-style: none;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+  overflow: hidden;
+}
+
+.sb-alert-group li + li {
+  border-top: 1px solid var(--border);
+}
+
+.sb-alert-title {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: 0;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.sb-level-red .sb-alert-title {
+  color: var(--sb-red);
+}
+
+.sb-level-orange .sb-alert-title {
+  color: var(--sb-orange);
+}
+
+.sb-level-yellow .sb-alert-title {
+  color: var(--gold);
+}
+
+.sb-alert {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 11px 14px;
+  border: none;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  font-size: 14px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.sb-alert:hover {
+  background: color-mix(in srgb, var(--gold) 7%, transparent);
+}
+
+.sb-alert .icon,
+.sb-alert svg {
+  flex-shrink: 0;
+  color: var(--text-muted);
+}
+
+.sb-all-clear {
+  margin: 0;
+  padding: 12px 14px;
+  border: 1px solid color-mix(in srgb, var(--sb-green) 30%, transparent);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--sb-green) 7%, transparent);
+  color: var(--sb-green);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.sb-loading-more {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 12.5px;
+}
+
+.sb-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.sb-actions button {
+  padding: 8px 14px;
+  border: 1px solid color-mix(in srgb, var(--gold) 55%, var(--border));
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.sb-actions button:hover {
+  border-color: var(--gold);
+  color: var(--gold);
+}
+
+@media (prefers-color-scheme: dark) {
+  .sb {
+    --sb-red: #f0857a;
+    --sb-orange: #e5b45a;
+    --sb-green: #6fcf97;
+  }
+}
+
+/* 휴대폰: 매장 이름 + 신호등 / 숫자 3칸 */
+@media (max-width: 760px) {
+  .sb {
+    padding: 18px 14px 4px;
+  }
+
+  .sb::before {
+    left: 14px;
+    right: 14px;
+  }
+
+  .sb-cols {
+    display: none;
+  }
+
+  .sb-row-main {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
+    grid-template-areas:
+      'store store status'
+      'm1 m2 m3';
+    align-items: start;
+    gap: 12px 10px;
+    padding: 14px 6px 14px 14px;
+  }
+
+  .sb-store {
+    grid-area: store;
+  }
+
+  .sb-status {
+    grid-area: status;
+    gap: 6px;
+  }
+
+  .sb-row-main > .sb-metric:nth-of-type(2) {
+    grid-area: m1;
+  }
+
+  .sb-row-main > .sb-metric:nth-of-type(3) {
+    grid-area: m2;
+  }
+
+  .sb-row-main > .sb-metric:nth-of-type(4) {
+    grid-area: m3;
+  }
+
+  .sb-metric-label {
+    display: block;
+  }
+
+  .sb-metric-value {
+    font-size: 15px;
+  }
+
+  .sb-signal-group {
+    flex-wrap: nowrap;
+    gap: 4px;
+  }
+
+  .sb-signal {
+    gap: 4px;
+    padding: 3px 8px;
+    font-size: 11.5px;
+  }
+
+  .sb-detail {
+    padding: 4px 8px 14px 12px;
+  }
+}
