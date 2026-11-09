@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { Fragment, useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useStore } from '../context/StoreContext'
 import { supabase } from '../lib/supabaseClient'
@@ -7,6 +7,9 @@ import { cycleMark, daysInMonth, countMarks, MARK_LABELS } from '../lib/staffSch
 import { apiFetch } from '../lib/apiFetch'
 import DailyCheck from '../components/staff/DailyCheck'
 import { mergeScheduleDays } from '../lib/staffDaily'
+import { buildMonthModel } from '../lib/staffPosition'
+import { todayStr } from '../lib/vendorLedger'
+import MonthTable from '../components/staff/MonthTable'
 import { buildStaffMonthSheets } from '../lib/staffExport'
 import { downloadXlsx } from '../lib/xlsxWriter'
 import { fetchShifts, fetchWorkers } from '../lib/dispatchApi'
@@ -241,10 +244,12 @@ export default function StaffScheduleScreen() {
   const [browseLoaded, setBrowseLoaded] = useState(false)
   const [browseError, setBrowseError] = useState('')
   const [browseMessage, setBrowseMessage] = useState('')
-  const [browseOpenDetail, setBrowseOpenDetail] = useState(new Set())
   const [browseSaving, setBrowseSaving] = useState(false)
   const [browseClosed, setBrowseClosed] = useState(false)
-  const [browseOrder, setBrowseOrder] = useState([])
+  const [browseMembers, setBrowseMembers] = useState([])
+  const [browseShifts, setBrowseShifts] = useState([])
+  const [browseWorkers, setBrowseWorkers] = useState([])
+  const [browseSaved, setBrowseSaved] = useState(new Set())
   const [closing, setClosing] = useState(false)
   const [exporting, setExporting] = useState(false)
   // 매니저는 이번 달만 고칠 수 있다(지난달·마감한 달은 메인 관리자). 마감은 DB에서도 막는다.
@@ -258,7 +263,11 @@ export default function StaffScheduleScreen() {
     setBrowseLoading(true)
     setBrowseError('')
     setBrowseMessage('')
-    const [{ data, error: err }, closesRes, membersRes] = await Promise.all([
+    const year = Number(yearStr)
+    const month = Number(monthStr)
+    const start = `${yearStr}-${monthStr}-01`
+    const nextMonth = month === 12 ? `${year + 1}-01-01` : `${year}-${pad2(month + 1)}-01`
+    const [{ data, error: err }, closesRes, membersRes, logsRes, dispatch] = await Promise.all([
       supabase
         .from('staff_schedules')
         .select('id, employee_name, days')
@@ -267,36 +276,46 @@ export default function StaffScheduleScreen() {
         .eq('month', Number(monthStr))
         .order('employee_name'),
       supabase.from('staff_month_closes').select('year').eq('store_code', store.code).eq('year', Number(yearStr)).eq('month', Number(monthStr)),
-      supabase.from('staff_members').select('name, sort_order').eq('store_code', store.code).order('sort_order').order('name'),
+      supabase
+        .from('staff_members')
+        .select('name, sort_order, position, employment_type')
+        .eq('store_code', store.code)
+        .order('sort_order')
+        .order('name'),
+      supabase.from('staff_day_logs').select('work_date').eq('store_code', store.code).gte('work_date', start).lt('work_date', nextMonth),
+      // 일별 인원·엑셀 파출 시트용 (실패해도 근무표는 보여준다)
+      Promise.all([fetchShifts({ storeCodes: store.code, start, end: nextMonth }), fetchWorkers(store.code)]).catch(() => [[], []]),
     ])
     setBrowseLoading(false)
     if (err) {
       setBrowseError(err.message)
       return
     }
-    const order = (membersRes.data ?? []).map((m) => m.name)
-    const rank = new Map(order.map((n, i) => [n, i]))
-    setBrowseOrder(order)
+    setBrowseMembers(membersRes.error ? [] : membersRes.data ?? [])
+    setBrowseSaved(new Set((logsRes.data ?? []).map((l) => l.work_date)))
+    setBrowseShifts(dispatch[0] ?? [])
+    setBrowseWorkers(dispatch[1] ?? [])
     setBrowseClosed(!closesRes.error && (closesRes.data ?? []).length > 0)
-    // 직원 명부 순서대로(명부에 없는 이름은 뒤에 가나다순)
-    setBrowseRows(
-      (data ?? [])
-        .map((r) => ({ ...r, days: r.days ?? {} }))
-        .sort((a, b) => (rank.get(a.employee_name) ?? 9999) - (rank.get(b.employee_name) ?? 9999) || a.employee_name.localeCompare(b.employee_name)),
-    )
+    setBrowseRows((data ?? []).map((r) => ({ ...r, days: r.days ?? {} })))
     setBrowseLoaded(true)
-    setBrowseOpenDetail(new Set())
   }
 
-  const updateBrowseName = (index, name) => {
-    setBrowseRows((prev) => prev.map((r, i) => (i === index ? { ...r, employee_name: name } : r)))
+  // 사진에서 이름이 잘못 읽힌 경우 등: 관리자만 근무표의 직원 이름을 고친다("수정 저장"을 눌러야 저장).
+  const renameBrowse = (name) => {
+    const next = window.prompt(`"${name}"의 이름을 무엇으로 고칠까요?\n(직원 명부의 이름과 같게 맞춰 주세요)`, name)?.trim()
+    if (!next || next === name) return
+    if (browseRows.some((r) => r.employee_name === next)) {
+      setBrowseError(`"${next}" 이름의 근무가 이미 이 달에 있어요. 겹치지 않는 이름으로 고쳐 주세요.`)
+      return
+    }
+    setBrowseRows((prev) => prev.map((r) => (r.employee_name === name ? { ...r, employee_name: next } : r)))
   }
 
-  const cycleBrowseDay = (index, day) => {
+  const cycleBrowseDay = (name, day) => {
     if (!browseEditable) return
     setBrowseRows((prev) =>
-      prev.map((r, i) => {
-        if (i !== index) return r
+      prev.map((r) => {
+        if (r.employee_name !== name) return r
         const next = { ...r.days }
         const nextMark = cycleMark(next[day])
         if (nextMark == null) delete next[day]
@@ -306,14 +325,17 @@ export default function StaffScheduleScreen() {
     )
   }
 
-  const toggleBrowseDetail = (index) => {
-    setBrowseOpenDetail((prev) => {
-      const next = new Set(prev)
-      if (next.has(index)) next.delete(index)
-      else next.add(index)
-      return next
-    })
-  }
+  const browseModel = browseLoaded
+    ? buildMonthModel({
+        year: Number(browseMonth.split('-')[0]),
+        month: Number(browseMonth.split('-')[1]),
+        rows: browseRows,
+        members: browseMembers,
+        shifts: browseShifts,
+        savedDates: browseSaved,
+        today: todayStr(),
+      })
+    : null
 
   const handleSaveBrowse = async () => {
     if (!supabase) return
@@ -360,32 +382,18 @@ export default function StaffScheduleScreen() {
     setBrowseMessage(browseClosed ? `${label} 마감을 해제했어요.` : `${label}을(를) 마감했어요. 엑셀 저장·인쇄로 보관하세요.`)
   }
 
-  // 엑셀 저장: 1번 시트 근무표(직원 × 날짜 + 합계), 2번 시트 그 달 파출 근무
-  const handleExportXlsx = async () => {
-    if (browseRows.length === 0) return
-    const [yearStr, monthStr] = browseMonth.split('-')
-    const year = Number(yearStr)
-    const month = Number(monthStr)
-    const start = `${yearStr}-${monthStr}-01`
-    const nextMonth = month === 12 ? `${year + 1}-01-01` : `${year}-${pad2(month + 1)}-01`
+  // 엑셀 저장: 1번 시트 근무표(포지션별 묶음 + 합계 + 일별 인원), 2번 시트 그 달 파출 근무
+  const handleExportXlsx = () => {
+    if (!browseModel || browseRows.length === 0) return
     setExporting(true)
-    setBrowseError('')
-    let shifts = []
-    let workers = []
-    try {
-      ;[shifts, workers] = await Promise.all([fetchShifts({ storeCodes: store.code, start, end: nextMonth }), fetchWorkers(store.code)])
-    } catch (e) {
-      setBrowseError(`파출 기록을 불러오지 못해 근무표만 저장해요. (${e.message})`)
-    }
-    const sheets = buildStaffMonthSheets({ storeName: store.name, year, month, rows: browseRows, order: browseOrder, shifts, workers })
-    downloadXlsx(`직원근무표_${store.name}_${year}-${monthStr}.xlsx`, sheets)
+    const sheets = buildStaffMonthSheets({ storeName: store.name, model: browseModel, shifts: browseShifts, workers: browseWorkers })
+    downloadXlsx(`직원근무표_${store.name}_${browseMonth}.xlsx`, sheets)
     setExporting(false)
   }
 
   const handlePrint = () => {
     if (browseRows.length === 0) return
-    const [yearStr, monthStr] = browseMonth.split('-')
-    setPrintData({ year: Number(yearStr), month: Number(monthStr), rows: browseRows })
+    setPrintData({ model: browseModel })
     setPendingPrint(true)
   }
 
@@ -653,35 +661,23 @@ export default function StaffScheduleScreen() {
             <>
               <p className="hint">
                 {browseEditable
-                  ? '"자세히보기"에서 날짜 칸을 누를 때마다 종일(O) → 반타임(△) → 연차(연) → 휴무(X) → 빈칸 순으로 바뀌어요. 고친 뒤 "수정 저장"을 누르세요.'
+                  ? '표의 칸을 누를 때마다 종일(O) → 반타임(△) → 연차(연) → 휴무(X) → 빈칸 순으로 바뀌어요. 고친 뒤 "수정 저장"을 누르세요. 휴대폰에서는 표를 옆으로 밀어 보세요.'
                   : '매니저는 이번 달 근무표만 고칠 수 있어요. 지난달은 보기만 돼요.'}
               </p>
-              {browseRows.map((row, i) => {
-                const [yearStr, monthStr] = browseMonth.split('-')
-                return (
-                  <div className="cost-summary" key={row.id} style={{ textAlign: 'left' }}>
-                    <div className="field" style={{ marginBottom: 8 }}>
-                      {isAdmin ? (
-                        <input className="input" value={row.employee_name} onChange={(e) => updateBrowseName(i, e.target.value)} />
-                      ) : (
-                        <strong>{row.employee_name}</strong>
-                      )}
-                    </div>
-                    <CountsLine counts={countMarks(row.days)} />
-                    <button type="button" className="link-btn" style={{ marginTop: 8 }} onClick={() => toggleBrowseDetail(i)}>
-                      {browseOpenDetail.has(i) ? '자세히 닫기' : '자세히보기'}
-                    </button>
-                    {browseOpenDetail.has(i) && (
-                      <DayGrid
-                        year={Number(yearStr)}
-                        month={Number(monthStr)}
-                        days={row.days}
-                        onCycle={browseEditable ? (day) => cycleBrowseDay(i, day) : null}
-                      />
-                    )}
-                  </div>
-                )
-              })}
+              <MonthTable
+                model={browseModel}
+                editable={browseEditable}
+                onCycle={cycleBrowseDay}
+                onRename={isAdmin ? renameBrowse : null}
+              />
+              <div className="mt-legend">
+                <span className="mt-full">O 종일</span>
+                <span className="mt-half">△ 반타임</span>
+                <span className="mt-leave">연 연차</span>
+                <span>X 휴무</span>
+                <span className="mt-unrecorded">빗금 = 기록 안 된 날</span>
+                <span>숫자에 "파" = 파출 포함</span>
+              </div>
 
               <div className="invoice-form">
                 <button type="button" className="btn-secondary" onClick={handleSaveBrowse} disabled={browseSaving || !browseEditable}>
@@ -801,7 +797,7 @@ export default function StaffScheduleScreen() {
       {printData && (
         <div className="print-schedule">
           <h2 className="print-title">
-            {printData.year}년 {printData.month}월 근무표
+            {printData.model.year}년 {printData.model.month}월 근무표
           </h2>
           <p className="print-store-name">
             {store.name} · O=종일 △=반타임 연=연차 X=휴무 · 총 근무일 = 종일 + 반타임
@@ -810,40 +806,67 @@ export default function StaffScheduleScreen() {
             <thead>
               <tr>
                 <th>직원명</th>
-                {Array.from({ length: daysInMonth(printData.year, printData.month) }, (_, i) => i + 1).map((day) => (
-                  <th key={day}>{day}</th>
+                {printData.model.days.map((d) => (
+                  <th key={d.day}>{d.day}</th>
                 ))}
-                <th>O(종일근무)</th>
-                <th>△(반타임)</th>
-                <th>연(연차)</th>
-                <th>X(휴무)</th>
+                <th>종일</th>
+                <th>반타임</th>
+                <th>연차</th>
+                <th>휴무</th>
                 <th>총 근무일</th>
               </tr>
               <tr>
                 <th>요일</th>
-                {Array.from({ length: daysInMonth(printData.year, printData.month) }, (_, i) => i + 1).map((day) => (
-                  <th key={day}>{['일', '월', '화', '수', '목', '금', '토'][new Date(printData.year, printData.month - 1, day).getDay()]}</th>
+                {printData.model.days.map((d) => (
+                  <th key={d.day}>{d.weekday}</th>
                 ))}
                 <th colSpan={5} />
               </tr>
             </thead>
             <tbody>
-              {printData.rows.map((row) => {
-                const counts = countMarks(row.days)
-                return (
-                  <tr key={row.id}>
-                    <td>{row.employee_name}</td>
-                    {Array.from({ length: daysInMonth(printData.year, printData.month) }, (_, i) => i + 1).map((day) => (
-                      <td key={day}>{row.days[day] ?? ''}</td>
-                    ))}
-                    <td>{counts.full}</td>
-                    <td>{counts.half}</td>
-                    <td>{counts.leave}</td>
-                    <td>{counts.off}</td>
-                    <td>{counts.total}</td>
+              {printData.model.groups.map((g) => (
+                <Fragment key={g.position}>
+                  <tr className="print-group-row">
+                    <td colSpan={printData.model.days.length + 1}>
+                      [{g.position}] {g.rows.length}명
+                    </td>
+                    <td>{g.subtotal.full}</td>
+                    <td>{g.subtotal.half}</td>
+                    <td>{g.subtotal.leave}</td>
+                    <td>{g.subtotal.off}</td>
+                    <td>{g.subtotal.total}</td>
                   </tr>
-                )
-              })}
+                  {g.rows.map((r) => (
+                    <tr key={r.name}>
+                      <td>{r.name}</td>
+                      {printData.model.days.map((d) => (
+                        <td key={d.day}>{r.days[String(d.day)] ?? ''}</td>
+                      ))}
+                      <td>{r.counts.full}</td>
+                      <td>{r.counts.half}</td>
+                      <td>{r.counts.leave}</td>
+                      <td>{r.counts.off}</td>
+                      <td>{r.counts.total}</td>
+                    </tr>
+                  ))}
+                </Fragment>
+              ))}
+              {printData.model.headcount.map((h) => (
+                <tr key={`hc-${h.position}`} className="print-group-row">
+                  <td>{h.position} 인원</td>
+                  {h.perDay.map((c, i) => (
+                    <td key={i}>{c.total || ''}</td>
+                  ))}
+                  <td colSpan={5} />
+                </tr>
+              ))}
+              <tr className="print-group-row">
+                <td>파출</td>
+                {printData.model.dispatchPerDay.map((c, i) => (
+                  <td key={i}>{c || ''}</td>
+                ))}
+                <td colSpan={5} />
+              </tr>
             </tbody>
           </table>
         </div>
