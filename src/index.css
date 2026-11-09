@@ -4113,22 +4113,6 @@ h1 {
   font-size: 14px;
 }
 
-.reorder-message-label {
-  display: block;
-  margin-top: 14px;
-  font-size: 14px;
-  color: var(--text-muted);
-}
-
-.reorder-message {
-  width: 100%;
-  box-sizing: border-box;
-  margin-top: 6px;
-  font-size: 15px;
-  line-height: 1.5;
-  resize: vertical;
-}
-
 .reorder-actions .btn-primary,
 .reorder-actions .btn-secondary {
   margin-top: 10px;

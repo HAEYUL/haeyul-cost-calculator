@@ -4,7 +4,7 @@ import { useStore } from '../context/StoreContext'
 import { supabase } from '../lib/supabaseClient'
 import {
   analyzeReorder,
-  buildOrderMessage,
+  buildOrderList,
   groupAlertsByVendor,
   localDateStr,
   mutedKeysFromDismissals,
@@ -118,25 +118,16 @@ function qtyStep(unit, qty) {
   return qty != null && qty < 1 ? 0.1 : 1
 }
 
-function VendorPanel({ group, storeName, defaultOpen, onMarkOrdered, saving }) {
+function VendorPanel({ group, defaultOpen, onMarkOrdered, saving }) {
   const [open, setOpen] = useState(defaultOpen)
   const [checked, setChecked] = useState(() => new Set(group.items.map((i) => i.key)))
   const [qtyByKey, setQtyByKey] = useState(() => new Map(group.items.map((i) => [i.key, i.recommendedQty])))
-  const [messageOverride, setMessageOverride] = useState(null)
   const [notice, setNotice] = useState('')
 
   const selected = group.items.filter((i) => checked.has(i.key))
-  const autoMessage = buildOrderMessage({
-    vendor: group.vendor,
-    storeName,
-    lines: selected.map((i) => ({
-      itemName: i.itemName,
-      qty: qtyByKey.get(i.key),
-      unitLabel: unitLabelOf(i.unit),
-    })),
-  })
-  const message = messageOverride ?? autoMessage
-  const canShare = typeof navigator !== 'undefined' && typeof navigator.share === 'function'
+  const orderList = buildOrderList(
+    selected.map((i) => ({ itemName: i.itemName, qty: qtyByKey.get(i.key), unitLabel: unitLabelOf(i.unit) })),
+  )
 
   const toggle = (key) => {
     setChecked((prev) => {
@@ -145,12 +136,12 @@ function VendorPanel({ group, storeName, defaultOpen, onMarkOrdered, saving }) {
       else next.add(key)
       return next
     })
-    setMessageOverride(null)
+    setNotice('')
   }
 
   const setQty = (key, value) => {
     setQtyByKey((prev) => new Map(prev).set(key, value))
-    setMessageOverride(null)
+    setNotice('')
   }
 
   const bump = (item, dir) => {
@@ -167,19 +158,13 @@ function VendorPanel({ group, storeName, defaultOpen, onMarkOrdered, saving }) {
     }
   }
 
-  const handleShare = async () => {
-    setNotice('')
-    try {
-      await navigator.share({ text: message })
-      askMarkOrdered()
-    } catch (e) {
-      if (e?.name !== 'AbortError') setNotice('보내기를 열지 못했어요. 복사 버튼을 써주세요.')
-    }
-  }
-
   const handleCopy = async () => {
-    const ok = await copyText(message)
-    setNotice(ok ? '주문 문구를 복사했어요. 카톡이나 문자에 붙여넣으세요.' : '복사하지 못했어요. 문구를 길게 눌러 직접 복사해 주세요.')
+    const ok = await copyText(orderList)
+    setNotice(
+      ok
+        ? `${selected.length}개 품목을 복사했어요. 거래처 카톡방에 붙여넣으세요.`
+        : '복사하지 못했어요. 다시 눌러 주세요.',
+    )
     if (ok) askMarkOrdered()
   }
 
@@ -232,27 +217,12 @@ function VendorPanel({ group, storeName, defaultOpen, onMarkOrdered, saving }) {
             })}
           </ul>
 
-          <label className="reorder-message-label" htmlFor={`msg-${group.vendor}`}>
-            주문 문구 (직접 고칠 수 있어요)
-          </label>
-          <textarea
-            id={`msg-${group.vendor}`}
-            className="input reorder-message"
-            rows={Math.min(14, message.split('\n').length + 1)}
-            value={message}
-            onChange={(e) => setMessageOverride(e.target.value)}
-          />
           <div className="reorder-actions">
-            {canShare && (
-              <button type="button" className="btn-primary" onClick={handleShare} disabled={selected.length === 0}>
-                📤 카톡·문자로 보내기
-              </button>
-            )}
-            <button type="button" className={canShare ? 'btn-secondary' : 'btn-primary'} onClick={handleCopy} disabled={selected.length === 0}>
-              📋 복사
+            <button type="button" className="btn-primary" onClick={handleCopy} disabled={selected.length === 0}>
+              📋 체크한 {selected.length}개 품목 복사
             </button>
             <button type="button" className="btn-secondary" onClick={askMarkOrdered} disabled={selected.length === 0 || saving}>
-              ✅ 주문했어요 (보내지 않고 표시만)
+              ✅ 주문했어요 (복사 없이 표시만)
             </button>
           </div>
           {notice && <p className="hint">{notice}</p>}
@@ -427,7 +397,7 @@ export default function ReorderAlertScreen() {
           ← 메인 메뉴
         </button>
         <h1>재주문 알림</h1>
-        <p className="subtitle">{store.name} · 거래처별로 주문할 품목을 모아 바로 주문 문구를 보낼 수 있어요</p>
+        <p className="subtitle">{store.name} · 거래처별로 주문할 품목과 수량을 모아 카톡으로 바로 보낼 수 있어요</p>
       </div>
 
       <div className="toolbar-chips reorder-tabs" role="tablist">
@@ -452,8 +422,8 @@ export default function ReorderAlertScreen() {
         <>
           {vendorGroups.length > 0 && (
             <p className="hint">
-              거래처를 누르면 품목이 보여요. 이번에 주문하지 않을 품목은 체크를 풀고, 수량을 고친 뒤 보내기나 복사를 누르세요.
-              보낸 품목은 목록에서 빠지고, {ORDER_WAIT_DAYS}일 안에 입고가 없으면 다시 알려드려요.
+              거래처를 누르면 품목이 보여요. 이번에 주문하지 않을 품목은 체크를 풀고, 수량을 고친 뒤 복사해서 거래처 카톡방에 붙여넣으세요.
+              주문한 품목은 목록에서 빠지고, {ORDER_WAIT_DAYS}일 안에 입고가 없으면 다시 알려드려요.
             </p>
           )}
           <ul className="history-list">
@@ -461,7 +431,6 @@ export default function ReorderAlertScreen() {
               <VendorPanel
                 key={g.vendor}
                 group={g}
-                storeName={store.name}
                 defaultOpen={focusVendor ? focusVendor === g.vendor : vendorGroups.length === 1}
                 onMarkOrdered={markOrdered}
                 saving={saving}
