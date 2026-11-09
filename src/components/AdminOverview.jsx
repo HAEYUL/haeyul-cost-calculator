@@ -3,9 +3,11 @@ import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
 import { todayStr } from '../lib/vendorLedger'
 import { fetchNotices } from '../lib/notices'
-import { loadStoreSummary, wonFull } from '../lib/storeSummary'
-import StoreBoard from './StoreBoard'
+import { loadStoreSummary, nextReportDeadline, wonFull } from '../lib/storeSummary'
+import { STORE_INFO, storeColor } from '../data/stores'
 import Icon from './Icon'
+import StoreDetail, { StoreSignal } from './StoreDetail'
+import { loadStoreBriefing } from '../lib/storeBriefing'
 import KpiBand from './KpiBand'
 
 const QUICK = [
@@ -19,13 +21,17 @@ const QUICK = [
   ['print', '세무 출력', '/dispatch-report'],
 ]
 
-// 메인 관리자 메인 화면: 전체 매장 핵심 숫자(네이비 띠) · 오늘의 매장 현황(매장별 한 줄 + 신호등) · 바로가기
-// onGo(store, path): 그 매장을 고른 뒤 화면으로 이동
+// 메인 관리자 메인 화면: 4개 매장 핵심 숫자(네이비 띠) · 매장 카드 · 바로가기 · 오늘 확인할 일
+// 매장 카드 머리띠에 신호등(긴급/처리/정상), 카드를 누르면 카드들 아래에 그 매장 상세(StoreDetail)를 펼친다.
+// onGo(store, path): 그 매장을 고른 뒤 화면 이동. (매장을 바꾸면 화면이 새로 그려져서, 카드를 누를 때는 매장을 바꾸지 않는다)
 export default function AdminOverview({ stores, onGo }) {
   const navigate = useNavigate()
   const [summaries, setSummaries] = useState(null)
   const [noticeInfo, setNoticeInfo] = useState(null)
   const [error, setError] = useState('')
+  const [briefings, setBriefings] = useState(new Map())
+  const [briefingErrors, setBriefingErrors] = useState(new Map())
+  const [openCode, setOpenCode] = useState(null)
 
   useEffect(() => {
     if (!supabase) return
@@ -44,6 +50,12 @@ export default function AdminOverview({ stores, onGo }) {
         })
       })
       .catch(() => !cancelled && setNoticeInfo(null))
+    // 매장별 신호등·상세용 (매장마다 따로 불러와서 먼저 끝난 매장부터 표시)
+    for (const st of stores) {
+      loadStoreBriefing(st.code, today)
+        .then((b) => !cancelled && setBriefings((prev) => new Map(prev).set(st.code, b)))
+        .catch((e) => !cancelled && setBriefingErrors((prev) => new Map(prev).set(st.code, e.message)))
+    }
     return () => {
       cancelled = true
     }
@@ -56,6 +68,7 @@ export default function AdminOverview({ stores, onGo }) {
   const sum = (k) => all.reduce((acc, r) => acc + r[k], 0)
   const todayStores = all.filter((r) => r.todayCount > 0).length
   const unpaidStores = all.filter((r) => r.unpaidAmount > 0).length
+  const longWorkers = sum('longWorkers')
 
   const kpis = [
     { icon: 'receipt', label: '오늘 입고 합계', value: wonFull(sum('todayAmount')), unit: '원', sub: `명세표 ${sum('todayCount')}건 · ${todayStores}개 매장`, to: '/invoices' },
@@ -64,13 +77,73 @@ export default function AdminOverview({ stores, onGo }) {
     { icon: 'mega', label: '미확인 전달사항', value: noticeInfo ? noticeInfo.pending : '-', unit: '건', sub: noticeInfo ? `새 답장 ${noticeInfo.replies}건` : '', to: '/notices' },
   ]
 
+  const todos = [
+    { tag: '송금', kind: 'gold', text: '파출비 송금 대기', value: sum('unpaidAmount') ? `${sum('unpaidWorkers')}명 · ${wonFull(sum('unpaidAmount'))}원` : '없음', to: '/dispatch-payments' },
+    { tag: '전달', kind: 'navy', text: '미확인 전달사항', value: noticeInfo ? `${noticeInfo.pending}건 · 새 답장 ${noticeInfo.replies}` : '-', to: '/notices' },
+    { tag: '보험', kind: 'red', text: '이번 달 8일 이상 근무자', value: longWorkers ? `${longWorkers}명` : '없음', to: '/dispatch' },
+    { tag: '신고', kind: 'green', text: '근로내용확인신고', value: nextReportDeadline(), to: '/dispatch-report' },
+  ]
+
   return (
     <div className="overview">
       <KpiBand items={kpis} onOpen={navigate} />
 
-      <StoreBoard stores={stores} summaries={summaries} onGo={onGo} />
+      <div className="store-cards">
+        {stores.map((s) => {
+          const r = summaries.get(s.code)
+          return (
+            <button
+              type="button"
+              key={s.code}
+              className={`store-card${openCode === s.code ? ' store-card-open' : ''}`}
+              style={{ '--c': storeColor(s.code) }}
+              aria-expanded={openCode === s.code}
+              onClick={() => setOpenCode((cur) => (cur === s.code ? null : s.code))}
+            >
+              <div className="store-card-hd">
+                <span className="store-card-hd-text">
+                  <b>{s.name}</b>
+                  <small>{STORE_INFO[s.code] ?? ''}</small>
+                </span>
+                <StoreSignal briefing={briefings.get(s.code)} failed={briefingErrors.has(s.code)} />
+              </div>
+              <div className="store-card-bd">
+                <div className="kv">
+                  <span>오늘 명세표</span>
+                  <b className={r.todayCount ? '' : 'muted'}>{r.todayCount ? `${r.todayCount}건 · ${wonFull(r.todayAmount)}` : '0건'}</b>
+                </div>
+                <div className="kv">
+                  <span>파출 송금 대기</span>
+                  <b className={r.unpaidAmount ? 'tone-gold' : 'muted'}>{r.unpaidAmount ? `${r.unpaidWorkers}명 · ${wonFull(r.unpaidAmount)}` : '없음'}</b>
+                </div>
+                <div className="kv">
+                  <span>거래처 미지급</span>
+                  <b className={r.balance > 0 ? 'tone-neg' : ''}>{wonFull(r.balance)}</b>
+                </div>
+              </div>
+            </button>
+          )
+        })}
+      </div>
 
-      <div className="overview-lower overview-lower-single">
+      {openCode &&
+        (() => {
+          const st = stores.find((x) => x.code === openCode)
+          if (!st) return null
+          return (
+            <StoreDetail
+              key={st.code}
+              store={st}
+              summary={summaries.get(st.code)}
+              briefing={briefings.get(st.code)}
+              error={briefingErrors.get(st.code)}
+              onGo={onGo}
+              onClose={() => setOpenCode(null)}
+            />
+          )
+        })()}
+
+      <div className="overview-lower">
         <div className="panel">
           <h3 className="panel-title">
             <Icon name="home" /> 바로가기
@@ -85,6 +158,18 @@ export default function AdminOverview({ stores, onGo }) {
               </button>
             ))}
           </div>
+        </div>
+        <div className="panel">
+          <h3 className="panel-title">
+            <Icon name="bell" /> 오늘 확인할 일
+          </h3>
+          {todos.map((t) => (
+            <button type="button" key={t.tag} className="todo-row" onClick={() => navigate(t.to)}>
+              <span className={`todo-tag todo-${t.kind}`}>{t.tag}</span>
+              <span className="todo-text">{t.text}</span>
+              <em className={t.kind === 'gold' ? 'tone-gold' : t.kind === 'red' && longWorkers ? 'tone-neg' : ''}>{t.value}</em>
+            </button>
+          ))}
         </div>
       </div>
     </div>
