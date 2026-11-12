@@ -143,7 +143,8 @@ export default function AdminOverview({ stores, onGo }) {
         })()}
 
       <div className="overview-lower">
-        <div className="panel">
+        {/* 바로가기: 왼쪽 메뉴가 보이는 PC(1024px 이상)에서는 중복이라 숨기고, 휴대폰·태블릿에서만 보인다. */}
+        <div className="panel quick-panel">
           <h3 className="panel-title">
             <Icon name="home" /> 바로가기
           </h3>

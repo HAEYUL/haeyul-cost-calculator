@@ -3609,6 +3609,17 @@ h1 {
   }
 }
 
+/* PC(왼쪽 메뉴가 보이는 폭)에서는 바로가기를 숨기고 '오늘 확인할 일'을 한 줄 전체로 */
+@media (min-width: 1024px) {
+  .quick-panel {
+    display: none;
+  }
+
+  .overview-lower {
+    grid-template-columns: 1fr;
+  }
+}
+
 .panel {
   padding: 18px 20px;
   border: 1px solid var(--border);
