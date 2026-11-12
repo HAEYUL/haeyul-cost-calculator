@@ -5,6 +5,7 @@ import { supabase } from '../lib/supabaseClient'
 import { useGoBack } from '../hooks/usePageHistoryState'
 import TimeSelect from '../components/TimeSelect'
 import SourcePicker from '../components/SourcePicker'
+import BankSelect from '../components/BankSelect'
 import { dispatchRequest, fetchShifts, fetchSources, fetchWorkers, SHIFT_COLUMNS, workerPayload } from '../lib/dispatchApi'
 import {
   findSimilarWorkers,
@@ -21,7 +22,6 @@ import {
 } from '../lib/dispatch'
 import { todayStr } from '../lib/vendorLedger'
 
-const BANKS = ['기업은행', '국민은행', '농협', '신한은행', '우리은행', '하나은행', '카카오뱅크', '토스뱅크', '새마을금고', '우체국', '수협', '신협', 'SC제일은행', '케이뱅크']
 
 // 파출 근무 등록·수정. 입력: 근무날짜 · 이름 · 주민번호 · 근무시간 · 일당 · 계좌번호.
 // 처음 오신 분은 인력 명부에 같이 저장되고, 다음부터는 이름만 고르면 주민번호·계좌가 채워진다.
@@ -487,7 +487,7 @@ export default function DispatchShiftFormScreen() {
             </div>
           ) : (
             <div className="rrn-row">
-              <input className="input bank-input" list="bank-list" value={bank} onChange={(e) => setBank(e.target.value)} placeholder="은행" disabled={locked} />
+              <BankSelect className="bank-input" value={bank} onChange={setBank} disabled={locked} />
               <input
                 className="input"
                 inputMode="numeric"
@@ -496,11 +496,6 @@ export default function DispatchShiftFormScreen() {
                 placeholder="계좌번호"
                 disabled={locked}
               />
-              <datalist id="bank-list">
-                {BANKS.map((b) => (
-                  <option key={b} value={b} />
-                ))}
-              </datalist>
             </div>
           )}
         </div>

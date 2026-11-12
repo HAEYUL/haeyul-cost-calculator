@@ -5,6 +5,7 @@ import { supabase } from '../lib/supabaseClient'
 import { useGoBack, useHistoryState } from '../hooks/usePageHistoryState'
 import { dispatchRequest, fetchShifts, fetchSources, WORKER_COLUMNS, workerPayload } from '../lib/dispatchApi'
 import SourcePicker from '../components/SourcePicker'
+import BankSelect from '../components/BankSelect'
 import PositionTag from '../components/PositionTag'
 import {
   INSURANCE_DAY_LIMIT,
@@ -345,7 +346,7 @@ export default function DispatchWorkerScreen() {
           <div className="field">
             <label>계좌</label>
             <div className="rrn-row">
-              <input className="input bank-input" value={form.bank} onChange={setField('bank')} placeholder="은행" />
+              <BankSelect className="bank-input" value={form.bank} onChange={(v) => setForm((prev) => ({ ...prev, bank: v }))} />
               <input className="input" inputMode="numeric" value={form.account} onChange={setField('account')} placeholder="계좌번호" />
             </div>
           </div>

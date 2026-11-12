@@ -2340,6 +2340,24 @@ button.kpi-card {
   flex: 0.7;
 }
 
+/* 은행 선택 상자 + (직접 입력일 때) 은행 이름 칸을 위아래로 */
+.bank-select {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.rrn-row:has(.bank-select) {
+  align-items: flex-start;
+}
+
+.bank-select .input {
+  flex: none;
+  width: 100%;
+  min-width: 0;
+}
+
 .danger-btn {
   color: #d84343;
 }
