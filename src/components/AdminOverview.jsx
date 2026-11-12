@@ -22,7 +22,8 @@ const QUICK = [
 ]
 
 // 메인 관리자 메인 화면: 4개 매장 핵심 숫자(네이비 띠) · 매장 카드 · 바로가기 · 오늘 확인할 일
-// 매장 카드 머리띠에 신호등(긴급/처리/정상), 카드를 누르면 카드들 아래에 그 매장 상세(StoreDetail)를 펼친다.
+// 매장 카드 머리띠(색깔 부분)에 신호등(긴급/처리/정상), 머리띠를 누르면 카드들 아래에 그 매장 상세(StoreDetail)를 펼친다.
+// 카드 아래 줄(오늘 명세표·파출 송금 대기·거래처 미지급)을 누르면 그 매장을 고른 뒤 해당 화면으로 바로 간다.
 // onGo(store, path): 그 매장을 고른 뒤 화면 이동. (매장을 바꾸면 화면이 새로 그려져서, 카드를 누를 때는 매장을 바꾸지 않는다)
 export default function AdminOverview({ stores, onGo }) {
   const navigate = useNavigate()
@@ -92,36 +93,34 @@ export default function AdminOverview({ stores, onGo }) {
         {stores.map((s) => {
           const r = summaries.get(s.code)
           return (
-            <button
-              type="button"
-              key={s.code}
-              className={`store-card${openCode === s.code ? ' store-card-open' : ''}`}
-              style={{ '--c': storeColor(s.code) }}
-              aria-expanded={openCode === s.code}
-              onClick={() => setOpenCode((cur) => (cur === s.code ? null : s.code))}
-            >
-              <div className="store-card-hd">
+            <div key={s.code} className={`store-card${openCode === s.code ? ' store-card-open' : ''}`} style={{ '--c': storeColor(s.code) }}>
+              <button
+                type="button"
+                className="store-card-hd"
+                aria-expanded={openCode === s.code}
+                onClick={() => setOpenCode((cur) => (cur === s.code ? null : s.code))}
+              >
                 <span className="store-card-hd-text">
                   <b>{s.name}</b>
                   <small>{STORE_INFO[s.code] ?? ''}</small>
                 </span>
                 <StoreSignal briefing={briefings.get(s.code)} failed={briefingErrors.has(s.code)} />
-              </div>
+              </button>
               <div className="store-card-bd">
-                <div className="kv">
+                <button type="button" className="kv" onClick={() => onGo(s, '/invoices#history')}>
                   <span>오늘 명세표</span>
                   <b className={r.todayCount ? '' : 'muted'}>{r.todayCount ? `${r.todayCount}건 · ${wonFull(r.todayAmount)}` : '0건'}</b>
-                </div>
-                <div className="kv">
+                </button>
+                <button type="button" className="kv" onClick={() => onGo(s, '/dispatch-payments')}>
                   <span>파출 송금 대기</span>
                   <b className={r.unpaidAmount ? 'tone-gold' : 'muted'}>{r.unpaidAmount ? `${r.unpaidWorkers}명 · ${wonFull(r.unpaidAmount)}` : '없음'}</b>
-                </div>
-                <div className="kv">
+                </button>
+                <button type="button" className="kv" onClick={() => onGo(s, '/vendors')}>
                   <span>거래처 미지급</span>
                   <b className={r.balance > 0 ? 'tone-neg' : ''}>{wonFull(r.balance)}</b>
-                </div>
+                </button>
               </div>
-            </button>
+            </div>
           )
         })}
       </div>
@@ -144,7 +143,8 @@ export default function AdminOverview({ stores, onGo }) {
         })()}
 
       <div className="overview-lower">
-        <div className="panel">
+        {/* 바로가기: 왼쪽 메뉴가 보이는 PC(1024px 이상)에서는 중복이라 숨기고, 휴대폰·태블릿에서만 보인다. */}
+        <div className="panel quick-panel">
           <h3 className="panel-title">
             <Icon name="home" /> 바로가기
           </h3>

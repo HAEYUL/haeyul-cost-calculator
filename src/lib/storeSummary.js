@@ -20,7 +20,9 @@ export async function loadStoreSummary(storeCode, today = todayStr()) {
   if (err) throw err
 
   const batches = batchesRes.data ?? []
-  const todayBatches = batches.filter((b) => rowDateStr(b) === today || (b.created_at ?? '').slice(0, 10) === today)
+  // 매장 [입고 입력] 화면의 명세표 목록과 같은 기준(명세표 날짜)으로 센다.
+  // 예전에는 '오늘 입력한 지난 날짜 명세표'(created_at, 그것도 UTC 날짜)까지 세어 매장 화면보다 건수가 많게 나왔다.
+  const todayBatches = batches.filter((b) => rowDateStr(b) === today)
 
   const batchesByVendor = groupByVendor(batches)
   const paymentsByVendor = groupByVendor(paymentsRes.data)

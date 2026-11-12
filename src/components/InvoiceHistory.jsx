@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useEffect, useRef, useState } from 'react'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
 import { UNIT_LABELS } from '../lib/units'
 import { rowDateStr } from '../lib/rowDateStr'
@@ -22,6 +22,9 @@ function rowDateValue(row) {
 // canRecordPayments: [결제완료](즉시 결제 나중에 처리) 버튼. 매니저도 쓸 수 있다(DB가 같은 날·같은 금액 명세표일 때만 허용).
 export default function InvoiceHistory({ storeCode, refreshKey, canRecordPayments = true }) {
   const navigate = useNavigate()
+  const location = useLocation()
+  const rootRef = useRef(null)
+  const scrolledRef = useRef(false)
   const [batches, setBatches] = useState([])
   const [legacyRows, setLegacyRows] = useState([])
   const [payments, setPayments] = useState([])
@@ -66,6 +69,13 @@ export default function InvoiceHistory({ storeCode, refreshKey, canRecordPayment
       setLoading(false)
     })
   }, [storeCode, refreshKey, dataKey])
+
+  // 관리자 홈 매장 카드의 [오늘 명세표]로 들어오면(#history) 입고 입력 폼을 건너뛰고 이 목록으로 바로 내려 준다.
+  useEffect(() => {
+    if (location.hash !== '#history' || loading || scrolledRef.current) return
+    scrolledRef.current = true
+    rootRef.current?.scrollIntoView?.({ behavior: 'smooth', block: 'start' })
+  }, [location.hash, loading])
 
   // 결제 기록은 [결제완료]를 누를 때마다 다시 불러와야 해서, 명세표 목록과 따로 불러온다.
   useEffect(() => {
@@ -146,7 +156,7 @@ export default function InvoiceHistory({ storeCode, refreshKey, canRecordPayment
   ].sort((a, b) => rowDateValue(b) - rowDateValue(a))
 
   return (
-    <div className="history">
+    <div className="history" id="history" ref={rootRef}>
       <div className="history-header">
         <h2>저장된 입고 내역</h2>
         {vendorNames.length > 0 && (
