@@ -149,24 +149,6 @@ export default function DispatchScreen() {
         </button>
       </div>
 
-      {isAdmin && (
-        <div className="preset-row">
-          {[{ code: 'all', name: '전체 매장' }, ...stores].map((st) => (
-            <button
-              key={st.code}
-              type="button"
-              className={storeFilter === st.code ? 'chip chip-active' : 'chip'}
-              onClick={() => {
-                setStoreFilter(st.code)
-                setPickingStore(false)
-              }}
-            >
-              {st.name}
-            </button>
-          ))}
-        </div>
-      )}
-
       <div className="preset-row">
         {TABS.map((t) => (
           <button key={t.key} type="button" className={tab === t.key ? 'chip chip-active' : 'chip'} onClick={() => setTab(t.key)}>
@@ -198,6 +180,25 @@ export default function DispatchScreen() {
       <button type="button" className="btn-secondary" onClick={() => navigate('/dispatch/sources')}>
         🏢 경로 관리 (파출사무소·당근 등{isAdmin ? '' : ' 연락처'})
       </button>
+
+      {/* 매장 버튼: 아래 목록 바로 위에 둔다 */}
+      {isAdmin && (
+        <div className="preset-row dispatch-store-filter">
+          {[{ code: 'all', name: '전체 매장' }, ...stores].map((st) => (
+            <button
+              key={st.code}
+              type="button"
+              className={storeFilter === st.code ? 'chip chip-active' : 'chip'}
+              onClick={() => {
+                setStoreFilter(st.code)
+                setPickingStore(false)
+              }}
+            >
+              {st.name}
+            </button>
+          ))}
+        </div>
+      )}
 
       {loading && <p className="hint">불러오는 중...</p>}
       {error && <p className="error-text">{error}</p>}
